@@ -21,6 +21,9 @@ import * as Schema from 'effect/Schema';
 // @ts-expect-error no type declarations
 import picomatch from 'picomatch';
 
+import * as nodeFs from 'node:fs';
+import * as nodePath from 'node:path';
+
 import { extractBody, parseFrontmatter } from './frontmatter.ts';
 
 // ─── Schema Definitions ───────────────────────────────────────
@@ -465,6 +468,17 @@ export const EffectEnforcerPlugin: Plugin = async (pluginInput) => {
 	};
 
 	return {
+		config: async (opencodeConfig) => {
+			const dirname = import.meta.dirname ?? '.';
+			const skillsDir = nodePath.join(dirname, '..', 'skills');
+			if (nodeFs.existsSync(skillsDir)) {
+				const cfg = opencodeConfig as Record<string, unknown>;
+				const skills = ((cfg.skills as Record<string, unknown>) ??= {});
+				const paths = ((skills.paths as string[]) ??= []);
+				paths.push(skillsDir);
+			}
+		},
+
 		tool: referenceTools,
 
 		'chat.message': async (_input, output) => {
