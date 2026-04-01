@@ -3,40 +3,38 @@ action: context
 tool: (edit|write)
 event: before
 name: casting-awareness
-description: Type assertions may indicate incorrect types
+description: Type assertions bypass the compiler — use type-safe alternatives
 glob: '**/*.{ts,tsx}'
 pattern: (?<!\*\s)\bas\s+(?!const\b)\w+
 level: info
+suggestSkills:
+    - effect-domain-modeling
+    - effect-domain-predicates
 ---
 
-# Type Assertion Awareness
+# Stop — do you actually need `as`?
 
-```haskell
--- Type assertion
-cast :: a → b                     -- "trust me, I know better"
+Most `as` casts can be replaced. Try these in order:
 
--- Before casting, check
-redundant  :: a → a               -- already correct type (use LSP!)
-narrowable :: ∀ a. Generic a ⇒ F a  -- use generics instead
-guardable  :: a → Maybe b         -- runtime check for safety
-decodable  :: Schema b → a → Either ParseError b  -- validate external data
-```
+1. **Remove it.** Check the actual type with LSP (`hover`/`Go to Definition`). If it's already correct or the cast just papers over a fixable upstream type, delete the assertion entirely.
 
-```haskell
--- Pattern
-suspicious :: Unknown → User
-suspicious x = x `as` User        -- why is x Unknown?
+2. **`satisfies`** — validates a value matches a type at compile time without changing the inferred type. No runtime cost, no lying to the compiler:
+   ```ts
+   const config = { port: 3000 } satisfies ServerConfig
+   ```
 
-investigate :: Effect ()
-investigate = do
-  actualType ← lsp.typeAt file line col    -- what is it really?
-  case actualType of
-    User → pure ()                -- cast was redundant
-    _    → fix (sourceType actualType)     -- improve upstream types
+3. **`Schema.is(MySchema)`** — runtime type guard that narrows correctly. Replaces `as` when you need to check unknown/union data:
+   ```ts
+   if (Schema.is(User)(value)) { /* value: User */ }
+   ```
 
--- Consider
-withGenerics :: ∀ a. Decodable a ⇒ String → Effect a ParseError
-withGenerics = Schema.decode schema       -- types flow correctly
-```
+4. **`Schema.decodeUnknownSync(MySchema)`** — validates unknown data with full error reporting instead of blindly trusting it:
+   ```ts
+   const user = Schema.decodeUnknownSync(User)(data)
+   ```
 
-Casts tell the compiler "trust me." Sometimes correct, often a signal that upstream types could be improved. Check with LSP first. Note: `as const` is not a cast—it narrows to literal types and is always acceptable.
+5. **`Predicate.isString` / `isNumber` / `isRecord` / etc.** — Effect's built-in type guards for primitives and structures.
+
+6. **`MyEnum.$is("Tag")`** or **`Schema.is(VariantSchema)`** — type guard for discriminated union variants. See `effect-domain-modeling` skill for the full pattern.
+
+`as const` is fine — it narrows to literal types. Every other `as` is the compiler waving a white flag. Fix the types instead.
