@@ -178,8 +178,27 @@ export const createReferenceTools = (version: string) => ({
 				.describe('Maximum number of lines to return (default: 2000)')
 		},
 		async execute(args) {
-			const content = await fetchFileFromGitHub(version, args.path);
-			return applyOffsetLimit(content, args.offset, args.limit);
+			// Fast path: path has a file extension — fetch directly
+			if (/\.\w+$/.test(args.path)) {
+				const content = await fetchFileFromGitHub(version, args.path);
+				return applyOffsetLimit(content, args.offset, args.limit);
+			}
+
+			// No extension — likely a directory. Try as file first (handles
+			// extensionless files like Makefile), fall back to directory listing.
+			try {
+				const content = await fetchFileFromGitHub(version, args.path);
+				return applyOffsetLimit(content, args.offset, args.limit);
+			} catch {
+				const items = await fetchDirectoryListing(version, args.path);
+				const listing = items
+					.map(
+						(item) =>
+							`${item.type === 'directory' ? '[dir]' : `[${String(item.size)}b]`} ${item.name}`
+					)
+					.join('\n');
+				return `This path is a directory, not a file. Contents of ${args.path}:\n\n${listing}\n\nUse effect_ref_read with a specific file path from the listing above.`;
+			}
 		}
 	}),
 
