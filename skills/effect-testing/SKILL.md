@@ -110,6 +110,8 @@ it.live('test with real time', () =>
 );
 ```
 
+**When to default to `it.live`:** For integration tests that perform real I/O (HTTP servers, databases, filesystems), use `it.live` as the default. `TestClock` intercepts time-dependent operations and will interfere with actual async I/O timing. Reserve `it.effect` for pure logic tests and tests that explicitly need `TestClock`.
+
 ### Resource Management in Tests
 
 `it.effect` already handles scoping internally — there is no separate `it.scoped` or `it.scopedLive` variant. Use `Effect.acquireRelease` or `Effect.scoped` directly within `it.effect`:
@@ -211,6 +213,15 @@ it.effect('should work with dependencies', () =>
 	}).pipe(Effect.provide(TestUserServiceLayer))
 );
 ```
+
+```typescript
+// Concise alternative using Layer.mock (v4)
+const TestUserService = Layer.mock(UserService)({
+	getUser: (id) => Effect.succeed({ name: 'John' })
+});
+```
+
+`Layer.mock(Service)({...})` is shorthand for `Layer.succeed(Service, Service.of({...}))` — use whichever reads more clearly in context.
 
 ### Using layer Helper
 
@@ -827,6 +838,76 @@ it.effect('should merge states correctly', () =>
 	})
 );
 ```
+
+## HTTP Mock Server Testing
+
+For integration tests that need to verify actual HTTP transport behavior (serialization, status codes, retries), build an Effect-native HTTP test double using `HttpServer`, `HttpRouter`, and `HttpServerResponse.stream`.
+
+The pattern:
+
+1. **Define a `TestServer` service** as a `ServiceMap.Service` that exposes methods like `push(reply)` to enqueue canned responses, `wait(count)` to block until N requests have been received, and a `url` property for the base URL.
+2. **Implement with `Layer.effect`** — build an `HttpRouter` that dequeues replies on each request, use `HttpServerResponse.stream` for SSE endpoints, and bind to a random port with `NodeHttpServer.layer(() => Http.createServer(), { port: 0 })`.
+3. **Use `Deferred`-based request counting** for `wait(count)` — the server increments a counter on each request and completes a `Deferred` when the count is reached, letting the test block until the expected number of calls arrive.
+4. **Wire the mock URL into test config** via a callback: `config: (url) => ({ baseUrl: url })`.
+
+```typescript
+// Test fixture composition
+const withMockServer = <A, E, R>(
+	self: (server: TestApiServer) => Effect.Effect<A, E, R>
+) =>
+	Effect.gen(function* () {
+		const server = yield* TestApiServer;
+		return yield* self(server);
+	});
+
+// In test
+it.live('calls API correctly', () =>
+	withMockServer((server) =>
+		Effect.gen(function* () {
+			yield* server.push({ status: 200, body: { result: 'ok' } });
+			const result = yield* MyService.use((svc) => svc.callApi());
+			expect(result).toEqual({ result: 'ok' });
+		})
+	).pipe(
+		Effect.provide(MyService.layer),
+		Effect.provide(TestApiServer.layer)
+	)
+);
+```
+
+> This approach tests the full HTTP integration path (serialization, status codes, retries) rather than faking at the service boundary. Prefer it when the value is in verifying transport-level behavior.
+
+### Test Fake Factories
+
+When providing fake service layers in tests, return the test data alongside the layer to avoid duplicating constants between setup and assertions:
+
+```typescript
+export function fakeUserRepo(overrides?: { user?: User }) {
+	const user = overrides?.user ?? new User({ id: '1', name: 'Test' });
+	return {
+		user,
+		layer: Layer.succeed(
+			UserRepo,
+			UserRepo.of({
+				findById: Effect.fn('TestUserRepo.findById')(
+					function* (id: string) {
+						if (id === user.id) return user;
+						return yield* Effect.die(
+							new Error(`Unknown test user: ${id}`)
+						);
+					}
+				)
+			})
+		)
+	};
+}
+
+// Usage in test:
+const { user, layer } = fakeUserRepo();
+// assert against `user` values, provide `layer`
+```
+
+> Returning test data alongside the layer avoids duplicating constants between test setup and assertions.
 
 ## Testing Checklist
 
