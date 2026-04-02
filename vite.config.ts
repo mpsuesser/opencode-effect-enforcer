@@ -24,7 +24,7 @@ export default defineConfig({
 		quoteProps: 'preserve',
 		semi: true,
 		trailingComma: 'none',
-		ignore: ['**/*.md'],
+		ignorePatterns: ['**/*.md'],
 		overrides: [
 			{
 				files: ['*.json', '*.jsonc'],
