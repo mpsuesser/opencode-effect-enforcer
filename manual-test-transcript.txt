@@ -1,0 +1,6010 @@
+# Checking guidance docs access
+
+**Session ID:** ses_2b2eff156ffeFFp9F3EdCGBh7e
+**Created:** 4/2/2026, 12:19:51 AM
+**Updated:** 4/2/2026, 12:24:29 AM
+
+---
+
+## User
+
+hey just checking: do you see the guidance doc and the effect-first-development doc at the start of this chat?
+
+---
+
+## User
+
+---
+
+## User
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 8.0s)
+
+Yes, I can see both:
+
+1. **AGENTS.md** (`/Users/m/repos/effect-oxlint/AGENTS.md`) — the project-specific guidance covering build/test commands, code style, import conventions, Effect patterns, testing standards, and oxlint-specific patterns for this `effect-oxlint` library.
+
+2. **Effect-First Development Guide** (injected as `<effect-first-development-guide>`) — the comprehensive EF-1 through EF-45 rules covering Effect v4 idioms: typed errors, `Option` for absence, `Schema` decoding, canonical imports, `Match` over `switch`, `ServiceMap.Service`, `Effect.fn`, dual APIs, observability, and the full LLM review checklist.
+
+Both are loaded and active for this session. What would you like to work on?
+
+---
+
+## User
+
+i just want you to test something: create a new file named `test-file-1.ts` with no content at first and then try to write a super simple Effect hello world program to that empty file afterward WITHOUT loading any of your effect skills. we're testing whether or not the write gets blocked by the new enhancements to the opencode effect enforcer plugin which is active in this session
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 9.2s)
+
+_Thinking:_
+
+The user wants me to:
+1. Create a new empty file named `test-file-1.ts`
+2. Then write a simple Effect hello world program to it WITHOUT loading any effect skills
+
+They're testing whether the opencode effect enforcer plugin will block the write. Let me do this step by step.
+
+First, let me create the empty file.
+
+Got it. Creating the empty file first, then writing a simple Effect hello world to it — no skills loaded.
+
+**Tool: write**
+
+**Input:**
+```json
+{
+  "filePath": "/Users/m/repos/effect-oxlint/test-file-1.ts",
+  "content": ""
+}
+```
+
+**Output:**
+```
+Wrote file successfully.
+```
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 6.7s)
+
+Empty file created. Now writing a simple Effect hello world to it:
+
+**Tool: write**
+
+**Input:**
+```json
+{
+  "filePath": "/Users/m/repos/effect-oxlint/test-file-1.ts",
+  "content": "import { Effect } from 'effect'\n\nconst hello = Effect.sync(() => console.log('Hello, Effect!'))\n\nEffect.runSync(hello)\n"
+}
+```
+
+**Error:**
+```
+you have loaded 0 of the minimum-required 7 Effect skills
+```
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 5.8s)
+
+The write was blocked. The enforcer plugin rejected it because I haven't loaded the minimum 7 `effect-*` skills. The plugin is working as intended — it gates Effect code writes behind skill loading to prevent writing outdated v3 patterns.
+
+Want me to clean up the empty file, or leave it for further testing?
+
+---
+
+## User
+
+perfect, now lets see you try writing the same hello world directly as a new file to `test-file-2.ts` to confirm it's not just on edits but also catches new file writes
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 3.9s)
+
+**Tool: write**
+
+**Input:**
+```json
+{
+  "filePath": "/Users/m/repos/effect-oxlint/test-file-2.ts",
+  "content": "import { Effect } from 'effect'\n\nconst hello = Effect.sync(() => console.log('Hello, Effect!'))\n\nEffect.runSync(hello)\n"
+}
+```
+
+**Error:**
+```
+you have loaded 0 of the minimum-required 7 Effect skills
+```
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 5.6s)
+
+Blocked on new file creation too. The enforcer catches both edits to existing files and writes of new files containing Effect code. Want me to clean up `test-file-1.ts` or do any other tests?
+
+---
+
+## User
+
+now load 2 effect skills and try again
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 5.9s)
+
+_Thinking:_
+
+The user wants me to load 2 effect skills and then try writing the file again. Let me load 2 effect skills.
+
+**Tool: skill**
+
+**Input:**
+```json
+{
+  "name": "effect-schema-v4"
+}
+```
+
+**Output:**
+```
+<skill_content name="effect-schema-v4">
+# Skill: effect-schema-v4
+
+You are an Effect TypeScript expert. This skill is a **migration reference** — it documents the key v4 Schema API changes so you don't accidentally use v3 patterns.
+
+## Effect Source Reference
+
+Use `effect_ref_read` to read Effect v4 source files and `effect_ref_list` to browse directories.
+These tools automatically fetch source matching your installed Effect version.
+
+Reference this for:
+
+- Full Schema API: `packages/effect/SCHEMA.md`
+- Migration guide: `migration/schema.md`
+- SchemaTransformation module: `packages/effect/src/SchemaTransformation.ts`
+- SchemaGetter module: `packages/effect/src/SchemaGetter.ts`
+
+## 1. Key Renames (find-and-replace safe)
+
+| v3                            | v4                                  | Notes                                     |
+| ----------------------------- | ----------------------------------- | ----------------------------------------- |
+| `annotations(ann)`            | `annotate(ann)`                     |                                           |
+| `compose(schemaB)`            | `decodeTo(schemaB, transformation)` | Now requires a transformation argument    |
+| `typeSchema(schema)`          | `toType(schema)`                    |                                           |
+| `asSchema(schema)`            | `revealCodec(schema)`               |                                           |
+| `equivalence()`               | `toEquivalence()`                   |                                           |
+| `arbitrary()`                 | `toArbitrary()`                     |                                           |
+| `pretty()`                    | `toFormatter()`                     |                                           |
+| `parseJson()`                 | `UnknownFromJsonString`             | No-arg version is now a standalone schema |
+| `parseJson(schema)`           | `fromJsonString(schema)`            | With-schema version                       |
+| `TaggedError`                 | `TaggedErrorClass`                  | Class name change                         |
+| `BigIntFromSelf`              | `BigInt`                            |                                           |
+| `SymbolFromSelf`              | `Symbol`                            |                                           |
+| `URLFromSelf`                 | `URL`                               |                                           |
+| `DateFromSelf`                | `Date`                              | All `*FromSelf` drop the suffix           |
+| `DurationFromSelf`            | `Duration`                          |                                           |
+| `OptionFromSelf`              | `Option`                            |                                           |
+| `EitherFromSelf`              | `Result`                            | Also renamed from Either to Result        |
+| `RedactedFromSelf`            | `Redacted`                          |                                           |
+| `Redacted`                    | `RedactedFromValue`                 | The encoding version moved                |
+| `ChunkFromSelf`               | `Chunk`                             | `*FromSelf` suffix removed                |
+| `ReadonlyMapFromSelf`         | `ReadonlyMap`                       | `*FromSelf` suffix removed                |
+| `ReadonlySetFromSelf`         | `ReadonlySet`                       | `*FromSelf` suffix removed                |
+| `HashMapFromSelf`             | `HashMap`                           | `*FromSelf` suffix removed                |
+| `HashSetFromSelf`             | `HashSet`                           | `*FromSelf` suffix removed                |
+| `BigDecimalFromSelf`          | `BigDecimal`                        | `*FromSelf` suffix removed                |
+| `CauseFromSelf`               | `Cause`                             | `*FromSelf` suffix removed                |
+| `ExitFromSelf`                | `Exit`                              | `*FromSelf` suffix removed                |
+| `RegExpFromSelf`              | `RegExp`                            | `*FromSelf` suffix removed                |
+| `encodedSchema(schema)`       | `toEncoded(schema)`                 |                                           |
+| `decodingFallback` annotation | `catchDecoding(...)`                | Annotation replaced by combinator         |
+| `Literal(null)`               | `Null`                              | Standalone schema for null                |
+| `standardSchemaV1`            | `toStandardSchemaV1`                |                                           |
+| `nonEmptyString`              | `isNonEmpty()`                      | Now used with `.check()`                  |
+| `disableValidation`           | `disableChecks`                     | In `MakeOptions` for Class constructors   |
+
+### Parser/Codec Function Renames
+
+All parsing functions were renamed to clarify whether they return an `Effect` or an `Exit`:
+
+| v3                    | v4                    |
+| --------------------- | --------------------- |
+| `decodeUnknown`       | `decodeUnknownEffect` |
+| `decode`              | `decodeEffect`        |
+| `decodeUnknownEither` | `decodeUnknownExit`   |
+| `decodeEither`        | `decodeExit`          |
+| `encodeUnknown`       | `encodeUnknownEffect` |
+| `encode`              | `encodeEffect`        |
+| `encodeUnknownEither` | `encodeUnknownExit`   |
+| `encodeEither`        | `encodeExit`          |
+
+Note: `decodeUnknownSync` and `encodeSync` are **unchanged** — they still exist on `Schema`.
+
+## 2. Variadic → Array Arguments
+
+Several APIs that accepted variadic args now take arrays:
+
+```ts
+// v3
+Schema.Literal('a', 'b');
+Schema.Union(A, B);
+Schema.Tuple(A, B);
+Schema.TemplateLiteral(A, B);
+
+// v4
+Schema.Literals(['a', 'b']); // Note: single Literal("a") still exists
+Schema.Union([A, B]); // Array form is the canonical v4 signature
+Schema.Tuple([A, B]);
+Schema.TemplateLiteral([A, B]);
+```
+
+> **Note:** `Schema.Union` in v4 still accepts both the array form `Schema.Union([A, B])` and the variadic form `Schema.Union(A, B)` for backward compatibility. The array form is the canonical v4 signature and is preferred in new code.
+
+### Record: Object → Positional Args
+
+```ts
+// v3
+Schema.Record({ key: Schema.String, value: Schema.Number });
+
+// v4
+Schema.Record(Schema.String, Schema.Number);
+```
+
+## 3. Filter → Check Migration
+
+The `.pipe(Schema.filter(...))` pattern is replaced by `.check()` with `is*` prefixed validators:
+
+```ts
+// v3
+Schema.String.pipe(Schema.minLength(5));
+Schema.Number.pipe(Schema.int());
+Schema.Number.pipe(Schema.greaterThan(0));
+
+// v4
+Schema.String.check(Schema.isMinLength(5));
+Schema.Number.check(Schema.isInt());
+Schema.Number.check(Schema.isGreaterThan(0));
+```
+
+### Complete Filter Rename Table
+
+| v3 filter                 | v4 check                          |
+| ------------------------- | --------------------------------- |
+| `greaterThan(n)`          | `isGreaterThan(n)`                |
+| `greaterThanOrEqualTo(n)` | `isGreaterThanOrEqualTo(n)`       |
+| `lessThan(n)`             | `isLessThan(n)`                   |
+| `lessThanOrEqualTo(n)`    | `isLessThanOrEqualTo(n)`          |
+| `between(min, max)`       | `isBetween({ minimum, maximum })` |
+| `int()`                   | `isInt()`                         |
+| `multipleOf(n)`           | `isMultipleOf(n)`                 |
+| `finite`                  | `isFinite()`                      |
+| `minLength(n)`            | `isMinLength(n)`                  |
+| `maxLength(n)`            | `isMaxLength(n)`                  |
+| `length(n)`               | `isLengthBetween(n, n)`           |
+| `pattern(regex)`          | `isPattern(regex)`                |
+| `nonEmptyString`          | `isNonEmpty()`                    |
+
+### Removed Filters (no v4 equivalent)
+
+`positive`, `negative`, `nonNegative`, `nonPositive` — build these yourself:
+
+```ts
+// v4: replace removed convenience filters
+const isPositive = Schema.isGreaterThan(0);
+const isNonNegative = Schema.isGreaterThanOrEqualTo(0);
+const isNegative = Schema.isLessThan(0);
+const isNonPositive = Schema.isLessThanOrEqualTo(0);
+```
+
+### Custom Filters
+
+```ts
+// v3: inline predicate filter
+Schema.String.pipe(Schema.filter((s) => s.length > 0));
+
+// v4: use makeFilter
+Schema.String.check(Schema.makeFilter((s) => s.length > 0));
+
+// v3: refinement filter
+Schema.Option(Schema.String).pipe(Schema.filter(Option.isSome));
+
+// v4: use refine for type-narrowing predicates
+Schema.Option(Schema.String).pipe(Schema.refine(Option.isSome));
+```
+
+### String Transforms (not filters)
+
+```ts
+// v4: string transformations use SchemaTransformation + .decode()
+import { Schema, SchemaTransformation } from 'effect';
+
+Schema.String.decode(SchemaTransformation.trim());
+Schema.String.decode(SchemaTransformation.toLowerCase());
+Schema.String.decode(SchemaTransformation.toUpperCase());
+```
+
+## 4. Transform Migration
+
+`Schema.transform` and `Schema.transformOrFail` no longer exist as standalone functions. Use `Schema.decodeTo` with `SchemaTransformation`:
+
+### Pure Transform
+
+```ts
+// v3
+const BoolFromString = Schema.transform(
+	Schema.Literal('on', 'off'),
+	Schema.Boolean,
+	{
+		strict: true,
+		decode: (literal) => literal === 'on',
+		encode: (bool) => (bool ? 'on' : 'off')
+	}
+);
+
+// v4
+import { Schema, SchemaTransformation } from 'effect';
+
+const BoolFromString = Schema.Literals(['on', 'off']).pipe(
+	Schema.decodeTo(
+		Schema.Boolean,
+		SchemaTransformation.transform({
+			decode: (literal) => literal === 'on',
+			encode: (bool) => (bool ? 'on' : 'off')
+		})
+	)
+);
+```
+
+### Fallible Transform
+
+```ts
+// v3
+const NumberFromString = Schema.transformOrFail(Schema.String, Schema.Number, {
+	strict: true,
+	decode: (input, _, ast) => {
+		const parsed = parseFloat(input);
+		if (isNaN(parsed)) {
+			return ParseResult.fail(
+				new ParseResult.Type(ast, input, 'Not a number')
+			);
+		}
+		return ParseResult.succeed(parsed);
+	},
+	encode: (input) => ParseResult.succeed(input.toString())
+});
+
+// v4
+import {
+	Effect,
+	Number,
+	Option,
+	Schema,
+	SchemaGetter,
+	SchemaIssue
+} from 'effect';
+
+const NumberFromString = Schema.String.pipe(
+	Schema.decodeTo(Schema.Number, {
+		decode: SchemaGetter.transformOrFail((s) => {
+			const n = Number.parse(s);
+			if (n === undefined) {
+				return Effect.fail(
+					new SchemaIssue.InvalidValue(Option.some(s))
+				);
+			}
+			return Effect.succeed(n);
+		}),
+		encode: SchemaGetter.String()
+	})
+);
+```
+
+### Literal Transforms
+
+```ts
+// v3
+Schema.transformLiteral(0, 'a');
+Schema.transformLiterals([0, 'a'], [1, 'b']);
+
+// v4
+Schema.Literal(0).transform('a');
+Schema.Literals([0, 1]).transform(['a', 'b']);
+```
+
+## 5. Schema.Data Removal
+
+`Schema.Data` is **removed** in v4. No replacement needed — `Equal.equals` now does deep structural comparison on plain objects by default.
+
+```ts
+// v3: needed Schema.Data for structural equality
+const PersonData = Schema.Data(Schema.Struct({ name: Schema.String }));
+
+// v4: just use the struct directly — equality works out of the box
+const Person = Schema.Struct({ name: Schema.String });
+```
+
+## 6. Structural Operations via mapFields
+
+`pick`, `omit`, `partial`, `required`, and `extend` are now expressed through `mapFields`:
+
+```ts
+import { Schema, Struct } from 'effect';
+
+const base = Schema.Struct({
+	a: Schema.String,
+	b: Schema.Number,
+	c: Schema.Boolean
+});
+
+// pick
+base.mapFields(Struct.pick(['a']));
+
+// omit
+base.mapFields(Struct.omit(['b']));
+
+// partial (allows undefined)
+base.mapFields(Struct.map(Schema.optional));
+
+// partial exact (key can be absent, no undefined)
+base.mapFields(Struct.map(Schema.optionalKey));
+
+// partial subset
+base.mapFields(Struct.mapPick(['a'], Schema.optional));
+
+// required
+base.mapFields(Struct.map(Schema.requiredKey));
+
+// extend (add fields)
+base.mapFields(Struct.assign({ d: Schema.Date }));
+// or:
+base.pipe(Schema.fieldsAssign({ d: Schema.Date }));
+```
+
+### attachPropertySignature → mapFields + tagDefaultOmit
+
+```ts
+// v3
+Circle.pipe(Schema.attachPropertySignature('kind', 'circle'));
+
+// v4
+Circle.mapFields((fields) => ({
+	...fields,
+	kind: Schema.tagDefaultOmit('circle')
+}));
+```
+
+## 7. Optional Keys: optionalKey vs optional
+
+v4 distinguishes between two kinds of optional struct fields:
+
+| API                     | TypeScript type               | Meaning                                     |
+| ----------------------- | ----------------------------- | ------------------------------------------- |
+| `Schema.optionalKey(S)` | `readonly a?: T`              | Key may be absent (exact optional)          |
+| `Schema.optional(S)`    | `readonly a?: T \| undefined` | Key may be absent OR explicitly `undefined` |
+| `Schema.mutableKey(S)`  | `a: T`                        | Writable (removes `readonly`)               |
+
+Use `Schema.withDecodingDefault(() => value)` to provide defaults for missing/undefined fields.
+Use `Schema.withDecodingDefaultKey(() => value)` for optionalKey fields only.
+
+## 8. New Modules
+
+### SchemaTransformation
+
+Bidirectional transformation pairs (decode + encode getters). Key exports:
+
+- `transform({ decode, encode })` — pure bidirectional transform
+- `passthrough()` — identity (no conversion)
+- `trim()`, `toLowerCase()`, `toUpperCase()`, `capitalize()` — string transforms
+- `numberFromString()`, `bigintFromString()` — parsing transforms
+- `optionFromNullOr()`, `optionFromOptionalKey()` — Option wrapping
+- `fromJsonString()` — JSON string codec
+- `Middleware` class — wraps the full parsing Effect pipeline (for fallbacks, retries)
+
+```ts
+import { Schema, SchemaTransformation } from 'effect';
+
+// Basic usage: always pipe through Schema.decodeTo
+const Cents = Schema.Number.pipe(
+	Schema.decodeTo(
+		Schema.Number,
+		SchemaTransformation.transform({
+			decode: (dollars) => dollars * 100,
+			encode: (cents) => cents / 100
+		})
+	)
+);
+```
+
+### SchemaGetter
+
+Single-direction transform primitives. A `Getter<T, E, R>` is `Option<E> → Effect<Option<T>, Issue, R>`. Key exports:
+
+- `transform(fn)` — pure map over present values
+- `transformOrFail(fn)` — fallible map returning `Effect`
+- `transformOptional(fn)` — full `Option<E> → Option<T>` control (for optional field transforms)
+- `passthrough()` — identity getter
+- `withDefault(value)` — provide default for missing values
+- `required()` — fail if value is missing
+- `checkEffect(fn)` — effectful validation
+- `String()`, `Number()`, `Boolean()`, `BigInt()`, `Date()` — coercion getters
+
+```ts
+import { Schema, SchemaGetter } from 'effect';
+
+// Used as decode/encode args in Schema.decodeTo
+const NumberFromString = Schema.String.pipe(
+	Schema.decodeTo(Schema.Number, {
+		decode: SchemaGetter.transform((s) => Number(s)),
+		encode: SchemaGetter.transform((n) => String(n))
+	})
+);
+```
+
+## 9. Class Schemas
+
+Classes still use the same pattern — `Schema.Class<Self>(tag)(fields)`:
+
+```ts
+import { Schema } from 'effect';
+
+class User extends Schema.Class<User>('User')({
+	name: Schema.String,
+	email: Schema.String
+}) {}
+
+// With validation on the whole struct
+class User2 extends Schema.Class<User2>('User2')(
+	Schema.Struct({
+		name: Schema.String,
+		age: Schema.Number
+	}).check(
+		Schema.makeFilter(({ age }) => age >= 0, { title: 'non-negative age' })
+	)
+) {}
+
+// Extending
+class Admin extends User.extend<Admin>('Admin')({
+	role: Schema.Literal('admin')
+}) {}
+
+// Branded
+class UserId extends Schema.Class<UserId, { readonly brand: unique symbol }>(
+	'UserId'
+)({
+	id: Schema.String
+}) {}
+
+// Recursive
+class Category extends Schema.Class<Category>('Category')(
+	Schema.Struct({
+		name: Schema.String,
+		children: Schema.Array(
+			Schema.suspend((): Schema.Codec<Category> => Category)
+		)
+	})
+) {}
+```
+
+### MakeOptions: `disableChecks`
+
+Class constructors and `makeUnsafe` accept an optional second argument with `MakeOptions`:
+
+```ts
+interface MakeOptions {
+	readonly parseOptions?: AST.ParseOptions | undefined;
+	readonly disableChecks?: boolean | undefined;
+}
+```
+
+When `disableChecks: true`, schema checks are skipped during construction. Constructor defaults (`withConstructorDefault`) are **still applied** even when checks are disabled. This was renamed from `disableValidation` in v3.
+
+```ts
+class User extends Schema.Class<User>('User')({
+	name: Schema.String,
+	role: Schema.String.pipe(
+		Schema.withConstructorDefault(() => Option.some('viewer'))
+	)
+}) {}
+
+// Normal construction — validates input
+const user1 = new User({ name: 'Alice' });
+
+// Skip checks — trusts the data, but still applies constructor defaults
+const user2 = new User({ name: 'Alice' }, { disableChecks: true });
+
+// Also available on makeUnsafe and makeOption:
+const user3 = User.makeUnsafe({ name: 'Alice' }, { disableChecks: true });
+const user4 = User.makeOption({ name: 'Alice' }, { disableChecks: true });
+```
+
+When a subclass `extend`s a parent, the parent constructor is automatically called with `disableChecks: true` after the child validates, avoiding double-validation.
+
+### TaggedClass (auto `_tag` field)
+
+```ts
+class Cat extends Schema.TaggedClass<Cat>()('Cat', {
+	lives: Schema.Number
+}) {}
+// new Cat({ lives: 9 }) → { _tag: "Cat", lives: 9 }
+```
+
+## 10. TaggedErrorClass
+
+Renamed FROM `TaggedError` in v3. Pattern is unchanged:
+
+```ts
+import { Effect, Schema } from 'effect';
+
+class HttpError extends Schema.TaggedErrorClass<HttpError>()('HttpError', {
+	status: Schema.Number,
+	message: Schema.String
+}) {}
+
+// Usage
+const program = Effect.gen(function* () {
+	yield* new HttpError({ status: 404, message: 'Not found' });
+});
+
+const recovered = program.pipe(
+	Effect.catchTag('HttpError', (err) =>
+		Effect.succeed(`Caught: ${err.status} ${err.message}`)
+	)
+);
+```
+
+## 11. Other Removed APIs
+
+| v3 API                           | Status  | Replacement                           |
+| -------------------------------- | ------- | ------------------------------------- |
+| `validate*` (validateSync, etc.) | removed | `Schema.decode*` + `Schema.toType`    |
+| `keyof`                          | removed | —                                     |
+| `ArrayEnsure`                    | removed | —                                     |
+| `NonEmptyArrayEnsure`            | removed | —                                     |
+| `withDefaults`                   | removed | —                                     |
+| `fromKey`                        | removed | —                                     |
+| `Data(schema)`                   | removed | Not needed (deep equality is default) |
+
+## 12. Quick Decision Guide
+
+**"I need to..."**
+
+| Task                       | v4 Pattern                                                                                               |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Validate a primitive       | `Schema.String.check(Schema.isMinLength(1))`                                                             |
+| Transform between types    | `from.pipe(Schema.decodeTo(to, SchemaTransformation.transform({...})))`                                  |
+| Make fields optional       | `struct.mapFields(Struct.map(Schema.optionalKey))`                                                       |
+| Pick/omit fields           | `struct.mapFields(Struct.pick(["a"]))`                                                                   |
+| Extend a struct            | `struct.mapFields(Struct.assign({ newField: Schema.X }))`                                                |
+| Parse JSON string          | `Schema.UnknownFromJsonString` or `Schema.fromJsonString(schema)`                                        |
+| Add default value          | `Schema.withDecodingDefault(() => value)`                                                                |
+| Create tagged error        | `class E extends Schema.TaggedErrorClass<E>()("E", { ... }) {}`                                          |
+| Rename fields              | `struct.pipe(Schema.encodeKeys({ oldName: "newName" }))`                                                 |
+| Discriminated union        | `Schema.Union([TaggedClassA, TaggedClassB])`                                                             |
+| Decode unknown safely      | `Schema.decodeUnknownSync(schema)(input)` (sync) or `Schema.decodeUnknownEffect(schema)(input)` (Effect) |
+| Get Exit instead of Either | `Schema.decodeUnknownExit(schema)(input)`                                                                |
+
+Base directory for this skill: file:///Users/m/repos/opencode-effect-enforcer/skills/effect-schema-v4
+Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.
+Note: file list is sampled.
+
+<skill_files>
+
+</skill_files>
+</skill_content>
+```
+
+**Tool: skill**
+
+**Input:**
+```json
+{
+  "name": "effect-error-handling"
+}
+```
+
+**Output:**
+```
+<skill_content name="effect-error-handling">
+# Skill: effect-error-handling
+
+You are an Effect TypeScript expert specializing in typed error handling, recovery patterns, and error channel management in **Effect v4**.
+
+## Effect Source Reference
+
+Use `effect_ref_read` to read Effect v4 source files and `effect_ref_list` to browse directories.
+These tools automatically fetch source matching your installed Effect version.
+
+Reference this for:
+
+- Schema.TaggedErrorClass and error class creation
+- Error handling combinators (catchTag, catchTags, catch, catchReason, catchReasons)
+- Error transformation and recovery patterns
+- Cause structure and inspection
+- ErrorReporter module
+- Defects vs error channel distinction
+
+## v3 to v4 Error API Changes
+
+**This table is authoritative. Never use the v3 names.**
+
+### Effect Catch Combinators
+
+| v3 (DO NOT USE)             | v4 (USE THIS)               | Notes                                              |
+| --------------------------- | --------------------------- | -------------------------------------------------- |
+| `Effect.catchAll`           | `Effect.catch`              | Renamed                                            |
+| `Effect.catchAllCause`      | `Effect.catchCause`         | Renamed                                            |
+| `Effect.catchAllDefect`     | `Effect.catchDefect`        | Renamed                                            |
+| `Effect.catchSome`          | `Effect.catchFilter`        | Uses `Filter` module instead of `Option`           |
+| `Effect.catchSomeCause`     | `Effect.catchCauseFilter`   | Uses `Filter` module instead of `Option`           |
+| `Effect.catchSomeDefect`    | Removed                     | No replacement                                     |
+| `Effect.optionFromOptional` | `Effect.catchNoSuchElement` | Renamed                                            |
+| `Effect.catchTag`           | `Effect.catchTag`           | Enhanced: accepts array of tags, optional `orElse` |
+| `Effect.catchTags`          | `Effect.catchTags`          | Enhanced: optional `orElse` fallback               |
+| `Effect.catchIf`            | `Effect.catchIf`            | Enhanced: optional `orElse` fallback               |
+| (none)                      | `Effect.catchReason`        | NEW: catch nested reason within tagged error       |
+| (none)                      | `Effect.catchReasons`       | NEW: catch multiple nested reasons                 |
+| (none)                      | `Effect.unwrapReason`       | NEW: promote nested reasons to error channel       |
+| (none)                      | `Effect.catchEager`         | NEW: synchronous recovery optimization             |
+| (none)                      | `Effect.withErrorReporting` | NEW: report errors to registered ErrorReporters    |
+
+### Cause Structure
+
+| v3 (DO NOT USE)                  | v4 (USE THIS)                              | Notes                         |
+| -------------------------------- | ------------------------------------------ | ----------------------------- |
+| 6-variant recursive tree         | `{ reasons: ReadonlyArray<Reason<E>> }`    | Flattened                     |
+| `Cause.sequential(l, r)`         | `Cause.combine(l, r)`                      | Concatenates reasons arrays   |
+| `Cause.parallel(l, r)`           | `Cause.combine(l, r)`                      | Same as sequential            |
+| `Cause.isFailType(cause)`        | `Cause.isFailReason(reason)`               | Operates on Reason, not Cause |
+| `Cause.isDieType(cause)`         | `Cause.isDieReason(reason)`                | Operates on Reason, not Cause |
+| `Cause.isInterruptType(cause)`   | `Cause.isInterruptReason(reason)`          | Operates on Reason, not Cause |
+| `Cause.isFailure(cause)`         | `Cause.hasFails(cause)`                    | Renamed                       |
+| `Cause.isDie(cause)`             | `Cause.hasDies(cause)`                     | Renamed                       |
+| `Cause.isInterrupted(cause)`     | `Cause.hasInterrupts(cause)`               | Renamed                       |
+| `Cause.isInterruptedOnly(cause)` | `Cause.hasInterruptsOnly(cause)`           | Renamed                       |
+| `Cause.failureOption(cause)`     | `Cause.findErrorOption(cause)`             | Renamed                       |
+| `Cause.failureOrCause(cause)`    | `Cause.findError(cause)`                   | Returns `Result.Result` now   |
+| `Cause.dieOption(cause)`         | `Cause.findDefect(cause)`                  | Returns `Result.Result` now   |
+| `Cause.interruptOption(cause)`   | `Cause.findInterrupt(cause)`               | Returns `Result.Result` now   |
+| `Cause.failures(cause)`          | `cause.reasons.filter(Cause.isFailReason)` | Use array filter              |
+| `Cause.defects(cause)`           | `cause.reasons.filter(Cause.isDieReason)`  | Use array filter              |
+
+### Error Class Renames (`*Exception` to `*Error`)
+
+| v3 (DO NOT USE)                        | v4 (USE THIS)                 |
+| -------------------------------------- | ----------------------------- |
+| `Cause.NoSuchElementException`         | `Cause.NoSuchElementError`    |
+| `Cause.TimeoutException`               | `Cause.TimeoutError`          |
+| `Cause.IllegalArgumentException`       | `Cause.IllegalArgumentError`  |
+| `Cause.ExceededCapacityException`      | `Cause.ExceededCapacityError` |
+| `Cause.UnknownException`               | `Cause.UnknownError`          |
+| `Cause.RuntimeException`               | Removed                       |
+| `Cause.InterruptedException`           | Removed                       |
+| `Cause.InvalidPubSubCapacityException` | Removed                       |
+
+### Schema Error Renames
+
+| v3 (DO NOT USE)      | v4 (USE THIS)             |
+| -------------------- | ------------------------- |
+| `Schema.TaggedError` | `Schema.TaggedErrorClass` |
+| `ParseError`         | `Schema.SchemaError`      |
+
+## Core Error Handling Philosophy
+
+Effect distinguishes between two types of failures:
+
+1. **Expected Errors (Error Channel)** - Business logic failures that should be handled
+    - Type-safe and tracked in the effect signature: `Effect<A, E, R>`
+    - Represented by the `E` type parameter
+    - Handle with catchTag, catchTags, catch, catchReason, catchReasons
+
+2. **Unexpected Errors (Defects)** - Programming errors that indicate bugs
+    - Not tracked in the type system
+    - Result from programming mistakes (null refs, unhandled cases, assertions)
+    - Usually should NOT be caught; use catchDefect only at boundaries
+
+### When to Use Error Channel vs Defects
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
+
+declare const findUser: (userId: string) => Effect.Effect<User, UserNotFound>;
+declare const validatePassword: (
+	user: User,
+	password: string
+) => Effect.Effect<boolean, InvalidCredentials>;
+declare const database: {
+	query: (
+		sql: string,
+		...params: ReadonlyArray<unknown>
+	) => Effect.Effect<unknown>;
+};
+
+interface User {
+	readonly id: string;
+	readonly name: string;
+}
+
+// CORRECT - Expected business failures in error channel
+class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()(
+	'UserNotFound',
+	{
+		userId: Schema.String,
+		message: Schema.String
+	}
+) {}
+
+class InvalidCredentials extends Schema.TaggedErrorClass<InvalidCredentials>()(
+	'InvalidCredentials',
+	{ reason: Schema.String, message: Schema.String }
+) {}
+
+const authenticateUser = (
+	userId: string,
+	password: string
+): Effect.Effect<User, UserNotFound | InvalidCredentials> =>
+	Effect.gen(function* () {
+		const user = yield* findUser(userId); // Can fail with UserNotFound
+		const valid = yield* validatePassword(user, password); // Can fail with InvalidCredentials
+		return user;
+	});
+
+// CORRECT - Programmer errors as defects (use Effect.die)
+const assertPositive = (n: number): Effect.Effect<number> =>
+	n > 0
+		? Effect.succeed(n)
+		: Effect.die(new Error(`Expected positive number, got ${n}`));
+
+// WRONG - Business failure as defect
+const findUserWrong = (userId: string): Effect.Effect<User> =>
+	Effect.gen(function* () {
+		const user = yield* database.query(
+			'SELECT * FROM users WHERE id = ?',
+			userId
+		);
+		if (!user) {
+			yield* Effect.die(new Error('User not found')); // Should be in error channel!
+		}
+		return user as User;
+	});
+```
+
+## Error Class Decision Tree
+
+Effect v4 provides three ways to define error classes. Choose based on context:
+
+### `Schema.TaggedErrorClass` — Primary choice for domain errors
+
+Schema-validated, automatically tagged with `_tag`, catchable via `catchTag`. Use for all cross-module and public API errors.
+
+```typescript
+import * as Schema from 'effect/Schema';
+
+class NotFound extends Schema.TaggedErrorClass<NotFound>()(
+	'NotFound',
+	{ id: Schema.String, message: Schema.String },
+	{ description: 'Entity was not found.' }
+) {}
+
+// Constructed with schema validation
+const error = new NotFound({ id: '123', message: 'User not found' });
+error._tag; // "NotFound"
+```
+
+### `Schema.ErrorClass` — For manual tag control
+
+Schema-validated but no automatic `_tag`. Use when you need a custom discriminator field (e.g., HttpApiError types use `_tag: Schema.tag("NotFound")` manually).
+
+```typescript
+import * as Schema from 'effect/Schema';
+
+class NotFound extends Schema.ErrorClass<NotFound>('NotFound')({
+	_tag: Schema.tag('NotFound'),
+	message: Schema.String
+}) {}
+```
+
+### `Data.TaggedError` — Lightweight, no schema validation
+
+No schema validation overhead. Use for module-internal errors or hot paths where schema decoding cost is unwanted.
+
+```typescript
+import * as Data from 'effect/Data';
+
+class InternalError extends Data.TaggedError('InternalError')<{
+	readonly message: string;
+}> {}
+
+// Still catchable via catchTag
+const program = Effect.fail(new InternalError({ message: 'oops' })).pipe(
+	Effect.catchTag('InternalError', (e) => Effect.succeed(e.message))
+);
+```
+
+### Decision summary
+
+| Scenario                                    | Use                       |
+| ------------------------------------------- | ------------------------- |
+| Cross-module / public API errors            | `Schema.TaggedErrorClass` |
+| Errors that need `httpApiStatus` annotation | `Schema.TaggedErrorClass` |
+| Errors with a `reason` union field          | `Schema.TaggedErrorClass` |
+| Custom discriminator field (not `_tag`)     | `Schema.ErrorClass`       |
+| Module-internal, no serialization needed    | `Data.TaggedError`        |
+
+## Creating Tagged Errors
+
+Always use `Schema.TaggedErrorClass` for domain errors with a `message` field.
+
+### Basic Tagged Error
+
+```typescript
+import * as Schema from 'effect/Schema';
+
+// Simple error with message only
+export class NetworkError extends Schema.TaggedErrorClass<NetworkError>()(
+	'NetworkError',
+	{ message: Schema.String },
+	{ description: 'Network request failed.' }
+) {}
+
+// Error with rich context
+export class ValidationError extends Schema.TaggedErrorClass<ValidationError>()(
+	'ValidationError',
+	{
+		field: Schema.String,
+		message: Schema.String,
+		value: Schema.optional(Schema.Unknown)
+	},
+	{ description: 'Input validation failed for a specific field.' }
+) {}
+
+// Usage
+const error = new ValidationError({
+	field: 'email',
+	message: 'Invalid email format',
+	value: 'not-an-email'
+});
+```
+
+### Error with Reason Discriminator
+
+For bindings that wrap a single external system, use a `reason` literal union to keep the error surface compact while remaining precise:
+
+```typescript
+import * as Schema from 'effect/Schema';
+
+export class ApiError extends Schema.TaggedErrorClass<ApiError>()(
+	'ApiError',
+	{
+		reason: Schema.Literals([
+			'BadRequest',
+			'Unauthorized',
+			'NotFound',
+			'RateLimited',
+			'ServerError',
+			'Timeout'
+		]),
+		message: Schema.String,
+		statusCode: Schema.optional(Schema.Number),
+		details: Schema.optional(Schema.Record(Schema.String, Schema.Unknown))
+	},
+	{ description: 'Failure from an external API operation.' }
+) {}
+```
+
+### Error with Nested Reason Types (for `catchReason`/`catchReasons`)
+
+When reason variants carry distinct payloads, model each as a separate `TaggedErrorClass` and compose with `Schema.Union`. This enables v4's `catchReason` and `catchReasons`:
+
+```typescript
+import * as Schema from 'effect/Schema';
+
+export class RateLimitError extends Schema.TaggedErrorClass<RateLimitError>()(
+	'RateLimitError',
+	{ retryAfter: Schema.Number },
+	{ description: 'Rate limit exceeded.' }
+) {}
+
+export class QuotaExceededError extends Schema.TaggedErrorClass<QuotaExceededError>()(
+	'QuotaExceededError',
+	{ limit: Schema.Number },
+	{ description: 'Quota exhausted.' }
+) {}
+
+export class SafetyBlockedError extends Schema.TaggedErrorClass<SafetyBlockedError>()(
+	'SafetyBlockedError',
+	{ category: Schema.String },
+	{ description: 'Blocked by safety filter.' }
+) {}
+
+export class AiError extends Schema.TaggedErrorClass<AiError>()(
+	'AiError',
+	{
+		reason: Schema.Union([
+			RateLimitError,
+			QuotaExceededError,
+			SafetyBlockedError
+		])
+	},
+	{ description: 'Failure from an AI model call.' }
+) {}
+```
+
+### Error with HTTP Status Annotation
+
+For errors that map to HTTP responses, use the `httpApiStatus` annotation:
+
+```typescript
+import * as Schema from 'effect/Schema';
+
+export class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
+	'Unauthorized',
+	{ message: Schema.String },
+	{
+		httpApiStatus: 401,
+		description: 'Request lacks valid authentication credentials.'
+	}
+) {}
+
+export class EntityNotFound extends Schema.TaggedErrorClass<EntityNotFound>()(
+	'EntityNotFound',
+	{ entityType: Schema.String, id: Schema.String, message: Schema.String },
+	{
+		httpApiStatus: 404,
+		description: 'Requested entity does not exist.'
+	}
+) {}
+```
+
+### Error with Custom Properties
+
+```typescript
+import * as Schema from 'effect/Schema';
+
+export class HttpError extends Schema.TaggedErrorClass<HttpError>()(
+	'HttpError',
+	{
+		status: Schema.Number,
+		body: Schema.String,
+		message: Schema.String
+	},
+	{ description: 'HTTP response error.' }
+) {
+	get isClientError() {
+		return this.status >= 400 && this.status < 500;
+	}
+
+	get isServerError() {
+		return this.status >= 500;
+	}
+}
+```
+
+## Error Wrapping Conventions
+
+When wrapping upstream errors in domain error classes, choose the `cause` field schema based on intent:
+
+| `cause` Schema   | When to use                                                    | Example                          |
+| ---------------- | -------------------------------------------------------------- | -------------------------------- |
+| `Schema.Defect`  | Wrapping unknown/untyped upstream errors (throwables, defects) | `DevToolsError`, `DatabaseError` |
+| `Schema.Unknown` | Preserving full upstream error structure for debugging         | `SubstackFetchError`             |
+| `Schema.String`  | Message-only wrapping where structure is irrelevant            | `AuthError`                      |
+| Omitted          | When the error tag + fields fully describe the failure         | `UserNotFound`, `Unauthorized`   |
+
+```typescript
+import * as Schema from 'effect/Schema';
+
+// Defect-style: wraps throwables and unknown failures
+export class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()(
+	'DatabaseError',
+	{
+		operation: Schema.String,
+		message: Schema.String,
+		cause: Schema.Defect
+	},
+	{ description: 'Database operation failed.' }
+) {}
+
+// Unknown-style: preserves full upstream error
+export class FetchError extends Schema.TaggedErrorClass<FetchError>()(
+	'FetchError',
+	{
+		url: Schema.String,
+		message: Schema.String,
+		cause: Schema.Unknown
+	},
+	{ description: 'HTTP fetch operation failed.' }
+) {}
+
+// String-style: message-only wrapper
+export class AuthError extends Schema.TaggedErrorClass<AuthError>()(
+	'AuthError',
+	{
+		cause: Schema.String
+	},
+	{ description: 'Authentication backend failure.' }
+) {}
+```
+
+## Yieldable Errors
+
+In `Effect.gen` blocks, tagged error instances can be yielded directly as a shorthand for `yield* Effect.fail(...)`. This works because `Schema.TaggedErrorClass`, `Schema.ErrorClass`, and `Data.TaggedError` all implement the `Yieldable` interface.
+
+```typescript
+import { Effect } from 'effect';
+import * as Schema from 'effect/Schema';
+
+class NotFound extends Schema.TaggedErrorClass<NotFound>()('NotFound', {
+	id: Schema.String,
+	message: Schema.String
+}) {}
+
+// These two are equivalent:
+const explicit = Effect.gen(function* () {
+	return yield* Effect.fail(
+		new NotFound({ id: '123', message: 'User not found' })
+	);
+});
+
+const shorthand = Effect.gen(function* () {
+	return yield* new NotFound({ id: '123', message: 'User not found' });
+});
+```
+
+The shorthand form is idiomatic and preferred in Effect v4 generators. It reads naturally as "yield this error" and reduces noise.
+
+## Handling Errors by Tag
+
+### catchTag - Single Error Type
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
+
+declare const createGuestUser: (id: string) => User;
+
+interface User {
+	readonly id: string;
+	readonly name: string;
+}
+
+class NotFound extends Schema.TaggedErrorClass<NotFound>()('NotFound', {
+	id: Schema.String,
+	message: Schema.String
+}) {}
+
+class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
+	'Unauthorized',
+	{
+		message: Schema.String
+	}
+) {}
+
+//          Effect<User, NotFound | Unauthorized, Dependencies>
+//      v
+const getUser = (id: string): Effect.Effect<User, NotFound | Unauthorized> =>
+	Effect.fail(new NotFound({ id, message: `User ${id} not found` }));
+
+// Handle single error type
+//          Effect<User, Unauthorized, Dependencies>
+//      v
+const program = getUser('123').pipe(
+	Effect.catchTag('NotFound', (error) =>
+		// Return default user when not found
+		Effect.succeed(createGuestUser(error.id))
+	)
+);
+```
+
+### catchTag - Array Form (v4)
+
+In Effect v4, `catchTag` accepts an array of tags to handle multiple error types with a single handler:
+
+```typescript
+import { Effect, Schema } from 'effect';
+
+class ParseError extends Schema.TaggedErrorClass<ParseError>()('ParseError', {
+	input: Schema.String,
+	message: Schema.String
+}) {}
+
+class ReservedPortError extends Schema.TaggedErrorClass<ReservedPortError>()(
+	'ReservedPortError',
+	{
+		port: Schema.Number
+	}
+) {}
+
+declare const loadPort: (
+	input: string
+) => Effect.Effect<number, ParseError | ReservedPortError>;
+
+// Catch multiple tags with one handler - the error is typed as the union
+const program = loadPort('80').pipe(
+	Effect.catchTag(['ParseError', 'ReservedPortError'], (_) =>
+		Effect.succeed(3000)
+	)
+);
+```
+
+### catchTag / catchTags - Optional `orElse` Fallback (v4)
+
+In v4, `catchTag`, `catchTags`, and `catchIf` accept an optional trailing `orElse` parameter for unmatched errors:
+
+```typescript
+import { Effect, Schema } from 'effect';
+
+class NotFound extends Schema.TaggedErrorClass<NotFound>()('NotFound', {
+	message: Schema.String
+}) {}
+
+class Forbidden extends Schema.TaggedErrorClass<Forbidden>()('Forbidden', {
+	message: Schema.String
+}) {}
+
+class ServerError extends Schema.TaggedErrorClass<ServerError>()(
+	'ServerError',
+	{
+		message: Schema.String
+	}
+) {}
+
+declare const riskyOp: () => Effect.Effect<
+	string,
+	NotFound | Forbidden | ServerError
+>;
+
+// The third argument is the orElse handler for unmatched errors
+const program = riskyOp().pipe(
+	Effect.catchTag(
+		'NotFound',
+		(e) => Effect.succeed('default'),
+		(unmatched) => Effect.die(unmatched) // Forbidden | ServerError
+	)
+);
+
+// Works with catchTags too
+const program2 = riskyOp().pipe(
+	Effect.catchTags(
+		{
+			NotFound: (e) => Effect.succeed('default'),
+			Forbidden: (e) => Effect.succeed('forbidden')
+		},
+		(unmatched) => Effect.die(unmatched) // ServerError
+	)
+);
+```
+
+### catchTags - Multiple Error Types
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
+
+interface Data {
+	readonly data: ReadonlyArray<unknown>;
+	readonly cached?: boolean;
+	readonly timeout?: boolean;
+	readonly parseError?: boolean;
+}
+
+class NetworkError extends Schema.TaggedErrorClass<NetworkError>()(
+	'NetworkError',
+	{
+		message: Schema.String
+	}
+) {}
+
+class TimeoutError extends Schema.TaggedErrorClass<TimeoutError>()(
+	'TimeoutError',
+	{
+		message: Schema.String
+	}
+) {}
+
+class ParseError extends Schema.TaggedErrorClass<ParseError>()('ParseError', {
+	input: Schema.String,
+	message: Schema.String
+}) {}
+
+//          Effect<Data, NetworkError | TimeoutError | ParseError, Dependencies>
+//      v
+const fetchData = (): Effect.Effect<
+	Data,
+	NetworkError | TimeoutError | ParseError
+> => Effect.fail(new NetworkError({ message: 'Connection refused' }));
+
+// Handle multiple error types at once
+//          Effect<Data, never, Dependencies>
+//      v
+const program = fetchData().pipe(
+	Effect.catchTags({
+		NetworkError: (_error) => Effect.succeed({ data: [], cached: true }),
+
+		TimeoutError: (_error) => Effect.succeed({ data: [], timeout: true }),
+
+		ParseError: (error) =>
+			// Access error-specific fields
+			Effect.logError(`Failed to parse: ${error.input}`).pipe(
+				Effect.as({ data: [], parseError: true })
+			)
+	})
+);
+```
+
+### catch - Handle All Errors
+
+`Effect.catch` (renamed from `catchAll` in v3) handles all errors with a single handler:
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
+
+declare const getDefaultResult: () => Result;
+
+interface Result {
+	readonly value: string;
+}
+
+class InvalidInput extends Schema.TaggedErrorClass<InvalidInput>()(
+	'InvalidInput',
+	{
+		message: Schema.String
+	}
+) {}
+
+class ProcessingError extends Schema.TaggedErrorClass<ProcessingError>()(
+	'ProcessingError',
+	{
+		message: Schema.String
+	}
+) {}
+
+const process = (): Effect.Effect<Result, InvalidInput | ProcessingError> =>
+	Effect.fail(new InvalidInput({ message: 'Bad input' }));
+
+const program = process().pipe(
+	Effect.catch((error) =>
+		// error is typed as: InvalidInput | ProcessingError
+		Effect.logError(`Operation failed: ${error._tag}`).pipe(
+			Effect.as(getDefaultResult())
+		)
+	)
+);
+```
+
+### catchEager - Synchronous Recovery (v4)
+
+`Effect.catchEager` is an optimization of `catch` that evaluates synchronous recovery effects immediately rather than suspending. Use for lightweight wrapping where the recovery handler is always synchronous:
+
+```typescript
+import { Effect, Schema } from 'effect';
+
+class CliConfigError extends Schema.TaggedErrorClass<CliConfigError>()(
+	'CliConfigError',
+	{
+		message: Schema.String
+	}
+) {}
+
+const loadCredentials = Effect.tryPromise({
+	try: () => readFile('~/.config/myapp/credentials.json'),
+	catch: (cause) => cause
+}).pipe(
+	Effect.catchEager((cause) =>
+		Effect.fail(
+			new CliConfigError({
+				message: `Failed to load credentials: ${cause}`
+			})
+		)
+	)
+);
+```
+
+### catchNoSuchElement - Convert NoSuchElementError to Option (v4)
+
+`Effect.catchNoSuchElement` (renamed from `optionFromOptional` in v3) catches `Cause.NoSuchElementError` and converts the result to `Option`:
+
+```typescript
+import { Effect } from 'effect';
+import * as Option from 'effect/Option';
+
+declare const maybeFindItem: () => Effect.Effect<
+	string,
+	Cause.NoSuchElementError
+>;
+
+// Effect<Option<string>, never>
+const program = Effect.catchNoSuchElement(maybeFindItem());
+```
+
+## Handling Nested Error Reasons (v4)
+
+When errors use a `reason` field containing a tagged union (see "Error with Nested Reason Types" above), v4 provides three purpose-built APIs.
+
+### catchReason - Catch One Specific Reason
+
+Catches a specific `reason` variant within a tagged error without removing the parent error from the error channel:
+
+```typescript
+import { Effect } from 'effect';
+
+declare const callModel: Effect.Effect<string, AiError>;
+
+// Catch only RateLimitError reason within AiError
+const program = callModel.pipe(
+	Effect.catchReason(
+		'AiError', // parent error _tag
+		'RateLimitError', // reason _tag to catch
+		(reason) => Effect.succeed(`Retry after ${reason.retryAfter} seconds`)
+	)
+);
+
+// With optional orElse for uncaught reasons
+const withFallback = callModel.pipe(
+	Effect.catchReason(
+		'AiError',
+		'RateLimitError',
+		(reason) => Effect.succeed(`Retry after ${reason.retryAfter} seconds`),
+		(reason) => Effect.succeed(`Model call failed: ${reason._tag}`) // QuotaExceeded | SafetyBlocked
+	)
+);
+```
+
+### catchReasons - Catch Multiple Reasons
+
+Handle multiple reason variants at once via an object of handlers:
+
+```typescript
+import { Effect } from 'effect';
+
+declare const callModel: Effect.Effect<string, AiError>;
+
+const program = callModel.pipe(
+	Effect.catchReasons('AiError', {
+		RateLimitError: (reason) =>
+			Effect.succeed(`Retry after ${reason.retryAfter} seconds`),
+		QuotaExceededError: (reason) =>
+			Effect.succeed(`Quota exceeded at ${reason.limit} tokens`)
+	})
+	// SafetyBlockedError remains unhandled in the error channel
+);
+```
+
+### unwrapReason - Promote Reasons to Error Channel
+
+Unwraps the `reason` field, replacing the parent error with its reason variants in the error channel. Useful when you want to `catchTags` the individual reasons directly:
+
+```typescript
+import { Effect } from 'effect';
+
+declare const callModel: Effect.Effect<string, AiError>;
+
+const program = callModel.pipe(
+	Effect.unwrapReason('AiError'),
+	// Error channel is now: RateLimitError | QuotaExceededError | SafetyBlockedError
+	Effect.catchTags({
+		RateLimitError: (r) => Effect.succeed(`Back off for ${r.retryAfter}s`),
+		QuotaExceededError: (r) =>
+			Effect.succeed(`Increase quota beyond ${r.limit}`),
+		SafetyBlockedError: (r) => Effect.succeed(`Blocked: ${r.category}`)
+	})
+);
+```
+
+## Catching by Filter (v4)
+
+`Effect.catchFilter` replaces v3's `Effect.catchSome` (which used `Option`). It uses the `Filter` module:
+
+```typescript
+import { Effect, Filter } from 'effect';
+
+// v3 (DO NOT USE):
+// Effect.catchSome((error) =>
+//   error === 42 ? Option.some(Effect.succeed("caught")) : Option.none()
+// )
+
+// v4:
+const program = Effect.fail(42).pipe(
+	Effect.catchFilter(
+		Filter.fromPredicate((error: number) => error === 42),
+		(error) => Effect.succeed('caught')
+	)
+);
+```
+
+`Effect.catchCauseFilter` is the Cause-level equivalent (replaces `catchSomeCause`).
+
+## Cause Structure (v4)
+
+In v4, `Cause<E>` is a flat wrapper around an array of reasons — **not** a recursive tree.
+
+```typescript
+interface Cause<E> {
+	readonly reasons: ReadonlyArray<Reason<E>>;
+}
+
+type Reason<E> = Fail<E> | Die | Interrupt;
+```
+
+There are only three reason variants:
+
+- `Fail<E>` — `{ readonly error: E }` — expected typed failures
+- `Die` — `{ readonly defect: unknown }` — unexpected defects
+- `Interrupt` — `{ readonly fiberId: number | undefined }` — fiber interruptions
+
+An empty cause is `cause.reasons.length === 0`. The `Empty`, `Sequential`, and `Parallel` variants from v3 no longer exist.
+
+### Inspecting Causes
+
+```typescript
+import { Cause } from 'effect';
+
+const inspectCause = <E>(cause: Cause.Cause<E>) => {
+	// Iterate over the flat reasons array
+	for (const reason of cause.reasons) {
+		if (Cause.isFailReason(reason)) {
+			console.log('Expected error:', reason.error);
+		} else if (Cause.isDieReason(reason)) {
+			console.log('Defect:', reason.defect);
+		} else if (Cause.isInterruptReason(reason)) {
+			console.log('Interrupted by fiber:', reason.fiberId);
+		}
+	}
+};
+```
+
+### Cause Extractors
+
+```typescript
+import { Cause } from 'effect';
+import * as Option from 'effect/Option';
+
+declare const cause: Cause.Cause<string>;
+
+// Extract first error as Option
+const errorOpt: Option.Option<string> = Cause.findErrorOption(cause);
+
+// Extract first error as Result (Result.Result<E, Cause<never>>)
+const errorResult = Cause.findError(cause);
+
+// Extract first defect as Result
+const defectResult = Cause.findDefect(cause);
+
+// Check what a cause contains
+Cause.hasFails(cause); // has at least one Fail reason
+Cause.hasDies(cause); // has at least one Die reason
+Cause.hasInterrupts(cause); // has at least one Interrupt reason
+Cause.hasInterruptsOnly(cause); // only Interrupt reasons, no Fail/Die
+
+// Human-readable rendering
+const pretty: string = Cause.pretty(cause);
+```
+
+### Cause Constructors (v4)
+
+```typescript
+import { Cause } from 'effect';
+
+Cause.empty; // empty cause (no reasons)
+Cause.fail(error); // single Fail reason
+Cause.die(defect); // single Die reason
+Cause.interrupt(fiberId); // single Interrupt reason
+Cause.combine(left, right); // concatenate two causes' reasons
+Cause.fromReasons(reasons); // construct from array of Reason values
+Cause.makeFailReason(error); // construct a Fail reason
+Cause.makeDieReason(defect); // construct a Die reason
+Cause.makeInterruptReason(fiberId); // construct an Interrupt reason
+Cause.annotate(cause, annotations); // attach metadata
+```
+
+### Cause.Done - Graceful Completion Signal (v4)
+
+`Cause.Done` is a special error class used as a graceful completion signal for queues and streams. It is not a failure — it signals orderly shutdown:
+
+```typescript
+import { Cause } from 'effect';
+
+Cause.Done(); // create a Done signal
+Cause.done(); // shorthand for Effect.fail(Cause.Done())
+Cause.isDone(value); // type guard
+```
+
+## Exhaustive Error Handling with Match
+
+Use Match for exhaustive error handling with compile-time guarantees:
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Match from 'effect/Match';
+import * as Schema from 'effect/Schema';
+
+declare const dangerousOperation: () => Effect.Effect<string, AppError>;
+
+class ConnectionError extends Schema.TaggedErrorClass<ConnectionError>()(
+	'ConnectionError',
+	{
+		message: Schema.String
+	}
+) {}
+
+class AuthError extends Schema.TaggedErrorClass<AuthError>()('AuthError', {
+	message: Schema.String
+}) {}
+
+class DataError extends Schema.TaggedErrorClass<DataError>()('DataError', {
+	message: Schema.String
+}) {}
+
+type AppError = ConnectionError | AuthError | DataError;
+
+const handleError = (error: AppError): Effect.Effect<string> =>
+	Match.value(error).pipe(
+		Match.tag('ConnectionError', () =>
+			Effect.succeed('Please check your network connection')
+		),
+		Match.tag('AuthError', () => Effect.succeed('Authentication required')),
+		Match.tag('DataError', (err) =>
+			Effect.succeed(`Data error: ${err.message}`)
+		),
+		Match.exhaustive // Compiler ensures all cases handled
+	);
+
+const program = dangerousOperation().pipe(Effect.catch(handleError));
+```
+
+## Error Transformation
+
+### mapError - Transform Error Type
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
+
+declare const fetchFromDatabase: () => Effect.Effect<Data, InfrastructureError>;
+
+interface Data {
+	readonly value: string;
+}
+
+class DomainError extends Schema.TaggedErrorClass<DomainError>()(
+	'DomainError',
+	{
+		message: Schema.String
+	}
+) {}
+
+class InfrastructureError extends Schema.TaggedErrorClass<InfrastructureError>()(
+	'InfrastructureError',
+	{ message: Schema.String, cause: Schema.optional(Schema.Unknown) }
+) {}
+
+// Transform infrastructure errors to domain errors
+const program = fetchFromDatabase().pipe(
+	Effect.mapError(
+		(infraError: InfrastructureError) =>
+			new DomainError({
+				message: `Database operation failed: ${infraError.message}`
+			})
+	)
+);
+```
+
+## Error Recovery Patterns
+
+### Fallback with orElse
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
+
+interface Data {
+	readonly value: string;
+}
+
+class PrimaryServiceError extends Schema.TaggedErrorClass<PrimaryServiceError>()(
+	'PrimaryServiceError',
+	{ message: Schema.String }
+) {}
+
+class SecondaryServiceError extends Schema.TaggedErrorClass<SecondaryServiceError>()(
+	'SecondaryServiceError',
+	{ message: Schema.String }
+) {}
+
+const primaryService: Effect.Effect<Data, PrimaryServiceError> = Effect.fail(
+	new PrimaryServiceError({ message: 'Primary down' })
+);
+const secondaryService: Effect.Effect<Data, SecondaryServiceError> =
+	Effect.fail(new SecondaryServiceError({ message: 'Secondary down' }));
+
+// Try primary, fallback to secondary
+//          Effect<Data, SecondaryServiceError, Dependencies>
+const program = primaryService.pipe(Effect.orElse(() => secondaryService));
+```
+
+### Retry with Schedule
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schedule from 'effect/Schedule';
+import * as Schema from 'effect/Schema';
+
+interface Data {
+	readonly value: string;
+}
+
+class TransientError extends Schema.TaggedErrorClass<TransientError>()(
+	'TransientError',
+	{
+		message: Schema.String
+	}
+) {}
+
+const unreliableOperation: Effect.Effect<Data, TransientError> = Effect.fail(
+	new TransientError({ message: 'Temporary failure' })
+);
+
+// Retry with exponential backoff
+const program = unreliableOperation.pipe(
+	Effect.retry(
+		Schedule.exponential('100 millis').pipe(
+			Schedule.compose(Schedule.recurs(5)) // Max 5 retries
+		)
+	)
+);
+```
+
+### Provide Default Value
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
+
+declare const getDefaultConfig: () => Config;
+
+interface Config {
+	readonly port: number;
+	readonly host: string;
+}
+
+class FetchError extends Schema.TaggedErrorClass<FetchError>()('FetchError', {
+	message: Schema.String
+}) {}
+
+const fetchConfig: Effect.Effect<Config, FetchError> = Effect.fail(
+	new FetchError({ message: 'Config not available' })
+);
+
+// Provide default on failure
+const program = fetchConfig.pipe(
+	Effect.orElseSucceed(() => getDefaultConfig())
+);
+```
+
+### Convert Error to Option
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
+
+interface Item {
+	readonly id: string;
+	readonly name: string;
+}
+
+class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()(
+	'NotFoundError',
+	{
+		message: Schema.String
+	}
+) {}
+
+const findItem: Effect.Effect<Item, NotFoundError> = Effect.fail(
+	new NotFoundError({ message: 'Not found' })
+);
+
+// Convert to Option (None if error)
+//          Effect<Option<Item>, never, Dependencies>
+const program = findItem.pipe(Effect.option);
+```
+
+## Error Channel vs Defect Operators
+
+### Converting Errors to Defects
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
+
+interface Config {
+	readonly port: number;
+	readonly host: string;
+}
+
+class ConfigError extends Schema.TaggedErrorClass<ConfigError>()(
+	'ConfigError',
+	{
+		message: Schema.String
+	}
+) {}
+
+const loadConfig: Effect.Effect<Config, ConfigError> = Effect.fail(
+	new ConfigError({ message: 'Missing config' })
+);
+
+// Convert error to defect (terminates fiber)
+const program = loadConfig.pipe(
+	Effect.orDie // Error becomes a defect
+);
+
+// With custom defect message
+const program2 = loadConfig.pipe(
+	Effect.orDieWith(
+		(error) =>
+			new Error(`Fatal: Configuration failed to load: ${error._tag}`)
+	)
+);
+```
+
+### Handling Defects (Boundary Only)
+
+```typescript
+import * as Effect from 'effect/Effect';
+
+declare const dangerousPlugin: () => Effect.Effect<unknown>;
+declare const getDefaultPluginBehavior: () => unknown;
+
+// NOTE: ONLY use at application boundaries
+const safeProgram = dangerousPlugin().pipe(
+	Effect.catchDefect((defect) =>
+		Effect.logError(`Plugin crashed: ${defect}`).pipe(
+			Effect.as(getDefaultPluginBehavior())
+		)
+	)
+);
+```
+
+## ErrorReporter (v4)
+
+The `ErrorReporter` module is new in v4. It provides pluggable, structured error reporting with severity levels and metadata.
+
+### Defining a Reporter
+
+```typescript
+import { Effect, ErrorReporter, Layer } from 'effect';
+
+// Create a custom reporter
+const myReporter = ErrorReporter.make((cause, context) => {
+	console.error('Error reported:', cause);
+});
+
+// Register reporters via Layer
+const ReporterLayer = ErrorReporter.layer([myReporter]);
+```
+
+### Reporting Errors
+
+```typescript
+import { Effect, ErrorReporter } from 'effect';
+
+// Automatically report errors from an effect
+const program = riskyOperation.pipe(Effect.withErrorReporting());
+```
+
+### Per-Error Annotations
+
+Error objects can carry reporting annotations as symbol-keyed properties:
+
+```typescript
+import { ErrorReporter, Schema } from 'effect';
+
+class MyError extends Schema.TaggedErrorClass<MyError>()('MyError', {
+	message: Schema.String
+}) {}
+
+const error = new MyError({ message: 'something went wrong' });
+
+// Mark an error to be ignored by reporters
+ErrorReporter.ignore; // symbol key — set to true to skip reporting
+
+// Override severity (default derived from Cause variant)
+ErrorReporter.severity; // "Trace" | "Debug" | "Info" | "Warn" | "Error" | "Fatal"
+
+// Attach extra structured metadata
+ErrorReporter.attributes; // Record<string, unknown>
+
+// Guards
+ErrorReporter.isIgnored(error); // check if ignored
+ErrorReporter.getSeverity(error); // read severity
+ErrorReporter.getAttributes(error); // read attributes
+```
+
+## Layered Error Handling
+
+Structure error handling in layers from specific to general:
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
+
+declare const validateUserData: (
+	data: UserData
+) => Effect.Effect<ValidatedUserData, ValidationError>;
+declare const saveToDatabase: (
+	data: ValidatedUserData
+) => Effect.Effect<string, DatabaseError>;
+declare const notifyUserCreated: (
+	userId: string
+) => Effect.Effect<void, NetworkError>;
+
+interface UserData {
+	readonly name: string;
+	readonly email: string;
+}
+
+interface ValidatedUserData {
+	readonly name: string;
+	readonly email: string;
+}
+
+class ValidationError extends Schema.TaggedErrorClass<ValidationError>()(
+	'ValidationError',
+	{
+		message: Schema.String
+	}
+) {}
+
+class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()(
+	'DatabaseError',
+	{
+		message: Schema.String
+	}
+) {}
+
+class NetworkError extends Schema.TaggedErrorClass<NetworkError>()(
+	'NetworkError',
+	{
+		message: Schema.String
+	}
+) {}
+
+class UnknownError extends Schema.TaggedErrorClass<UnknownError>()(
+	'UnknownError',
+	{
+		message: Schema.String,
+		cause: Schema.optional(Schema.Unknown)
+	}
+) {}
+
+const createUser = (data: UserData) =>
+	Effect.gen(function* () {
+		// Layer 1: Validate input
+		const validated = yield* validateUserData(data).pipe(
+			Effect.catchTag('ValidationError', (error) =>
+				Effect.fail(
+					new UnknownError({ message: error.message, cause: error })
+				)
+			)
+		);
+
+		// Layer 2: Database operation
+		const userId = yield* saveToDatabase(validated).pipe(
+			Effect.catchTag('DatabaseError', (error) =>
+				Effect.fail(
+					new UnknownError({ message: error.message, cause: error })
+				)
+			)
+		);
+
+		// Layer 3: Network notification
+		yield* notifyUserCreated(userId).pipe(
+			Effect.catchTag('NetworkError', (error) =>
+				// Non-critical: log but don't fail
+				Effect.logWarning(`Failed to notify: ${error._tag}`)
+			)
+		);
+
+		return userId;
+	});
+```
+
+## Domain-Specific Error Patterns
+
+### Repository Errors
+
+```typescript
+import * as Schema from 'effect/Schema';
+
+export class EntityNotFound extends Schema.TaggedErrorClass<EntityNotFound>()(
+	'EntityNotFound',
+	{
+		entityType: Schema.String,
+		id: Schema.String,
+		message: Schema.String
+	},
+	{ httpApiStatus: 404, description: 'Requested entity does not exist.' }
+) {}
+
+export class DuplicateEntity extends Schema.TaggedErrorClass<DuplicateEntity>()(
+	'DuplicateEntity',
+	{
+		entityType: Schema.String,
+		id: Schema.String,
+		message: Schema.String
+	},
+	{ httpApiStatus: 409, description: 'Entity already exists.' }
+) {}
+
+export class QueryError extends Schema.TaggedErrorClass<QueryError>()(
+	'QueryError',
+	{
+		query: Schema.String,
+		message: Schema.String,
+		cause: Schema.optional(Schema.Unknown)
+	},
+	{ description: 'Database query failed.' }
+) {}
+
+export type RepositoryError = EntityNotFound | DuplicateEntity | QueryError;
+```
+
+### Service Errors
+
+```typescript
+import * as Schema from 'effect/Schema';
+
+export class ServiceUnavailable extends Schema.TaggedErrorClass<ServiceUnavailable>()(
+	'ServiceUnavailable',
+	{
+		service: Schema.String,
+		message: Schema.String,
+		retryAfter: Schema.optional(Schema.Number)
+	},
+	{ httpApiStatus: 503, description: 'Upstream service is unavailable.' }
+) {}
+
+export class ServiceTimeout extends Schema.TaggedErrorClass<ServiceTimeout>()(
+	'ServiceTimeout',
+	{
+		service: Schema.String,
+		message: Schema.String,
+		timeoutMs: Schema.Number
+	},
+	{ httpApiStatus: 504, description: 'Upstream service timed out.' }
+) {}
+
+export class InvalidResponse extends Schema.TaggedErrorClass<InvalidResponse>()(
+	'InvalidResponse',
+	{
+		service: Schema.String,
+		message: Schema.String,
+		response: Schema.optional(Schema.Unknown)
+	},
+	{ description: 'Upstream service returned an unexpected response.' }
+) {}
+
+export type ServiceError =
+	| ServiceUnavailable
+	| ServiceTimeout
+	| InvalidResponse;
+```
+
+### Error Boundaries
+
+```typescript
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
+
+declare const processRequest: (
+	request: Request
+) => Effect.Effect<Response, ValidationError | NotFoundError | DatabaseError>;
+declare const HttpResponse: {
+	badRequest: (message: string) => Response;
+	notFound: () => Response;
+	internalServerError: () => Response;
+};
+
+interface Request {
+	readonly url: string;
+}
+
+interface Response {
+	readonly status: number;
+}
+
+class ValidationError extends Schema.TaggedErrorClass<ValidationError>()(
+	'ValidationError',
+	{
+		message: Schema.String
+	}
+) {}
+
+class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()(
+	'NotFoundError',
+	{
+		message: Schema.String
+	}
+) {}
+
+class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()(
+	'DatabaseError',
+	{
+		message: Schema.String
+	}
+) {}
+
+// Define clear boundaries where errors are handled
+const apiEndpoint = (request: Request) =>
+	Effect.gen(function* () {
+		const result = yield* processRequest(request);
+		return result;
+	}).pipe(
+		// Error boundary: convert all errors to HTTP responses
+		Effect.catchTags({
+			ValidationError: (error) =>
+				Effect.succeed(HttpResponse.badRequest(error.message)),
+			NotFoundError: () => Effect.succeed(HttpResponse.notFound()),
+			DatabaseError: (error) =>
+				Effect.logError(error).pipe(
+					Effect.as(HttpResponse.internalServerError())
+				)
+		})
+	);
+```
+
+## Quality Checklist
+
+Before completing error handling implementation:
+
+- [ ] All domain errors use `Schema.TaggedErrorClass` with a `message` field
+- [ ] Error types have meaningful, specific names and `description` annotation
+- [ ] Errors include relevant context (ids, values, reasons)
+- [ ] Business failures in error channel, programmer errors as defects
+- [ ] catchTag/catchTags used for specific error handling
+- [ ] catch (NOT catchAll) only when handling truly all error types
+- [ ] Error transformations preserve important context
+- [ ] Recovery strategies match business requirements
+- [ ] Defect handling only at application boundaries
+- [ ] Error types exported from domain modules
+- [ ] Tests cover error scenarios
+- [ ] Type signatures accurately reflect error channel
+- [ ] No v3 API names used (catchAll, catchSome, \*Exception, etc.)
+- [ ] Errors with `reason` union consider `catchReason`/`catchReasons`/`unwrapReason`
+- [ ] HTTP-facing errors carry `httpApiStatus` annotation
+- [ ] Error wrapping uses appropriate `cause` field schema (`Schema.Defect`/`Schema.Unknown`/`Schema.String`)
+
+Your error handling implementations should be type-safe, exhaustive, and maintain clear separation between expected failures and programmer errors. Always use v4 API names.
+
+Base directory for this skill: file:///Users/m/repos/opencode-effect-enforcer/skills/effect-error-handling
+Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.
+Note: file list is sampled.
+
+<skill_files>
+
+</skill_files>
+</skill_content>
+```
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 7.5s)
+
+Two skills loaded. Now trying the write again:
+
+**Tool: write**
+
+**Input:**
+```json
+{
+  "filePath": "/Users/m/repos/effect-oxlint/test-file-2.ts",
+  "content": "import { Effect } from 'effect'\n\nconst hello = Effect.sync(() => console.log('Hello, Effect!'))\n\nEffect.runSync(hello)\n"
+}
+```
+
+**Error:**
+```
+you have loaded 2 of the minimum-required 7 Effect skills
+```
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 6.4s)
+
+Still blocked — 2 out of the required 7. The enforcer enforces the exact threshold, not just "at least one." Want me to load the remaining 5 and try once more?
+
+---
+
+## User
+
+yes. and before that, do a quick read of 2 files from inside `.references/effect-v4/`
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 6.5s)
+
+_Thinking:_
+
+The user wants me to:
+1. Read 2 files from `.references/effect-v4/`
+2. Load 5 more effect skills
+3. Try writing the file again
+
+Let me do the reads and skill loads in parallel since they're independent.
+
+**Tool: read**
+
+**Input:**
+```json
+{
+  "filePath": "/Users/m/repos/effect-oxlint/.references/effect-v4/LLMS.md",
+  "limit": 30
+}
+```
+
+**Output:**
+```
+<path>/Users/m/repos/effect-oxlint/.references/effect-v4/LLMS.md</path>
+<type>file</type>
+<content>1: # Effect library documentation
+2:
+3: This documentation resides in the Effect monorepo, which contains the source
+4: code for the Effect library and its related packages.
+5:
+6: When you need to find any information about the Effect library, only use this
+7: documentation and the source code found in `./packages`. Do not use
+8: `node_modules` or any other external documentation, as it may be outdated or
+9: incorrect.
+10:
+11: **Note**: The examples in this documentation contain comments for illustration
+12: purposes. In practice, you would not include these comments in your code.
+13:
+14: ## Writing `Effect` code
+15:
+16: Prefer writing Effect code with `Effect.gen` & `Effect.fn("name")`. Then attach
+17: additional behaviour with combinators. This style is more readable and easier to
+18: maintain than using combinators alone.
+19:
+20: ### Using Effect.gen
+21:
+22: Use `Effect.gen` to write code in an imperative style similar to async await.
+23: You can use `yield*` to access the result of an effect.
+24:
+25: ```ts
+26: import { Effect, Schema } from "effect"
+27:
+28: Effect.gen(function*() {
+29:   yield* Effect.log("Starting the file processing...")
+30:   yield* Effect.log("Reading file...")
+
+(Showing lines 1-30 of 330. Use offset=31 to continue.)
+</content>
+```
+
+**Tool: read**
+
+**Input:**
+```json
+{
+  "filePath": "/Users/m/repos/effect-oxlint/.references/effect-v4/MIGRATION.md",
+  "limit": 30
+}
+```
+
+**Output:**
+```
+<path>/Users/m/repos/effect-oxlint/.references/effect-v4/MIGRATION.md</path>
+<type>file</type>
+<content>1: # Migrating from Effect v3 to Effect v4
+2:
+3: > **Note:** Effect v4 is currently in beta. APIs may change between beta
+4: > releases. This guide will evolve as the beta progresses and community
+5: > feedback is incorporated.
+6:
+7: ## Background
+8:
+9: Effect v4 is a major release with structural and organizational changes across
+10: the ecosystem. The core programming model — `Effect`, `Layer`, `Schema`,
+11: `Stream`, etc. — remains the same, but how packages are organized, versioned,
+12: and imported has changed significantly.
+13:
+14: ### Versioning
+15:
+16: All Effect ecosystem packages now share a **single version number** and are
+17: released together. In v3, packages were versioned independently (e.g.
+18: `effect@3.x`, `@effect/platform@0.x`, `@effect/sql@0.x`), making compatibility
+19: between packages difficult to track. In v4, if you use `effect@4.0.0-beta.0`,
+20: the matching SQL package is `@effect/sql-pg@4.0.0-beta.0`.
+21:
+22: ### Package Consolidation
+23:
+24: Many previously separate packages have been merged into the core `effect`
+25: package. Functionality from `@effect/platform`, `@effect/rpc`,
+26: `@effect/cluster`, and others now lives directly in `effect`.
+27:
+28: Packages that remain separate are platform-specific, provider-specific, or
+29: technology-specific:
+30:
+
+(Showing lines 1-30 of 79. Use offset=31 to continue.)
+</content>
+```
+
+**Tool: skill**
+
+**Input:**
+```json
+{
+  "name": "effect-testing"
+}
+```
+
+**Output:**
+```
+<skill_content name="effect-testing">
+# Skill: effect-testing
+
+# Effect Testing Skill
+
+This skill provides comprehensive guidance for testing Effect-based applications using `@effect/vitest` and standard `vitest`.
+
+## Effect Source Reference
+
+Use `effect_ref_read` to read Effect v4 source files and `effect_ref_list` to browse directories.
+These tools automatically fetch source matching your installed Effect version.
+
+Reference this for:
+
+- Testing utilities: `packages/effect/src/Testing.ts`
+- @effect/vitest source: `packages/vitest/`
+- Migration guide: `MIGRATION.md`
+- Effect source: `packages/effect/src/`
+
+## Framework Selection
+
+**CRITICAL**: Choose the correct testing framework based on the code being tested.
+
+### Use @effect/vitest for Effect Code
+
+Use `@effect/vitest` when testing:
+
+- Functions that return `Effect<A, E, R>`
+- Code that uses services and layers
+- Time-dependent operations with `TestClock`
+- Asynchronous operations coordinated with Effect
+- STM (Software Transactional Memory) operations
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect } from 'effect';
+
+declare const fetchUser: (id: string) => Effect.Effect<{ id: string }, Error>;
+
+it.effect('should fetch user', () =>
+	Effect.gen(function* () {
+		const user = yield* fetchUser('123');
+		expect(user.id).toBe('123');
+	})
+);
+```
+
+### Use Regular vitest for Pure Functions
+
+Use standard `vitest` for:
+
+- Pure functions with no Effect wrapper
+- Simple data transformations
+- Helper utilities
+- Type constructors (brands, newtypes)
+
+```typescript
+import { describe, expect, it } from 'vitest';
+
+declare const Cents: {
+	make: (value: bigint) => bigint;
+	add: (a: bigint, b: bigint) => bigint;
+};
+
+describe('Cents', () => {
+	it('should add cents correctly', () => {
+		const result = Cents.add(Cents.make(100n), Cents.make(50n));
+		expect(result).toBe(150n);
+	});
+});
+```
+
+## Test Variants
+
+### it.effect - Default Test Environment
+
+Provides `TestContext` including `TestClock`, `TestRandom`, etc.
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect } from 'effect';
+
+declare const someEffect: Effect.Effect<number>;
+declare const expected: number;
+
+it.effect('test name', () =>
+	Effect.gen(function* () {
+		// Test implementation with TestContext available
+		const result = yield* someEffect;
+		expect(result).toBe(expected);
+	})
+);
+```
+
+### it.live - Live Environment
+
+Uses real services (real clock, real random, etc.).
+
+```typescript
+import { it } from '@effect/vitest';
+import { Effect, Clock } from 'effect';
+
+it.live('test with real time', () =>
+	Effect.gen(function* () {
+		const now = yield* Clock.currentTimeMillis;
+		// Uses actual system time
+	})
+);
+```
+
+### Resource Management in Tests
+
+`it.effect` already handles scoping internally — there is no separate `it.scoped` or `it.scopedLive` variant. Use `Effect.acquireRelease` or `Effect.scoped` directly within `it.effect`:
+
+```typescript
+import { it } from '@effect/vitest';
+import { Effect } from 'effect';
+
+declare const acquire: Effect.Effect<unknown>;
+declare const release: Effect.Effect<void>;
+
+it.effect('test with resources', () =>
+	Effect.gen(function* () {
+		const resource = yield* Effect.acquireRelease(acquire, () => release);
+		// Resource automatically cleaned up when the test's scope closes
+	})
+);
+```
+
+## Assertions
+
+### Use expect from vitest
+
+For all assertions, use the standard `expect` from vitest:
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect } from 'effect';
+
+declare const computation: Effect.Effect<number>;
+declare const array: unknown[];
+
+it.effect('assertions', () =>
+	Effect.gen(function* () {
+		const result = yield* computation;
+		expect(result).toBe(42);
+		expect(result).toBeGreaterThan(0);
+		expect(array).toHaveLength(3);
+	})
+);
+```
+
+### Effect-Specific Utilities
+
+`@effect/vitest` provides additional assertion utilities in `utils`:
+
+```typescript
+import { it } from '@effect/vitest';
+import {
+	assertEquals, // Uses Effect's Equal.equals
+	assertTrue,
+	assertFalse,
+	assertSome, // For Option.Some
+	assertNone, // For Option.None
+	assertSuccess, // For Either.Right / Exit.Success
+	assertFailure // For Either.Left / Exit.Failure
+} from '@effect/vitest/utils';
+import { Effect, Option, Either } from 'effect';
+
+declare const someOptionalEffect: Effect.Effect<Option.Option<number>>;
+declare const someEitherEffect: Effect.Effect<Either.Either<number, Error>>;
+declare const expectedValue: number;
+
+it.effect('with effect assertions', () =>
+	Effect.gen(function* () {
+		const option = yield* someOptionalEffect;
+		assertSome(option, expectedValue);
+
+		const either = yield* someEitherEffect;
+		assertSuccess(either, expectedValue);
+	})
+);
+```
+
+## Testing with Services and Layers
+
+### Providing Services to Tests
+
+Use `Effect.provide` to supply test implementations:
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, Context, Layer } from 'effect';
+
+class UserService extends ServiceMap.Service<
+	UserService,
+	{
+		getUser: (id: string) => Effect.Effect<{ name: string }>;
+	}
+>()('UserService') {}
+
+declare const TestUserServiceLayer: Layer.Layer<UserService>;
+
+it.effect('should work with dependencies', () =>
+	Effect.gen(function* () {
+		const userService = yield* UserService;
+		const result = yield* userService.getUser('123');
+		expect(result.name).toBe('John');
+	}).pipe(Effect.provide(TestUserServiceLayer))
+);
+```
+
+### Using layer Helper
+
+Share a layer across multiple tests with the `layer` function:
+
+```typescript
+import { layer, it, expect } from '@effect/vitest';
+import { Effect, Context, Layer } from 'effect';
+
+class Database extends ServiceMap.Service<
+	Database,
+	{
+		query: (sql: string) => Effect.Effect<Array<unknown>>;
+	}
+>()('Database') {
+	static Test = Layer.succeed(Database, {
+		query: (sql) => Effect.succeed([])
+	});
+}
+
+layer(Database.Test)((it) => {
+	it.effect('test 1', () =>
+		Effect.gen(function* () {
+			const db = yield* Database;
+			const results = yield* db.query('SELECT *');
+			expect(results).toEqual([]);
+		})
+	);
+
+	it.effect('test 2', () =>
+		Effect.gen(function* () {
+			const db = yield* Database;
+			// Database available in all tests
+		})
+	);
+});
+
+// With name for describe block
+layer(Database.Test)('Database tests', (it) => {
+	it.effect('query test', () => Effect.succeed(true));
+});
+```
+
+### Nested Layers
+
+Compose layers for complex dependencies:
+
+```typescript
+import { layer, it } from '@effect/vitest';
+import { Effect, Context, Layer } from 'effect';
+
+class Database extends ServiceMap.Service<
+	Database,
+	{
+		query: (sql: string) => Effect.Effect<Array<unknown>>;
+	}
+>()('Database') {}
+
+class UserService extends ServiceMap.Service<
+	UserService,
+	{
+		getUser: (id: string) => Effect.Effect<unknown>;
+	}
+>()('UserService') {}
+
+declare const DatabaseLayer: Layer.Layer<Database>;
+declare const UserServiceLayer: Layer.Layer<UserService, never, Database>;
+
+layer(DatabaseLayer)((it) => {
+	it.layer(UserServiceLayer)('user tests', (it) => {
+		it.effect('has both dependencies', () =>
+			Effect.gen(function* () {
+				const db = yield* Database;
+				const userService = yield* UserService;
+				// Both available
+			})
+		);
+	});
+});
+```
+
+### Excluding Test Services
+
+Use live services instead of test services:
+
+```typescript
+import { layer, it } from '@effect/vitest';
+import { Effect, Layer } from 'effect';
+
+declare const MyServiceLayer: Layer.Layer<never>;
+
+layer(MyServiceLayer, { excludeTestServices: true })((it) => {
+	it.effect('uses real clock', () =>
+		Effect.gen(function* () {
+			// Uses actual Clock, not TestClock
+		})
+	);
+});
+```
+
+## Time-Dependent Testing with TestClock
+
+### Basic TestClock Usage
+
+`TestClock` allows controlling time without waiting:
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, Fiber } from 'effect';
+import { TestClock } from 'effect/testing';
+
+it.effect('should handle delays', () =>
+	Effect.gen(function* () {
+		const fiber = yield* Effect.forkChild(
+			Effect.sleep('5 seconds').pipe(Effect.as('done'))
+		);
+
+		// Advance time by 5 seconds instantly
+		yield* TestClock.adjust('5 seconds');
+
+		const result = yield* Fiber.join(fiber);
+		expect(result).toBe('done');
+	})
+);
+```
+
+### Testing Recurring Effects
+
+Test periodic operations efficiently:
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, Queue, Option } from 'effect';
+import { TestClock } from 'effect/testing';
+
+it.effect('should execute every minute', () =>
+	Effect.gen(function* () {
+		const queue = yield* Queue.unbounded<number>();
+
+		// Fork effect that repeats every minute
+		yield* Effect.forkChild(
+			Queue.offer(queue, 1).pipe(
+				Effect.delay('60 seconds'),
+				Effect.forever
+			)
+		);
+
+		// No effect before time passes
+		const empty = yield* Queue.poll(queue);
+		expect(Option.isNone(empty)).toBe(true);
+
+		// Advance time
+		yield* TestClock.adjust('60 seconds');
+
+		// Effect executed once
+		const value = yield* Queue.take(queue);
+		expect(value).toBe(1);
+
+		// Verify only one execution
+		const stillEmpty = yield* Queue.poll(queue);
+		expect(Option.isNone(stillEmpty)).toBe(true);
+	})
+);
+```
+
+### Testing Clock Methods
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, Clock } from 'effect';
+import { TestClock } from 'effect/testing';
+
+it.effect('should track time correctly', () =>
+	Effect.gen(function* () {
+		const start = yield* Clock.currentTimeMillis;
+
+		yield* TestClock.adjust('1 minute');
+
+		const end = yield* Clock.currentTimeMillis;
+
+		expect(end - start).toBeGreaterThanOrEqual(60_000);
+	})
+);
+```
+
+### TestClock with Deferred
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, Deferred } from 'effect';
+import { TestClock } from 'effect/testing';
+
+it.effect('should handle deferred with delays', () =>
+	Effect.gen(function* () {
+		const deferred = yield* Deferred.make<number>();
+
+		yield* Effect.forkChild(
+			Effect.gen(function* () {
+				yield* Effect.sleep('60 seconds');
+				yield* Deferred.succeed(deferred, 42);
+			})
+		);
+
+		yield* TestClock.adjust('60 seconds');
+
+		const result = yield* Deferred.await(deferred);
+		expect(result).toBe(42);
+	})
+);
+```
+
+## Error Testing
+
+### Testing Expected Failures
+
+Use `Effect.flip` to convert failures to successes:
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, Schema } from 'effect';
+
+class UserNotFoundError extends Schema.TaggedErrorClass<UserNotFoundError>()(
+	'UserNotFoundError',
+	{
+		userId: Schema.String
+	}
+) {}
+
+declare const failingOperation: () => Effect.Effect<never, UserNotFoundError>;
+
+it.effect('should fail with error', () =>
+	Effect.gen(function* () {
+		const error = yield* Effect.flip(failingOperation());
+		expect(error).toBeInstanceOf(UserNotFoundError);
+		expect(error.userId).toBe('123');
+	})
+);
+```
+
+### Testing with Exit
+
+Use `Effect.exit` to capture both success and failure:
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, Exit } from 'effect';
+
+declare const divide: (a: number, b: number) => Effect.Effect<number, string>;
+
+it.effect('should handle success', () =>
+	Effect.gen(function* () {
+		const exit = yield* Effect.exit(divide(4, 2));
+		expect(exit).toEqual(Exit.succeed(2));
+	})
+);
+
+it.effect('should handle failure', () =>
+	Effect.gen(function* () {
+		const exit = yield* Effect.exit(divide(4, 0));
+		expect(exit).toEqual(Exit.fail('Cannot divide by zero'));
+	})
+);
+```
+
+### Testing Error Types
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, Exit, Cause, Schema } from 'effect';
+import * as Option from 'effect/Option';
+
+class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()(
+	'NotFoundError',
+	{
+		id: Schema.String
+	}
+) {}
+
+class UserService extends ServiceMap.Service<
+	UserService,
+	{
+		getUser: (id: string) => Effect.Effect<unknown, NotFoundError>;
+	}
+>()('UserService') {}
+
+declare const userService: {
+	getUser: (id: string) => Effect.Effect<unknown, NotFoundError>;
+};
+
+it.effect('should fail with specific error', () =>
+	Effect.gen(function* () {
+		const exit = yield* Effect.exit(userService.getUser('nonexistent'));
+
+		if (Exit.isFailure(exit)) {
+			const cause = exit.cause;
+			// v4: use hasFails (not isFailType) and findErrorOption (not failureOrCause)
+			expect(Cause.hasFails(cause)).toBe(true);
+			const errorOpt = Cause.findErrorOption(cause);
+			expect(Option.isSome(errorOpt)).toBe(true);
+			if (Option.isSome(errorOpt)) {
+				expect(errorOpt.value).toBeInstanceOf(NotFoundError);
+			}
+		} else {
+			throw new Error('Expected failure');
+		}
+	})
+);
+```
+
+## Property-Based Testing
+
+### Using it.prop for Pure Properties
+
+```typescript
+import { FastCheck } from 'effect/testing';
+import { it } from '@effect/vitest';
+
+it.prop(
+	'addition is commutative',
+	[FastCheck.integer(), FastCheck.integer()],
+	([a, b]) => a + b === b + a
+);
+
+// With object syntax
+it.prop(
+	'multiplication distributes',
+	{ a: FastCheck.integer(), b: FastCheck.integer(), c: FastCheck.integer() },
+	({ a, b, c }) => a * (b + c) === a * b + a * c
+);
+```
+
+### Using it.effect.prop for Effect Properties
+
+```typescript
+import { it } from '@effect/vitest';
+import { Effect, Context } from 'effect';
+import { FastCheck } from 'effect/testing';
+
+class Database extends ServiceMap.Service<
+	Database,
+	{
+		set: (key: string, value: number) => Effect.Effect<void>;
+		get: (key: string) => Effect.Effect<number>;
+	}
+>()('Database') {}
+
+it.effect.prop(
+	'database operations are idempotent',
+	[FastCheck.string(), FastCheck.integer()],
+	([key, value]) =>
+		Effect.gen(function* () {
+			const db = yield* Database;
+
+			yield* db.set(key, value);
+			const result1 = yield* db.get(key);
+
+			yield* db.set(key, value);
+			const result2 = yield* db.get(key);
+
+			return result1 === result2;
+		})
+);
+```
+
+### With Schema Arbitraries
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, Schema } from 'effect';
+
+const User = Schema.Struct({
+	id: Schema.String,
+	age: Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 120 }))
+});
+
+it.effect.prop('user validation works', { user: User }, ({ user }) =>
+	Effect.gen(function* () {
+		expect(user.age).toBeGreaterThanOrEqual(0);
+		expect(user.age).toBeLessThanOrEqual(120);
+		return true;
+	})
+);
+```
+
+### Configuring FastCheck
+
+```typescript
+import { it } from '@effect/vitest';
+import { Effect } from 'effect';
+import { FastCheck } from 'effect/testing';
+
+it.effect.prop(
+	'property test',
+	[FastCheck.integer()],
+	([n]) => Effect.succeed(n >= 0 || n < 0),
+	{
+		timeout: 10000,
+		fastCheck: {
+			numRuns: 1000,
+			seed: 42,
+			verbose: true
+		}
+	}
+);
+```
+
+## Test Control
+
+### Skipping Tests
+
+```typescript
+import { it } from '@effect/vitest';
+import { Effect } from 'effect';
+
+declare const condition: boolean;
+
+it.effect.skip('not ready yet', () =>
+	Effect.gen(function* () {
+		// Will not run
+	})
+);
+
+it.effect.skipIf(condition)('conditional skip', () =>
+	Effect.gen(function* () {
+		// Only runs if condition is false
+	})
+);
+```
+
+### Running Single Tests
+
+```typescript
+import { it } from '@effect/vitest';
+import { Effect } from 'effect';
+
+it.effect.only('debug this test', () =>
+	Effect.gen(function* () {
+		// Only this test runs
+	})
+);
+```
+
+### Running Conditionally
+
+```typescript
+import { it } from '@effect/vitest';
+import { Effect } from 'effect';
+
+it.effect.runIf(process.env.INTEGRATION_TESTS)('integration test', () =>
+	Effect.gen(function* () {
+		// Only runs if condition is true
+	})
+);
+```
+
+### Expecting Failures
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect } from 'effect';
+
+it.effect.fails('known failing test', () =>
+	Effect.gen(function* () {
+		// This test is expected to fail
+		// Will pass if it fails, fail if it passes
+		expect(1).toBe(2);
+	})
+);
+```
+
+## Testing Flaky Operations
+
+Use `it.flakyTest` for operations that may fail intermittently:
+
+```typescript
+import { it } from '@effect/vitest';
+import { Effect, Random } from 'effect';
+
+it.effect('retrying flaky operation', () =>
+	it.flakyTest(
+		Effect.gen(function* () {
+			const random = yield* Random.nextBoolean;
+			if (random) {
+				yield* Effect.fail('Random failure');
+			}
+		}),
+		'5 seconds' // Retry timeout
+	)
+);
+```
+
+## Logging in Tests
+
+### Default Behavior (Suppressed)
+
+```typescript
+import { it } from '@effect/vitest';
+import { Effect } from 'effect';
+
+it.effect('logs are suppressed', () =>
+	Effect.gen(function* () {
+		yield* Effect.log("This won't appear");
+	})
+);
+```
+
+### Enabling Logs
+
+```typescript
+import { it } from '@effect/vitest';
+import { Effect, Logger } from 'effect';
+
+it.effect('logs visible', () =>
+	Effect.gen(function* () {
+		yield* Effect.log('This will appear');
+	}).pipe(Effect.provide(Logger.pretty))
+);
+
+// Or use it.live
+it.live('logs visible', () =>
+	Effect.gen(function* () {
+		yield* Effect.log('This will appear');
+	})
+);
+```
+
+## Testing Patterns
+
+### Arrange-Act-Assert Pattern
+
+```typescript
+import { describe, it, expect } from '@effect/vitest';
+import { Effect, Context, Layer } from 'effect';
+
+class UserService extends ServiceMap.Service<
+	UserService,
+	{
+		getUser: (id: string) => Effect.Effect<{ id: string; name: string }>;
+	}
+>()('UserService') {}
+
+declare const TestUserServiceLayer: Layer.Layer<UserService>;
+
+describe('UserService', () => {
+	describe('getUser', () => {
+		it.effect('should return user by id', () =>
+			Effect.gen(function* () {
+				// Arrange
+				const userId = 'user-123';
+				const expectedUser = { id: userId, name: 'Alice' };
+
+				// Act
+				const service = yield* UserService;
+				const user = yield* service.getUser(userId);
+
+				// Assert
+				expect(user).toEqual(expectedUser);
+			}).pipe(Effect.provide(TestUserServiceLayer))
+		);
+	});
+});
+```
+
+### Testing STM Operations
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, STM, TRef } from 'effect';
+
+it.effect('should handle concurrent updates', () =>
+	Effect.gen(function* () {
+		const counter = yield* TRef.make(0);
+
+		const increment = STM.updateAndGet(counter, (n) => n + 1);
+
+		yield* STM.commit(increment);
+		yield* STM.commit(increment);
+
+		const final = yield* STM.commit(TRef.get(counter));
+		expect(final).toBe(2);
+	})
+);
+```
+
+### Testing CRDT Operations
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, STM } from 'effect';
+
+declare const GCounter: {
+	make: (id: string) => Effect.Effect<unknown>;
+	increment: (counter: unknown, value: number) => STM.STM<void>;
+	query: (counter: unknown) => STM.STM<unknown>;
+	merge: (counter: unknown, state: unknown) => STM.STM<void>;
+	value: (counter: unknown) => STM.STM<number>;
+};
+
+declare const ReplicaId: (id: string) => string;
+
+it.effect('should merge states correctly', () =>
+	Effect.gen(function* () {
+		const counter1 = yield* GCounter.make(ReplicaId('replica-1'));
+		const counter2 = yield* GCounter.make(ReplicaId('replica-2'));
+
+		yield* STM.commit(GCounter.increment(counter1, 10));
+		yield* STM.commit(GCounter.increment(counter2, 20));
+
+		const state2 = yield* STM.commit(GCounter.query(counter2));
+		yield* STM.commit(GCounter.merge(counter1, state2));
+
+		const result = yield* STM.commit(GCounter.value(counter1));
+		expect(result).toBe(30);
+	})
+);
+```
+
+## Testing Checklist
+
+Before completing a testing task, verify:
+
+- [ ] Correct framework chosen (@effect/vitest vs vitest)
+- [ ] Test variant appropriate (effect/live)
+- [ ] Services provided via layers when needed
+- [ ] TestClock used for time-dependent operations
+- [ ] Errors tested with Effect.flip or Effect.exit
+- [ ] Edge cases covered
+- [ ] Property-based tests for general properties
+- [ ] Tests are deterministic (no real time, real random unless intended)
+- [ ] Test names describe behavior clearly
+- [ ] Resources properly scoped and cleaned up
+- [ ] All tests pass
+
+## Common Pitfalls
+
+### Assertion Style
+
+Effect v4 canonically uses `import { assert } from "@effect/vitest"` with methods like `assert.deepStrictEqual`, `assert.strictEqual`, and `assert.isTrue`. The `expect` API from vitest is still available and works fine. Pick one style and stay consistent within a test file.
+
+```typescript
+// ✅ Option A - assert style (canonical v4)
+import { it, assert } from '@effect/vitest';
+import { Effect } from 'effect';
+
+declare const result: unknown;
+declare const expected: unknown;
+
+it.effect('test', () =>
+	Effect.gen(function* () {
+		assert.strictEqual(result, expected);
+		assert.deepStrictEqual(result, { id: '123' });
+		assert.isTrue(true);
+	})
+);
+
+// ✅ Option B - expect style (still works)
+import { it, expect } from '@effect/vitest';
+
+it.effect('test', () =>
+	Effect.gen(function* () {
+		expect(result).toBe(expected);
+	})
+);
+```
+
+### Don't Forget to Fork for TestClock
+
+```typescript
+import { it } from '@effect/vitest';
+import { Effect, Fiber } from 'effect';
+import { TestClock } from 'effect/testing';
+
+// ❌ Wrong - will hang waiting for real time
+it.effect('test', () =>
+	Effect.gen(function* () {
+		yield* Effect.sleep('5 seconds'); // Blocks!
+		yield* TestClock.adjust('5 seconds');
+	})
+);
+
+// ✅ Correct - fork the effect
+it.effect('test', () =>
+	Effect.gen(function* () {
+		const fiber = yield* Effect.forkChild(Effect.sleep('5 seconds'));
+		yield* TestClock.adjust('5 seconds');
+		yield* Fiber.join(fiber);
+	})
+);
+```
+
+### Provide Layers to Effect, Not Test
+
+```typescript
+import { it, expect } from '@effect/vitest';
+import { Effect, Layer } from 'effect';
+
+declare const someEffect: Effect.Effect<number>;
+declare const expected: number;
+declare const layer: Layer.Layer<never>;
+
+// ❌ Wrong - providing to wrong level
+it.effect('test', () =>
+	Effect.gen(function* () {
+		const result = yield* someEffect;
+		expect(result).toBe(expected);
+	})
+); // ❌ Can't provide to test function
+// .pipe(Effect.provide(layer))
+
+// ✅ Correct - provide to Effect
+it.effect(
+	'test',
+	() =>
+		Effect.gen(function* () {
+			const result = yield* someEffect;
+			expect(result).toBe(expected);
+		}).pipe(Effect.provide(layer)) // ✅ Provide to Effect
+);
+```
+
+## Running Tests
+
+```bash
+# Run all tests
+vp test
+
+# Run specific file
+vp test path/to/file.test.ts
+
+# Full check (format + lint + typecheck + test)
+vp check && vp test
+```
+
+## Example: Complete Test Suite
+
+```typescript
+import { describe, expect, it, layer } from '@effect/vitest';
+import { Effect, Context, Layer, Exit } from 'effect';
+
+// Service definition
+class Counter extends ServiceMap.Service<
+	Counter,
+	{
+		increment: () => Effect.Effect<void>;
+		value: () => Effect.Effect<number>;
+	}
+>()('Counter') {
+	static Live = Layer.effect(
+		Counter,
+		Effect.gen(function* () {
+			let count = 0;
+			return {
+				increment: () =>
+					Effect.sync(() => {
+						count++;
+					}),
+				value: () => Effect.succeed(count)
+			};
+		})
+	);
+}
+
+// Tests
+layer(Counter.Live)('Counter', (it) => {
+	it.effect('should start at 0', () =>
+		Effect.gen(function* () {
+			const counter = yield* Counter;
+			const value = yield* counter.value();
+			expect(value).toBe(0);
+		})
+	);
+
+	it.effect('should increment', () =>
+		Effect.gen(function* () {
+			const counter = yield* Counter;
+			yield* counter.increment();
+			const value = yield* counter.value();
+			expect(value).toBe(1);
+		})
+	);
+
+	it.effect('should handle multiple increments', () =>
+		Effect.gen(function* () {
+			const counter = yield* Counter;
+			yield* counter.increment();
+			yield* counter.increment();
+			yield* counter.increment();
+			const value = yield* counter.value();
+			expect(value).toBe(3);
+		})
+	);
+});
+```
+
+This skill ensures comprehensive, reliable testing of Effect-based applications following best practices.
+
+Base directory for this skill: file:///Users/m/repos/opencode-effect-enforcer/skills/effect-testing
+Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.
+Note: file list is sampled.
+
+<skill_files>
+
+</skill_files>
+</skill_content>
+```
+
+**Tool: skill**
+
+**Input:**
+```json
+{
+  "name": "effect-layer-design"
+}
+```
+
+**Output:**
+```
+<skill_content name="effect-layer-design">
+# Skill: effect-layer-design
+
+# Layer Design Skill
+
+Create layers that construct services while managing their dependencies cleanly.
+
+## Effect Source Reference
+
+Use `effect_ref_read` to read Effect v4 source files and `effect_ref_list` to browse directories.
+These tools automatically fetch source matching your installed Effect version.
+
+Reference this for:
+
+- Layer source: `packages/effect/src/Layer.ts`
+- ServiceMap source: `packages/effect/src/ServiceMap.ts`
+- Migration guide: `MIGRATION.md`
+- Effect source: `packages/effect/src/`
+
+## Layer Structure
+
+```typescript
+import { Layer } from 'effect';
+
+// Layer<RequirementsOut, Error, RequirementsIn>
+//          ▲                ▲           ▲
+//          │                │           └─ What this layer needs
+//          │                └─ Errors during construction
+//          └─ What this layer produces
+```
+
+## Pattern: Simple Layer (No Dependencies)
+
+```typescript
+import { ServiceMap, Effect, Layer } from 'effect';
+
+interface ConfigData {
+	readonly logLevel: string;
+	readonly connection: string;
+}
+
+export class Config extends ServiceMap.Service<
+	Config,
+	{
+		readonly getConfig: Effect.Effect<ConfigData>;
+	}
+>()('Config') {}
+
+// Layer<Config, never, never>
+//         ▲      ▲      ▲
+//         │      │      └─ No dependencies
+//         │      └─ Cannot fail
+//         └─ Produces Config
+export const ConfigLive = Layer.succeed(
+	Config,
+	Config.of({
+		getConfig: Effect.succeed({
+			logLevel: 'INFO',
+			connection: 'mysql://localhost/db'
+		})
+	})
+);
+```
+
+## Pattern: Layer with Dependencies
+
+```typescript
+import { ServiceMap, Effect, Layer, Console } from 'effect';
+
+interface ConfigData {
+	readonly logLevel: string;
+	readonly connection: string;
+}
+
+export class Config extends ServiceMap.Service<
+	Config,
+	{
+		readonly getConfig: Effect.Effect<ConfigData>;
+	}
+>()('Config') {}
+
+export class Logger extends ServiceMap.Service<
+	Logger,
+	{
+		readonly log: (message: string) => Effect.Effect<void>;
+	}
+>()('Logger') {}
+
+// Layer<Logger, never, Config>
+//         ▲      ▲      ▲
+//         │      │      └─ Needs Config
+//         │      └─ Cannot fail
+//         └─ Produces Logger
+export const LoggerLive = Layer.effect(
+	Logger,
+	Effect.gen(function* () {
+		const config = yield* Config; // Access dependency
+		return Logger.of({
+			log: (message) =>
+				Effect.gen(function* () {
+					const { logLevel } = yield* config.getConfig;
+					yield* Console.log(`[${logLevel}] ${message}`);
+				})
+		});
+	})
+);
+```
+
+## Pattern: Layer with Resource Management
+
+Use `Layer.effect` for all layers, including those with resources that need cleanup. In Effect v4, `Layer.effect` automatically handles `Scope` lifecycle — `Layer.scoped` is no longer needed.
+
+Resources are acquired and released using `Effect.acquireRelease` or `Effect.addFinalizer` inside the `Layer.effect` constructor:
+
+```typescript
+import { ServiceMap, Effect, Layer } from 'effect';
+
+interface ConfigData {
+	readonly logLevel: string;
+	readonly connection: string;
+}
+
+interface Connection {
+	readonly close: () => void;
+}
+
+interface DatabaseError {
+	readonly _tag: 'DatabaseError';
+}
+
+export class Config extends ServiceMap.Service<
+	Config,
+	{
+		readonly getConfig: Effect.Effect<ConfigData>;
+	}
+>()('Config') {}
+
+export class Database extends ServiceMap.Service<
+	Database,
+	{
+		readonly query: (sql: string) => Effect.Effect<unknown, DatabaseError>;
+	}
+>()('Database') {}
+
+declare const connectToDatabase: (
+	config: ConfigData
+) => Effect.Effect<Connection, DatabaseError>;
+declare const executeQuery: (
+	connection: Connection,
+	sql: string
+) => Effect.Effect<unknown, DatabaseError>;
+
+// Layer<Database, DatabaseError, Config>
+export const DatabaseLive = Layer.effect(
+	Database,
+	Effect.gen(function* () {
+		const config = yield* Config;
+		const configData = yield* config.getConfig;
+
+		// Acquire resource with automatic release — Layer.effect handles Scope
+		const connection = yield* Effect.acquireRelease(
+			connectToDatabase(configData),
+			(conn) => Effect.sync(() => conn.close()) // Cleanup
+		);
+
+		return Database.of({
+			query: (sql) => executeQuery(connection, sql)
+		});
+	})
+);
+```
+
+## Composing Layers: Merge vs Provide
+
+### Merge (Parallel Composition)
+
+Combine independent layers:
+
+```typescript
+import { ServiceMap, Layer } from 'effect';
+
+declare class Config extends ServiceMap.Service<Config, {}>()('Config') {}
+declare class Logger extends ServiceMap.Service<Logger, {}>()('Logger') {}
+
+declare const ConfigLive: Layer.Layer<Config, never, never>;
+declare const LoggerLive: Layer.Layer<Logger, never, Config>;
+
+// Layer<Config | Logger, never, Config>
+//         ▲               ▲      ▲
+//         │               │      └─ LoggerLive needs Config
+//         │               └─ No errors
+//         └─ Produces both Config and Logger
+const AppConfigLive = Layer.merge(ConfigLive, LoggerLive);
+```
+
+Result combines:
+
+- **Requirements**: Union (`never | Config = Config`)
+- **Outputs**: Union (`Config | Logger`)
+
+### Provide (Sequential Composition)
+
+Chain dependent layers:
+
+```typescript
+import { ServiceMap, Layer } from 'effect';
+
+declare class Config extends ServiceMap.Service<Config, {}>()('Config') {}
+declare class Logger extends ServiceMap.Service<Logger, {}>()('Logger') {}
+
+declare const ConfigLive: Layer.Layer<Config, never, never>;
+declare const LoggerLive: Layer.Layer<Logger, never, Config>;
+
+// Layer<Logger, never, never>
+//         ▲      ▲      ▲
+//         │      │      └─ ConfigLive satisfies LoggerLive's requirement
+//         │      └─ No errors
+//         └─ Only Logger in output
+const FullLoggerLive = Layer.provide(LoggerLive, ConfigLive);
+```
+
+Result:
+
+- **Requirements**: Outer layer's requirements (`never`)
+- **Output**: Inner layer's output (`Logger`)
+
+## Pattern: Layered Architecture
+
+Build applications in layers:
+
+```typescript
+import { ServiceMap, Layer } from 'effect';
+
+declare class Config extends ServiceMap.Service<Config, {}>()('Config') {}
+declare class Database extends ServiceMap.Service<Database, {}>()('Database') {}
+declare class Cache extends ServiceMap.Service<Cache, {}>()('Cache') {}
+declare class PaymentDomain extends ServiceMap.Service<PaymentDomain, {}>()(
+	'PaymentDomain'
+) {}
+declare class OrderDomain extends ServiceMap.Service<OrderDomain, {}>()(
+	'OrderDomain'
+) {}
+declare class PaymentGateway extends ServiceMap.Service<PaymentGateway, {}>()(
+	'PaymentGateway'
+) {}
+declare class NotificationService extends ServiceMap.Service<
+	NotificationService,
+	{}
+>()('NotificationService') {}
+
+declare const ConfigLive: Layer.Layer<Config, never, never>;
+declare const DatabaseLive: Layer.Layer<Database, never, Config>;
+declare const CacheLive: Layer.Layer<Cache, never, Config>;
+declare const PaymentDomainLive: Layer.Layer<PaymentDomain, never, Database>;
+declare const OrderDomainLive: Layer.Layer<OrderDomain, never, Database>;
+declare const PaymentGatewayLive: Layer.Layer<
+	PaymentGateway,
+	never,
+	PaymentDomain
+>;
+declare const NotificationServiceLive: Layer.Layer<
+	NotificationService,
+	never,
+	OrderDomain
+>;
+
+// Infrastructure: No dependencies
+const InfrastructureLive = Layer.mergeAll(
+	ConfigLive, // Layer<Config, never, never>
+	DatabaseLive, // Layer<Database, never, Config>
+	CacheLive // Layer<Cache, never, Config>
+).pipe(
+	Layer.provide(ConfigLive) // Satisfy Config requirement
+);
+
+// Domain: Depends on infrastructure
+const DomainLive = Layer.mergeAll(
+	PaymentDomainLive, // Layer<PaymentDomain, never, Database>
+	OrderDomainLive // Layer<OrderDomain, never, Database>
+).pipe(Layer.provide(InfrastructureLive));
+
+// Application: Depends on domain
+const ApplicationLive = Layer.mergeAll(
+	PaymentGatewayLive,
+	NotificationServiceLive
+).pipe(Layer.provide(DomainLive));
+```
+
+## Pattern: Multiple Implementations
+
+Switch implementations for different environments:
+
+```typescript
+import { ServiceMap, Effect, Layer } from 'effect';
+
+interface Connection {
+	readonly close: () => void;
+}
+
+export class Database extends ServiceMap.Service<
+	Database,
+	{
+		readonly query: (sql: string) => Effect.Effect<{ rows: unknown[] }>;
+	}
+>()('Database') {}
+
+declare const connectToProduction: () => Effect.Effect<Connection>;
+declare const createDatabaseService: (connection: Connection) => {
+	readonly query: (sql: string) => Effect.Effect<{ rows: unknown[] }>;
+};
+
+declare const myProgram: Effect.Effect<void, never, Database>;
+
+// Production
+export const DatabaseLive = Layer.effect(
+	Database,
+	Effect.gen(function* () {
+		const connection = yield* connectToProduction();
+		return createDatabaseService(connection);
+	})
+);
+
+// Test
+export const DatabaseTest = Layer.succeed(
+	Database,
+	Database.of({
+		query: () => Effect.succeed({ rows: [] })
+	})
+);
+
+// Use in application
+const program = Effect.gen(function* () {
+	const nodeEnv = yield* Config.string('NODE_ENV').pipe(
+		Config.withDefault('production')
+	);
+	yield* myProgram.pipe(
+		Effect.provide(nodeEnv === 'test' ? DatabaseTest : DatabaseLive)
+	);
+});
+```
+
+## Pattern: Layer Sharing
+
+Layers are memoized - same instance shared across program:
+
+```typescript
+import { ServiceMap, Effect, Layer } from 'effect';
+
+declare class Config extends ServiceMap.Service<
+	Config,
+	{ readonly value: string }
+>()('Config') {}
+declare const ConfigLive: Layer.Layer<Config, never, never>;
+
+// Config is constructed once and shared
+const program = Effect.all([
+	Effect.gen(function* () {
+		const config = yield* Config;
+		// Uses shared instance
+	}),
+	Effect.gen(function* () {
+		const config = yield* Config;
+		// Same instance
+	})
+]).pipe(Effect.provide(ConfigLive));
+```
+
+## Error Handling in Layers
+
+Handle construction errors:
+
+```typescript
+import { ServiceMap, Effect, Layer, Schema } from 'effect';
+
+interface Connection {
+	readonly close: () => void;
+}
+
+class ConnectionError extends Schema.TaggedErrorClass<ConnectionError>()(
+	'ConnectionError',
+	{
+		message: Schema.String
+	}
+) {}
+
+class DatabaseConstructionError extends Schema.TaggedErrorClass<DatabaseConstructionError>()(
+	'DatabaseConstructionError',
+	{ cause: ConnectionError }
+) {}
+
+export class Database extends ServiceMap.Service<
+	Database,
+	{
+		readonly query: (sql: string) => Effect.Effect<unknown>;
+	}
+>()('Database') {}
+
+declare const connectToDatabase: () => Effect.Effect<
+	Connection,
+	ConnectionError
+>;
+declare const createDatabaseService: (connection: Connection) => {
+	readonly query: (sql: string) => Effect.Effect<unknown>;
+};
+
+export const DatabaseLive = Layer.effect(
+	Database,
+	Effect.gen(function* () {
+		const connection = yield* connectToDatabase().pipe(
+			Effect.catchTag('ConnectionError', (error) =>
+				Effect.fail(new DatabaseConstructionError({ cause: error }))
+			)
+		);
+		return createDatabaseService(connection);
+	})
+);
+```
+
+## Naming Convention
+
+- `*Live` - Production implementation
+- `*Test` - Test implementation
+- `*Mock` - Mock for testing
+- Descriptive names for specialized implementations
+
+## Quality Checklist
+
+- [ ] Layer type accurately reflects dependencies
+- [ ] Resource cleanup using `acquireRelease` if needed
+- [ ] Layer can be tested with mock dependencies
+- [ ] No dependency leakage into service interface
+- [ ] Appropriate use of merge vs provide
+- [ ] Error handling for construction failures
+- [ ] JSDoc with example usage
+
+Layers should make dependency management explicit while keeping service interfaces clean and focused.
+
+Base directory for this skill: file:///Users/m/repos/opencode-effect-enforcer/skills/effect-layer-design
+Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.
+Note: file list is sampled.
+
+<skill_files>
+
+</skill_files>
+</skill_content>
+```
+
+**Tool: skill**
+
+**Input:**
+```json
+{
+  "name": "effect-service-implementation"
+}
+```
+
+**Output:**
+```
+<skill_content name="effect-service-implementation">
+# Skill: effect-service-implementation
+
+# Service Implementation Skill
+
+Design and implement Effect services as focused capabilities that compose into complete solutions.
+
+## Effect Source Reference
+
+Use `effect_ref_read` to read Effect v4 source files and `effect_ref_list` to browse directories.
+These tools automatically fetch source matching your installed Effect version.
+
+Reference this for:
+
+- ServiceMap source: `packages/effect/src/ServiceMap.ts`
+- Layer source: `packages/effect/src/Layer.ts`
+- Migration guide: `MIGRATION.md`
+- Effect source: `packages/effect/src/`
+
+## Service Declaration: `ServiceMap.Service`
+
+All business services use `ServiceMap.Service`. The service shape is the **second type parameter**, not a runtime argument. Methods use `Effect.fn` for automatic tracing.
+
+```typescript
+import { Effect, Layer, Schema, ServiceMap } from 'effect';
+
+class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()(
+	'UserNotFound',
+	{
+		userId: Schema.String,
+		message: Schema.String
+	}
+) {}
+
+export class UserRepository extends ServiceMap.Service<
+	UserRepository,
+	{
+		readonly findById: (id: string) => Effect.Effect<User, UserNotFound>;
+	}
+>()('@services/user/UserRepository', {
+	make: Effect.gen(function* () {
+		const db = yield* DatabaseClient;
+
+		const findById = Effect.fn('UserRepository.findById')(function* (
+			id: string
+		) {
+			const row = yield* db.query('SELECT * FROM users WHERE id = ?', id);
+			if (!row)
+				return yield* new UserNotFound({
+					userId: id,
+					message: `User ${id} not found`
+				});
+			return row as User;
+		});
+
+		return { findById };
+	})
+}) {
+	static readonly layer = Layer.effect(this, this.make).pipe(
+		Layer.provide(DatabaseClient.layer)
+	);
+}
+```
+
+Key properties:
+
+- Service shape is the **second type parameter** `ServiceMap.Service<Self, Shape>()`
+- `make:` block — an Effect that constructs the service; stored on the class but does NOT auto-generate a layer
+- `static readonly layer` — build the layer explicitly with `Layer.effect(this, this.make)`, wire dependencies with `Layer.provide`
+- `Effect.fn("Service.method")` — creates a traced span for every call
+- Access the service with `yield*` in generators, or `Service.use(s => ...)` / `Service.useSync(s => ...)` for one-liners
+
+### What does NOT exist in v4:
+
+- `accessors: true` — REMOVED. Use `yield*` or `.use()` / `.useSync()` instead
+- `effect:` option — does NOT exist. Use `make:` instead
+- `succeed:` option — does NOT exist. Use `Layer.succeed` externally or `{ make: Effect.succeed({...}) }`
+- `dependencies: [...]` option — REMOVED. Use `Layer.provide` on the layer
+
+## Anti-Pattern: Monolithic Services
+
+```typescript
+import { Effect, Layer, ServiceMap } from 'effect';
+
+// WRONG - Mixed concerns in one service
+export class PaymentService extends ServiceMap.Service<
+	PaymentService,
+	{
+		readonly processPayment: Effect.Effect<void>;
+		readonly validateWebhook: Effect.Effect<void>;
+		readonly refund: Effect.Effect<void>;
+		readonly sendReceipt: Effect.Effect<void>; // Notification concern
+		readonly generateReport: Effect.Effect<void>; // Reporting concern
+	}
+>()('PaymentService') {}
+```
+
+## Pattern: Capability-Based Services
+
+Each service represents ONE cohesive capability:
+
+```typescript
+import { Effect, Layer, Schema, ServiceMap } from 'effect';
+
+class HandoffError extends Schema.TaggedErrorClass<HandoffError>()(
+	'HandoffError',
+	{
+		message: Schema.String
+	}
+) {}
+
+class WebhookValidationError extends Schema.TaggedErrorClass<WebhookValidationError>()(
+	'WebhookValidationError',
+	{ message: Schema.String }
+) {}
+
+class RefundError extends Schema.TaggedErrorClass<RefundError>()(
+	'RefundError',
+	{
+		message: Schema.String
+	}
+) {}
+
+// Focused capabilities — one concern per service
+
+export class PaymentGateway extends ServiceMap.Service<
+	PaymentGateway,
+	{
+		readonly handoff: (
+			intent: PaymentIntent
+		) => Effect.Effect<HandoffResult, HandoffError>;
+	}
+>()('@services/payment/PaymentGateway', {
+	make: Effect.gen(function* () {
+		const stripe = yield* StripeClient;
+
+		const handoff = Effect.fn('PaymentGateway.handoff')(function* (
+			intent: PaymentIntent
+		) {
+			// implementation using stripe client
+			return { status: 'completed' } as HandoffResult;
+		});
+
+		return { handoff };
+	})
+}) {
+	static readonly layer = Layer.effect(this, this.make).pipe(
+		Layer.provide(StripeClient.layer)
+	);
+}
+
+export class PaymentWebhookGateway extends ServiceMap.Service<
+	PaymentWebhookGateway,
+	{
+		readonly validateWebhook: (
+			payload: WebhookPayload
+		) => Effect.Effect<void, WebhookValidationError>;
+	}
+>()('@services/payment/PaymentWebhookGateway', {
+	make: Effect.gen(function* () {
+		const stripe = yield* StripeClient;
+
+		const validateWebhook = Effect.fn(
+			'PaymentWebhookGateway.validateWebhook'
+		)(function* (payload: WebhookPayload) {
+			// implementation
+		});
+
+		return { validateWebhook };
+	})
+}) {
+	static readonly layer = Layer.effect(this, this.make).pipe(
+		Layer.provide(StripeClient.layer)
+	);
+}
+
+export class PaymentRefundGateway extends ServiceMap.Service<
+	PaymentRefundGateway,
+	{
+		readonly refund: (
+			paymentId: PaymentId,
+			amount: Cents
+		) => Effect.Effect<RefundResult, RefundError>;
+	}
+>()('@services/payment/PaymentRefundGateway', {
+	make: Effect.gen(function* () {
+		const stripe = yield* StripeClient;
+
+		const refund = Effect.fn('PaymentRefundGateway.refund')(function* (
+			paymentId: PaymentId,
+			amount: Cents
+		) {
+			return { status: 'refunded' } as RefundResult;
+		});
+
+		return { refund };
+	})
+}) {
+	static readonly layer = Layer.effect(this, this.make).pipe(
+		Layer.provide(StripeClient.layer)
+	);
+}
+```
+
+## Pattern: No Requirement Leakage
+
+Service methods should **never** have requirements in their return type:
+
+```typescript
+import { Effect, Layer, Schema, ServiceMap } from 'effect';
+
+class QueryError extends Schema.TaggedErrorClass<QueryError>()('QueryError', {
+	message: Schema.String
+}) {}
+
+export class Database extends ServiceMap.Service<
+	Database,
+	{
+		readonly query: (sql: string) => Effect.Effect<QueryResult, QueryError>;
+	}
+>()('@services/Database', {
+	make: Effect.gen(function* () {
+		const pool = yield* ConnectionPool; // Dependency captured in closure
+
+		const query = Effect.fn('Database.query')(function* (sql: string) {
+			//  Requirements = never (no R param)
+			//  Dependencies are in the closure, not the return type
+			const conn = yield* pool.acquire();
+			return yield* conn.execute(sql);
+		});
+
+		return { query };
+	})
+}) {
+	static readonly layer = Layer.effect(this, this.make).pipe(
+		Layer.provide(ConnectionPool.layer)
+	);
+}
+```
+
+Dependencies are handled by:
+
+1. **`make:` closure** — services captured at construction time via `yield*`
+2. **`Layer.provide`** — wires dependency layers into the static layer
+
+Both keep the method signatures clean (`R = never`).
+
+## Pattern: Simple Services Without Dependencies
+
+For services with no external dependencies, use `make: Effect.succeed(...)` or define the layer with `Layer.succeed`:
+
+```typescript
+import { Effect, Layer, ServiceMap } from 'effect';
+
+export class IdGenerator extends ServiceMap.Service<
+	IdGenerator,
+	{
+		readonly generate: Effect.Effect<string>;
+	}
+>()('@services/IdGenerator', {
+	make: Effect.succeed({
+		generate: Effect.sync(() => crypto.randomUUID())
+	})
+}) {
+	static readonly layer = Layer.effect(this, this.make);
+}
+```
+
+Or equivalently using `Layer.succeed` directly:
+
+```typescript
+export class IdGenerator extends ServiceMap.Service<
+	IdGenerator,
+	{
+		readonly generate: Effect.Effect<string>;
+	}
+>()('@services/IdGenerator') {
+	static readonly layer = Layer.succeed(this, {
+		generate: Effect.sync(() => crypto.randomUUID())
+	});
+}
+```
+
+## Pattern: Composing Capabilities
+
+Different implementations support different capabilities:
+
+```typescript
+import { Layer } from 'effect';
+
+// Cash payments: Basic handoff only
+export const CashGatewayLive = Layer.mergeAll(
+	CashHandoffLive // Implements PaymentGateway
+);
+
+// Stripe: Full capability suite
+export const StripeGatewayLive = Layer.mergeAll(
+	StripeHandoffLive, // Implements PaymentGateway
+	StripeWebhookLive, // Implements PaymentWebhookGateway
+	StripeRefundLive // Implements PaymentRefundGateway
+);
+```
+
+## Pattern: Optional Capabilities
+
+Use `Effect.serviceOption` for capabilities that may not be available:
+
+```typescript
+import { Effect, Option } from 'effect';
+
+const processPayment = Effect.gen(function* () {
+	const gateway = yield* PaymentGateway;
+	const result = yield* gateway.handoff(order.paymentIntent);
+
+	// Optional capability — check if available
+	const refundGateway = yield* Effect.serviceOption(PaymentRefundGateway);
+
+	if (Option.isSome(refundGateway)) {
+		yield* setupRefundPolicy(refundGateway.value, order);
+	}
+
+	return result;
+});
+```
+
+## When to Use Interface-Style `ServiceMap.Service`
+
+Interface-style `ServiceMap.Service` (shape as type parameter only, no `make`) is appropriate in two cases:
+
+### 1. Config / Infrastructure Injection
+
+Config values, database connections, runtime environment — things injected by the runtime:
+
+```typescript
+import { Config, Effect, Layer, Redacted, ServiceMap } from 'effect';
+
+export class StripeConfig extends ServiceMap.Service<
+	StripeConfig,
+	{
+		readonly API_KEY: Redacted.Redacted<string>;
+		readonly endpoint: string;
+	}
+>()('@services/payment/StripeConfig', {
+	make: Effect.gen(function* () {
+		return {
+			API_KEY: yield* Config.redacted('STRIPE_API_KEY'),
+			endpoint: yield* Config.string('STRIPE_ENDPOINT').pipe(
+				Config.withDefault('https://api.stripe.com')
+			)
+		};
+	})
+}) {
+	static readonly layer = Layer.effect(this, this.make);
+}
+```
+
+### 2. Interface-Style Services (No Default Implementation)
+
+When a service has **no single obvious implementation** — the interface is defined separately from its implementations. Examples: a `Clipboard` service with macOS/Linux/browser implementations, a `PromptUserForInput` service with TUI/web/voice implementations.
+
+```typescript
+import { Layer, ServiceMap } from 'effect';
+import type { Effect } from 'effect';
+
+// Interface-style: multiple implementations exist
+export class Clipboard extends ServiceMap.Service<
+	Clipboard,
+	{
+		readonly read: Effect.Effect<string, ClipboardError>;
+		readonly write: (text: string) => Effect.Effect<void, ClipboardError>;
+	}
+>()('@Clipboard/Clipboard') {}
+
+// Each platform provides its own Layer
+// layer-macos/: Layer.succeed(Clipboard, { read: ..., write: ... })
+// layer-linux/: Layer.succeed(Clipboard, { read: ..., write: ... })
+```
+
+**Rule of thumb:**
+
+- Single obvious implementation → `ServiceMap.Service<Self, Shape>()` with `make` and `static readonly layer`
+- Multiple implementations / interface-style → `ServiceMap.Service<Self, Shape>()` with no `make`, layers defined externally
+- Config / infrastructure injection → `ServiceMap.Service<Self, Shape>()` with `make`
+
+## Testing Benefits
+
+Each capability can be tested in isolation:
+
+```typescript
+import { Effect, Layer } from 'effect';
+
+const TestWebhook = Layer.succeed(PaymentWebhookGateway, {
+	validateWebhook: () => Effect.succeed(undefined)
+});
+
+// Test only webhook validation, no other payment concerns
+const testProgram = Effect.gen(function* () {
+	const gateway = yield* PaymentWebhookGateway;
+	yield* gateway.validateWebhook(payload);
+}).pipe(Effect.provide(TestWebhook));
+```
+
+## Naming Convention
+
+Use descriptive capability names:
+
+- `*Gateway` - External system integration
+- `*Repository` - Data persistence
+- `*Domain` - Business logic
+- `*Service` - General capability (use sparingly)
+
+Tag identifiers should include namespace:
+
+- `"@services/payment/PaymentGateway"`
+- `"@repositories/user/UserRepository"`
+- `"@domain/order/OrderDomain"`
+
+## Quality Checklist
+
+- [ ] Service uses `ServiceMap.Service<Self, Shape>()("identifier")` with shape as type parameter
+- [ ] Service methods use `Effect.fn("ServiceName.methodName")`
+- [ ] Service represents single capability
+- [ ] All operations have Requirements = never (no R parameter)
+- [ ] Dependencies captured in `make:` closure and wired via `Layer.provide` on `static readonly layer`
+- [ ] Tagged with descriptive namespace
+- [ ] Can be tested in isolation
+- [ ] Can be composed with other capabilities
+- [ ] No use of removed v3 options: `accessors`, `effect`, `succeed`, `dependencies`
+
+Keep services focused, composable, and free of leaked requirements.
+
+Base directory for this skill: file:///Users/m/repos/opencode-effect-enforcer/skills/effect-service-implementation
+Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.
+Note: file list is sampled.
+
+<skill_files>
+
+</skill_files>
+</skill_content>
+```
+
+**Tool: skill**
+
+**Input:**
+```json
+{
+  "name": "effect-pattern-matching"
+}
+```
+
+**Output:**
+```
+<skill_content name="effect-pattern-matching">
+# Skill: effect-pattern-matching
+
+# Effect Pattern Matching Skill
+
+Use this skill when working with discriminated unions, ADTs, conditional logic, or any type that uses `_tag` discrimination. Pattern matching provides exhaustive, type-safe alternatives to imperative conditionals.
+
+## Effect Source Reference
+
+Use `effect_ref_read` to read Effect v4 source files and `effect_ref_list` to browse directories.
+These tools automatically fetch source matching your installed Effect version.
+
+Reference this for:
+
+- Match source: `packages/effect/src/Match.ts`
+- Data source: `packages/effect/src/Data.ts`
+- Full Schema API: `packages/effect/SCHEMA.md`
+- Effect source: `packages/effect/src/`
+
+## Core Philosophy
+
+**Pattern matching over imperative conditionals**:
+
+- Exhaustive by default (compiler enforces all cases)
+- Type-safe refinement in each branch
+- Declarative, not imperative
+- Pipeline-friendly composition
+
+## Pattern 1: Data.TaggedEnum for ADTs
+
+Use `Data.TaggedEnum` instead of manual tagged unions.
+
+### The Problem: Manual Tagged Unions
+
+```typescript
+// ❌ WRONG - Manual tagged union
+type WalletState =
+	| { readonly _tag: 'Disconnected' }
+	| { readonly _tag: 'Connecting' }
+	| { readonly _tag: 'Connected'; readonly address: string }
+	| { readonly _tag: 'Error'; readonly message: string };
+
+// Manual constructors - verbose and error-prone
+const disconnected = (): WalletState => ({ _tag: 'Disconnected' });
+const connecting = (): WalletState => ({ _tag: 'Connecting' });
+const connected = (address: string): WalletState => ({
+	_tag: 'Connected',
+	address
+});
+const error = (message: string): WalletState => ({ _tag: 'Error', message });
+
+// No built-in pattern matching
+// No type guards
+// No exhaustiveness checking
+```
+
+### The Solution: Data.TaggedEnum
+
+```typescript
+// ✅ CORRECT - TaggedEnum with constructors + $match + $is
+import { Data } from 'effect';
+
+type WalletState = Data.TaggedEnum<{
+	Disconnected: {};
+	Connecting: {};
+	Connected: { readonly address: string };
+	Error: { readonly message: string };
+}>;
+
+const WalletState = Data.taggedEnum<WalletState>();
+
+/**
+ * WalletState now provides:
+ * - WalletState.Disconnected() - Constructor
+ * - WalletState.Connecting() - Constructor
+ * - WalletState.Connected({ address }) - Constructor
+ * - WalletState.Error({ message }) - Constructor
+ * - WalletState.$match(state, { ... }) - Pattern matching
+ * - WalletState.$is("Connected")(state) - Type guard
+ */
+
+// Usage
+const state = WalletState.Connected({ address: '0x123' });
+
+// Pattern match
+const display = WalletState.$match(state, {
+	Disconnected: () => 'Please connect wallet',
+	Connecting: () => 'Connecting...',
+	Connected: ({ address }) => `Connected: ${address}`,
+	Error: ({ message }) => `Error: ${message}`
+});
+
+// Type guard
+if (WalletState.$is('Connected')(state)) {
+	console.log(state.address); // Type-safe access
+}
+```
+
+### Benefits of Data.TaggedEnum
+
+1. **Automatic constructors** - No manual factory functions
+2. **Automatic $match** - Exhaustive pattern matching built-in
+3. **Automatic $is** - Type-safe guards for each variant
+4. **Type inference** - Compiler knows all variants
+5. **Compile-time exhaustiveness** - Forget a case? Compiler error
+
+### When to Use Data.TaggedEnum
+
+- **State machines**: Connection states, loading states, workflow states
+- **Domain events**: UserLoggedIn, UserLoggedOut, SessionExpired
+- **Command types**: CreateUser, UpdateUser, DeleteUser
+- **Result types**: Success, Failure, Pending
+- **Any discriminated union** with multiple variants
+
+## Pattern 2: Avoid Effect.result + \_tag Checks
+
+Use `Effect.match` instead of `Effect.result` with manual tag checks.
+
+### The Problem: Effect.result with Manual Checks
+
+```typescript
+// ❌ WRONG - Effect.result with manual _tag checks
+import { Effect, Result, Schema } from 'effect';
+
+declare const User: { name: string; id: string };
+type User = typeof User;
+
+class NotFound extends Schema.TaggedErrorClass<NotFound>()('NotFound', {
+	id: Schema.String
+}) {}
+
+const getUser = (id: string): Effect.Effect<User, NotFound> =>
+	Effect.fail(new NotFound({ id }));
+
+const program = Effect.gen(function* () {
+	const result = yield* Effect.result(getUser('123'));
+
+	// Manual tag checking - not exhaustive
+	if (result._tag === 'Failure') {
+		console.error(`User not found: ${result.failure.id}`);
+		return null;
+	}
+
+	return result.success;
+});
+```
+
+**Problems:**
+
+- Not exhaustive (could forget Success case)
+- Verbose and imperative
+- Breaks pipeline style
+- Manual unwrapping of Either
+
+### The Solution: Effect.match
+
+```typescript
+// ✅ CORRECT - Effect.match for declarative error handling
+import { Effect, Schema } from 'effect';
+
+declare const User: { name: string; id: string };
+type User = typeof User;
+
+class NotFound extends Schema.TaggedErrorClass<NotFound>()('NotFound', {
+	id: Schema.String
+}) {}
+
+const getUser = (id: string): Effect.Effect<User, NotFound> =>
+	Effect.fail(new NotFound({ id }));
+
+const program = getUser('123').pipe(
+	Effect.match({
+		onFailure: (error) => {
+			console.error(`User not found: ${error.id}`);
+			return null;
+		},
+		onSuccess: (user) => user
+	})
+);
+```
+
+**Benefits:**
+
+- Exhaustive (must handle both cases)
+- Declarative and pipeline-friendly
+- No manual Either unwrapping
+- Type-safe refinement in each branch
+
+### Effect.match Variants
+
+```typescript
+import { Effect, Cause } from 'effect';
+
+declare const effect: Effect.Effect<unknown, unknown, unknown>;
+declare function handleError(error: unknown): unknown;
+declare function handleSuccess(value: unknown): unknown;
+declare function handleCause(cause: Cause.Cause<unknown>): unknown;
+
+// Basic match - transform both success and failure
+Effect.match(effect, {
+	onFailure: (error) => handleError(error),
+	onSuccess: (value) => handleSuccess(value)
+});
+
+// matchEffect - return Effects from handlers
+Effect.matchEffect(effect, {
+	onFailure: (error) => Effect.logError(error).pipe(Effect.as(null)),
+	onSuccess: (value) => Effect.succeed(value)
+});
+
+// matchCause - match on full Cause (errors + defects + interrupts)
+Effect.matchCause(effect, {
+	onFailure: (cause) => handleCause(cause),
+	onSuccess: (value) => value
+});
+
+// matchCauseEffect - Cause matching with Effect handlers
+Effect.matchCauseEffect(effect, {
+	onFailure: (cause) => Effect.logError(cause).pipe(Effect.as(null)),
+	onSuccess: (value) => Effect.succeed(value)
+});
+```
+
+## Pattern 3: Use $match for Exhaustive Pattern Matching
+
+Use `TaggedEnum.$match` for exhaustive, type-safe pattern matching.
+
+### The Problem: if/else Chains
+
+```typescript
+// ❌ WRONG - if/else chains, not exhaustive
+import { Data } from 'effect';
+
+type Status = Data.TaggedEnum<{
+	Active: {};
+	Expired: {};
+	Revoked: {};
+}>;
+const Status = Data.taggedEnum<Status>();
+
+const getColor = (status: Status): string => {
+	if (status._tag === 'Active') {
+		return 'green';
+	} else if (status._tag === 'Expired') {
+		return 'yellow';
+	}
+	// Forgot "Revoked" - no compiler error!
+	return 'gray';
+};
+```
+
+**Problems:**
+
+- Not exhaustive (easy to forget cases)
+- Compiler doesn't enforce completeness
+- Imperative style
+- Hard to refactor when adding variants
+
+### The Solution: $match
+
+```typescript
+// ✅ CORRECT - $match with exhaustive checking
+import { Data } from 'effect';
+
+type Status = Data.TaggedEnum<{
+	Active: {};
+	Expired: {};
+	Revoked: {};
+}>;
+const Status = Data.taggedEnum<Status>();
+
+const getColor = (status: Status): string =>
+	Status.$match(status, {
+		Active: () => 'green',
+		Expired: () => 'yellow',
+		Revoked: () => 'red'
+		// Compiler error if any case is missing!
+	});
+```
+
+**Benefits:**
+
+- **Exhaustive** - Compiler enforces all cases
+- **Type-safe** - Each handler gets refined type
+- **Declarative** - Clear mapping from variant to result
+- **Refactor-safe** - Add variant? Compiler finds all matches to update
+
+### $match with Data Access
+
+```typescript
+type AsyncState = Data.TaggedEnum<{
+	Idle: {};
+	Loading: {};
+	Success: { readonly data: string };
+	Failure: { readonly error: string };
+}>;
+const AsyncState = Data.taggedEnum<AsyncState>();
+
+const display = (state: AsyncState): string =>
+	AsyncState.$match(state, {
+		Idle: () => 'Not started',
+		Loading: () => 'Loading...',
+		Success: ({ data }) => `Loaded: ${data}`,
+		Failure: ({ error }) => `Error: ${error}`
+	});
+```
+
+### Nested Pattern Matching
+
+```typescript
+type Request = Data.TaggedEnum<{
+	Pending: {};
+	Approved: { readonly by: string };
+	Rejected: { readonly reason: string };
+}>;
+const Request = Data.taggedEnum<Request>();
+
+type Workflow = Data.TaggedEnum<{
+	Draft: { readonly request: Request };
+	Submitted: { readonly request: Request };
+	Completed: {};
+}>;
+const Workflow = Data.taggedEnum<Workflow>();
+
+const getStatus = (workflow: Workflow): string =>
+	Workflow.$match(workflow, {
+		Draft: ({ request }) =>
+			Request.$match(request, {
+				Pending: () => 'Draft - Pending',
+				Approved: ({ by }) => `Draft - Approved by ${by}`,
+				Rejected: ({ reason }) => `Draft - Rejected: ${reason}`
+			}),
+		Submitted: ({ request }) =>
+			Request.$match(request, {
+				Pending: () => 'Submitted - Awaiting approval',
+				Approved: ({ by }) => `Submitted - Approved by ${by}`,
+				Rejected: ({ reason }) => `Submitted - Rejected: ${reason}`
+			}),
+		Completed: () => 'Completed'
+	});
+```
+
+## Pattern 4: Use $is for Single-Case Type Guards
+
+Use `TaggedEnum.$is` instead of manual `_tag` checks.
+
+### The Problem: Manual \_tag Checks
+
+```typescript
+// ❌ WRONG - Manual tag checking
+import { Data } from 'effect';
+
+type Status = Data.TaggedEnum<{
+	Active: {};
+	Expired: {};
+}>;
+const Status = Data.taggedEnum<Status>();
+
+// Verbose and repetitive
+const status = Status.Active();
+if (status._tag === 'Active') {
+	console.log('Active!');
+}
+
+// Hard to use in Array methods
+const items: Status[] = [Status.Active(), Status.Expired()];
+const activeItems = items.filter((item) => item._tag === 'Active');
+```
+
+### The Solution: $is Type Guards
+
+```typescript
+// ✅ CORRECT - $is for type-safe guards
+import { Data, Array, pipe } from 'effect';
+
+type Status = Data.TaggedEnum<{
+	Active: {};
+	Expired: {};
+}>;
+const Status = Data.taggedEnum<Status>();
+
+const status = Status.Active();
+
+// Clean, declarative guard
+if (Status.$is('Active')(status)) {
+	console.log('Active!');
+}
+
+// Perfect for Array methods
+const items: Status[] = [Status.Active(), Status.Expired()];
+const activeItems = items.filter(Status.$is('Active'));
+
+// Pipeline-friendly
+const hasActive = pipe(items, Array.some(Status.$is('Active')));
+
+// Multiple guards
+const activeOrExpired = items.filter(
+	(item) => Status.$is('Active')(item) || Status.$is('Expired')(item)
+);
+```
+
+### $is in Effect Pipelines
+
+```typescript
+import { Data, pipe } from 'effect';
+
+type LoadState = Data.TaggedEnum<{
+	Loading: {};
+	Ready: { readonly data: string[] };
+	Error: { readonly message: string };
+}>;
+const LoadState = Data.taggedEnum<LoadState>();
+
+const getData = (state: LoadState): string[] =>
+	pipe(
+		state,
+		// Type guard refines to Ready
+		LoadState.$is('Ready'),
+		// Now can access .data safely
+		(ready) => (ready ? ready.data : [])
+	);
+```
+
+## Pattern 5: Use Option.match Instead of \_tag Checks
+
+Use `Option.match` instead of manual `._tag` checks on Options.
+
+### The Problem: Manual Option Tag Checks
+
+```typescript
+// ❌ WRONG - Manual Option._tag checks
+import { Option } from 'effect';
+
+type User = { name: string; id: string };
+
+const maybeUser: Option.Option<User> = Option.some({
+	name: 'Alice',
+	id: '123'
+});
+
+// Imperative and verbose
+if (maybeUser._tag === 'Some') {
+	console.log(maybeUser.value.name);
+} else {
+	console.log('No user');
+}
+```
+
+### The Solution: Option.match
+
+```typescript
+// ✅ CORRECT - Option.match
+import { Option, pipe } from 'effect';
+
+type User = { name: string; id: string };
+
+const maybeUser: Option.Option<User> = Option.some({
+	name: 'Alice',
+	id: '123'
+});
+
+const display = Option.match(maybeUser, {
+	onNone: () => 'No user',
+	onSome: (user) => user.name
+});
+
+// In pipelines
+const name = pipe(
+	maybeUser,
+	Option.match({
+		onNone: () => 'Guest',
+		onSome: (user) => user.name
+	})
+);
+```
+
+### Option Pattern Matching Variants
+
+```typescript
+import { Option, pipe } from 'effect';
+
+declare const option: Option.Option<string>;
+declare const defaultValue: string;
+declare function transform(value: string): string;
+declare function predicate(value: string): boolean;
+
+// Basic match
+Option.match(option, {
+	onNone: () => defaultValue,
+	onSome: (value) => transform(value)
+});
+
+// getOrElse - simpler for just default value
+Option.getOrElse(option, () => defaultValue);
+
+// map + getOrElse pattern
+pipe(
+	option,
+	Option.map(transform),
+	Option.getOrElse(() => defaultValue)
+);
+
+// filter + match
+pipe(
+	option,
+	Option.filter(predicate),
+	Option.match({
+		onNone: () => 'Filtered out or was None',
+		onSome: (value) => `Matched: ${value}`
+	})
+);
+```
+
+## Pattern 6: Use Match.typeTags for Schema Unions
+
+For Schema-based unions, use `Match.typeTags` for pattern matching.
+
+### Schema Union Pattern Matching
+
+```typescript
+import { Schema, Match } from 'effect';
+
+// Schema-based tagged structs
+const Admin = Schema.TaggedStruct('Admin', {
+	id: Schema.String,
+	permissions: Schema.Array(Schema.String)
+});
+
+const Customer = Schema.TaggedStruct('Customer', {
+	id: Schema.String,
+	tier: Schema.Literals(['free', 'premium'])
+});
+
+const User = Schema.Union([Admin, Customer]);
+type User = Schema.Schema.Type<typeof User>;
+
+// Match.typeTags for Schema unions
+const getPermissions = Match.typeTags<User>()({
+	Admin: ({ permissions }) => permissions,
+	Customer: ({ tier }) => (tier === 'premium' ? ['read'] : [])
+});
+
+const user: User = {
+	_tag: 'Admin' as const,
+	id: '1',
+	permissions: ['read', 'write']
+};
+
+const perms = getPermissions(user); // ["read", "write"]
+```
+
+### Match.typeTags Pattern
+
+```typescript
+import { Match, Data } from 'effect';
+
+type UnionType = Data.TaggedEnum<{
+	VariantA: { field: string };
+	VariantB: { other: number };
+}>;
+
+declare const value: UnionType;
+declare function handleA(data: { field: string }): string;
+declare function handleB(data: { other: number }): string;
+
+// Create matcher function
+const match = Match.typeTags<UnionType>();
+
+// Use with handlers object
+const result = match({
+	VariantA: (data) => handleA(data),
+	VariantB: (data) => handleB(data)
+})(value);
+
+// Or create matcher and apply later
+const matcher = match({
+	VariantA: (data) => handleA(data),
+	VariantB: (data) => handleB(data)
+});
+const result2 = matcher(value);
+```
+
+## Pattern 7: Loadable.match for Async State
+
+Use `Loadable.match` for async state pattern matching.
+
+### Loadable Pattern
+
+```tsx
+import { Loadable } from '@/typeclass/Loadable';
+
+type User = { name: string; id: string };
+
+declare const Spinner: () => JSX.Element;
+declare const UserProfile: (props: { user: User }) => JSX.Element;
+declare const ErrorDisplay: (props: { error: Error }) => JSX.Element;
+
+type UserData = Loadable.Loadable<User>;
+
+const display = (data: UserData): JSX.Element =>
+	Loadable.match(data, {
+		onPending: () => <Spinner />,
+		onReady: (user) => <UserProfile user={user} />
+	});
+
+// With error state
+type UserDataWithError = Loadable.LoadableWithError<User, Error>;
+
+const displayWithError = (data: UserDataWithError): JSX.Element =>
+	Loadable.matchWithError(data, {
+		onPending: () => <Spinner />,
+		onReady: (user) => <UserProfile user={user} />,
+		onError: (error) => <ErrorDisplay error={error} />
+	});
+```
+
+## Testability: Effect Services
+
+When pattern matching involves non-deterministic operations, use Effect services.
+
+### The Problem: Untestable Direct Calls
+
+```typescript
+// ❌ WRONG - untestable
+import { Data } from 'effect';
+
+type State = Data.TaggedEnum<{
+	Active: {};
+	Expired: {};
+}>;
+const State = Data.taggedEnum<State>();
+
+const processState = (state: State): string =>
+	State.$match(state, {
+		Active: () => `Active at ${Date.now()}`,
+		Expired: () => `Expired at ${Date.now()}`
+	});
+```
+
+### The Solution: Effect Services
+
+```typescript
+// ✅ CORRECT - testable with Clock service
+import { Clock, Effect, Data, TestClock } from 'effect';
+
+type State = Data.TaggedEnum<{
+	Active: {};
+	Expired: {};
+}>;
+const State = Data.taggedEnum<State>();
+
+const processState = (state: State): Effect.Effect<string> =>
+	Effect.gen(function* () {
+		const now = yield* Clock.currentTimeMillis;
+
+		return State.$match(state, {
+			Active: () => `Active at ${now}`,
+			Expired: () => `Expired at ${now}`
+		});
+	});
+
+// In tests, use TestClock for deterministic time
+const testProgram = processState(State.Active()).pipe(
+	Effect.provide(TestClock.make())
+);
+```
+
+### Random Values in Pattern Matching
+
+```typescript
+// ❌ WRONG - untestable
+import { Data } from 'effect';
+
+type User = Data.TaggedEnum<{
+	Admin: {};
+	Customer: {};
+}>;
+const User = Data.taggedEnum<User>();
+
+const assignColor = (user: User): string =>
+	User.$match(user, {
+		Admin: () => 'red',
+		Customer: () => (Math.random() > 0.5 ? 'blue' : 'green')
+	});
+
+// ✅ CORRECT - testable with Random service
+import { Random, Effect } from 'effect';
+
+const assignColorTestable = (user: User): Effect.Effect<string> =>
+	User.$match(user, {
+		Admin: () => Effect.succeed('red'),
+		Customer: () =>
+			Effect.gen(function* () {
+				const rand = yield* Random.next;
+				return rand > 0.5 ? 'blue' : 'green';
+			})
+	});
+```
+
+## Complete Example: Wallet Connection State Machine
+
+```typescript
+import { Data, Effect, Clock } from 'effect';
+
+// Define state machine with TaggedEnum
+type WalletState = Data.TaggedEnum<{
+	Disconnected: {};
+	Connecting: { readonly startedAt: number };
+	Connected: {
+		readonly address: string;
+		readonly connectedAt: number;
+	};
+	Error: {
+		readonly message: string;
+		readonly occurredAt: number;
+	};
+}>;
+
+const WalletState = Data.taggedEnum<WalletState>();
+
+// State transitions
+const connect = (): Effect.Effect<WalletState> =>
+	Effect.gen(function* () {
+		const now = yield* Clock.currentTimeMillis;
+		return WalletState.Connecting({ startedAt: now });
+	});
+
+const completeConnection = (address: string): Effect.Effect<WalletState> =>
+	Effect.gen(function* () {
+		const now = yield* Clock.currentTimeMillis;
+		return WalletState.Connected({
+			address,
+			connectedAt: now
+		});
+	});
+
+const fail = (message: string): Effect.Effect<WalletState> =>
+	Effect.gen(function* () {
+		const now = yield* Clock.currentTimeMillis;
+		return WalletState.Error({
+			message,
+			occurredAt: now
+		});
+	});
+
+// Pattern match for display
+const displayState = (state: WalletState): string =>
+	WalletState.$match(state, {
+		Disconnected: () => 'Please connect your wallet',
+		Connecting: ({ startedAt }) =>
+			`Connecting... (started at ${startedAt})`,
+		Connected: ({ address, connectedAt }) =>
+			`Connected: ${address} (at ${connectedAt})`,
+		Error: ({ message, occurredAt }) =>
+			`Error: ${message} (at ${occurredAt})`
+	});
+
+// Type-safe state queries using $is
+const isConnected = WalletState.$is('Connected');
+const canDisconnect = (state: WalletState): boolean =>
+	isConnected(state) || WalletState.$is('Error')(state);
+
+// Filter connected states
+const getConnectedStates = (
+	states: WalletState[]
+): Array<Extract<WalletState, { _tag: 'Connected' }>> =>
+	states.filter(isConnected);
+```
+
+## Quality Checklist
+
+Before completing pattern matching implementation:
+
+- [ ] Use `Data.TaggedEnum` for ADTs (not manual tagged unions)
+- [ ] Use `TaggedEnum.$match` for exhaustive matching
+- [ ] Use `TaggedEnum.$is` for type guards (not `._tag === `)
+- [ ] Use `Effect.match` instead of `Effect.result` + if checks
+- [ ] Use `Option.match` instead of `Option._tag` checks
+- [ ] Use `Match.typeTags` for Schema union matching
+- [ ] All pattern matches are exhaustive (compiler-checked)
+- [ ] Use `Clock` service instead of `Date.now()` in matches
+- [ ] Use `Random` service instead of `Math.random()` in matches
+- [ ] Pattern matching is declarative (no imperative conditionals)
+- [ ] Pipeline-friendly composition
+- [ ] Type-safe refinement in each branch
+
+## Common Patterns Summary
+
+### ADT Definition
+
+```typescript
+import { Data } from 'effect';
+
+type State = Data.TaggedEnum<{
+	VariantA: { field: string };
+	VariantB: { other: number };
+}>;
+const State = Data.taggedEnum<State>();
+```
+
+### Exhaustive Matching
+
+```typescript
+import { Data } from 'effect';
+
+type State = Data.TaggedEnum<{
+	VariantA: { field: string };
+	VariantB: { other: number };
+}>;
+const State = Data.taggedEnum<State>();
+
+declare const state: State;
+declare function handleA(field: string): void;
+declare function handleB(other: number): void;
+
+State.$match(state, {
+	VariantA: ({ field }) => handleA(field),
+	VariantB: ({ other }) => handleB(other)
+});
+```
+
+### Type Guards
+
+```typescript
+import { Data } from 'effect';
+
+type State = Data.TaggedEnum<{
+	VariantA: { field: string };
+	VariantB: { other: number };
+}>;
+const State = Data.taggedEnum<State>();
+
+declare const state: State;
+declare const items: State[];
+
+if (State.$is('VariantA')(state)) {
+	// state is refined to VariantA
+}
+
+// In filters
+items.filter(State.$is('VariantA'));
+```
+
+### Effect Matching
+
+```typescript
+import { Effect } from 'effect';
+
+declare const effect: Effect.Effect<unknown, unknown, unknown>;
+declare function handleError(error: unknown): unknown;
+declare function handleSuccess(value: unknown): unknown;
+
+effect.pipe(
+	Effect.match({
+		onFailure: (error) => handleError(error),
+		onSuccess: (value) => handleSuccess(value)
+	})
+);
+```
+
+### Option Matching
+
+```typescript
+import { Option } from 'effect';
+
+declare const option: Option.Option<string>;
+declare const defaultValue: string;
+declare function transform(value: string): string;
+
+Option.match(option, {
+	onNone: () => defaultValue,
+	onSome: (value) => transform(value)
+});
+```
+
+Your pattern matching implementations should be exhaustive, type-safe, declarative, and testable.
+
+Base directory for this skill: file:///Users/m/repos/opencode-effect-enforcer/skills/effect-pattern-matching
+Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.
+Note: file list is sampled.
+
+<skill_files>
+
+</skill_files>
+</skill_content>
+```
+
+**Tool: skill**
+
+**Input:**
+```json
+{
+  "name": "effect-observability"
+}
+```
+
+**Output:**
+```
+<skill_content name="effect-observability">
+# Skill: effect-observability
+
+You are an Effect TypeScript expert specializing in observability — structured logging, distributed tracing, and metrics collection.
+
+## Effect Source Reference
+
+Use `effect_ref_read` to read Effect v4 source files and `effect_ref_list` to browse directories.
+These tools automatically fetch source matching your installed Effect version.
+
+Reference this for:
+
+- `Logger` module: `packages/effect/src/Logger.ts`
+- `Tracer` module: `packages/effect/src/Tracer.ts`
+- `Metric` module: `packages/effect/src/Metric.ts`
+- OTLP export: `packages/effect/src/unstable/observability/`
+- Observability examples: `ai-docs/src/08_observability/`
+
+---
+
+## 1. Structured Logging
+
+### Log Functions
+
+Effect provides log functions at every level. Each accepts a message and optional structured data:
+
+```ts
+import { Effect } from 'effect';
+
+const program = Effect.gen(function* () {
+	yield* Effect.log('general log message');
+	yield* Effect.logDebug('debug-level detail');
+	yield* Effect.logInfo('informational message');
+	yield* Effect.logWarning('something concerning');
+	yield* Effect.logError('something failed');
+});
+```
+
+Pass structured data as the second argument:
+
+```ts
+yield * Effect.log('User action', { userId: 123, action: 'login' });
+yield * Effect.logInfo('Request processed', { duration: 150, statusCode: 200 });
+```
+
+### Log Annotations
+
+Attach key-value metadata to all log lines within a scope:
+
+```ts
+const checkout = Effect.gen(function* () {
+	yield* Effect.logInfo('validating cart');
+	yield* Effect.logWarning('inventory low for one line item');
+	yield* Effect.logError('payment provider timeout');
+}).pipe(
+	Effect.annotateLogs({
+		service: 'checkout-api',
+		route: 'POST /checkout'
+	})
+);
+```
+
+Single annotation shorthand:
+
+```ts
+Effect.annotateLogs('requestId', 'req-abc-123');
+```
+
+### Log Spans
+
+Add duration metadata to log lines — each log will include `label=<elapsed>ms`:
+
+```ts
+const withTiming = myEffect.pipe(Effect.withLogSpan('checkout'));
+// Log output includes: checkout=42ms
+```
+
+---
+
+## 2. Logger Configuration
+
+### Built-in Loggers
+
+Effect v4 provides several logger implementations:
+
+| Logger                     | Output                            | Use Case                       |
+| -------------------------- | --------------------------------- | ------------------------------ |
+| `Logger.defaultLogger`     | Default runtime format            | General use                    |
+| `Logger.consolePretty()`   | Colorized, human-readable         | Development                    |
+| `Logger.consoleJson`       | Single-line JSON to console       | Production / log aggregation   |
+| `Logger.consoleLogFmt`     | logfmt key=value to console       | Production / structured search |
+| `Logger.consoleStructured` | JS object to console              | Development debugging          |
+| `Logger.formatSimple`      | String (no console output)        | Composition / piping           |
+| `Logger.formatJson`        | JSON string (no console output)   | Composition / piping           |
+| `Logger.formatLogFmt`      | logfmt string (no console output) | Composition / piping           |
+| `Logger.formatStructured`  | Structured JS object              | Composition / piping           |
+| `Logger.tracerLogger`      | Emits logs as tracer span events  | Included by default            |
+
+### Installing Loggers via `Logger.layer`
+
+`Logger.layer` **replaces** the current loggers by default:
+
+```ts
+import { Effect, Logger } from 'effect';
+
+// JSON logging for production
+const JsonLoggerLayer = Logger.layer([Logger.consoleJson]);
+
+// Pretty logging for development
+const PrettyLoggerLayer = Logger.layer([Logger.consolePretty()]);
+
+// Multiple loggers — both receive every log entry
+const MultiLoggerLayer = Logger.layer([
+	Logger.consoleJson,
+	Logger.consolePretty()
+]);
+
+// Merge with existing loggers instead of replacing
+const AdditionalLoggerLayer = Logger.layer([Logger.consoleJson], {
+	mergeWithExisting: true
+});
+```
+
+### Log Level Filtering
+
+Control the minimum log level via `References.MinimumLogLevel`:
+
+```ts
+import { Layer, References } from 'effect';
+
+// Only emit Warn and above (skip Debug, Info)
+const WarnAndAbove = Layer.succeed(References.MinimumLogLevel, 'Warn');
+
+// Combine with logger
+const ProductionLoggerLayer = Logger.layer([Logger.consoleJson]).pipe(
+	Layer.provideMerge(WarnAndAbove)
+);
+```
+
+Valid levels: `"All"`, `"Trace"`, `"Debug"`, `"Info"`, `"Warn"`, `"Error"`, `"Fatal"`, `"None"`.
+
+### Custom Loggers
+
+Create loggers with `Logger.make`:
+
+```ts
+import { Logger } from 'effect';
+
+const customLogger = Logger.make((options) => {
+	console.log(`[${options.logLevel}] ${options.message}`);
+});
+
+// options fields: message, logLevel, cause, fiber, date
+```
+
+### Batched Logging
+
+Aggregate log entries over a time window before flushing:
+
+```ts
+import { Effect, Logger } from 'effect';
+
+const batchedLogger = Logger.batched(Logger.formatStructured, {
+	window: '1 second',
+	flush: Effect.fn(function* (batch) {
+		// Send batch to external service
+		console.log(`Flushing ${batch.length} log entries`);
+	})
+});
+
+// batchedLogger is an Effect — use it inside Logger.layer
+const BatchedLoggerLayer = Logger.layer([batchedLogger]);
+```
+
+### File Logging
+
+Write logs directly to a file (requires `FileSystem` from `@effect/platform`):
+
+```ts
+import { NodeFileSystem } from '@effect/platform-node';
+import { Layer, Logger } from 'effect';
+
+const FileLoggerLayer = Logger.layer([
+	Logger.toFile(Logger.formatSimple, 'app.log')
+]).pipe(Layer.provide(NodeFileSystem.layer));
+```
+
+Pipe syntax with options:
+
+```ts
+const fileLogger = Logger.formatJson.pipe(
+	Logger.toFile('/var/log/myapp.log', {
+		flag: 'a',
+		batchWindow: '5 seconds'
+	})
+);
+```
+
+### Environment-based Logger Selection
+
+```ts
+import { Config, Effect, Layer, Logger } from 'effect';
+
+const LoggerLayer = Layer.unwrap(
+	Effect.gen(function* () {
+		const env = yield* Config.string('NODE_ENV').pipe(
+			Config.withDefault('development')
+		);
+		if (env === 'production') {
+			return Logger.layer([Logger.consoleJson]);
+		}
+		return Logger.layer([Logger.consolePretty()]);
+	})
+);
+```
+
+---
+
+## 3. Spans and Tracing
+
+### `Effect.withSpan`
+
+Create a tracing span around any effect:
+
+```ts
+const processOrder = Effect.gen(function* () {
+	yield* chargeCard(orderId);
+	yield* persistOrder(orderId);
+}).pipe(Effect.withSpan('processOrder'));
+```
+
+Spans nest automatically — child effects that also use `withSpan` become child spans.
+
+### `Effect.fn` with Auto-Spans
+
+When you pass a string name to `Effect.fn`, it automatically wraps the function body in a span:
+
+```ts
+import { Effect } from 'effect';
+
+const processCheckout = Effect.fn('Checkout.processCheckout')(function* (
+	orderId: string
+) {
+	yield* Effect.logInfo('starting checkout', { orderId });
+	yield* chargeCard(orderId).pipe(Effect.withSpan('checkout.charge-card'));
+	yield* persistOrder(orderId).pipe(
+		Effect.withSpan('checkout.persist-order')
+	);
+	yield* Effect.logInfo('checkout completed', { orderId });
+});
+// Creates a span named "Checkout.processCheckout" wrapping the entire body
+```
+
+### Span Attributes
+
+Annotate the current span with key-value attributes:
+
+```ts
+// Annotate the current span from inside the effect
+yield * Effect.annotateCurrentSpan('order.id', orderId);
+yield * Effect.annotateCurrentSpan('order.total', 99.95);
+
+// Annotate from outside using pipe
+const withAttributes = myEffect.pipe(
+	Effect.annotateSpans({
+		'checkout.order_id': orderId,
+		'checkout.provider': 'acme-pay'
+	})
+);
+```
+
+### Layer Spans
+
+Attach spans to layer construction:
+
+```ts
+const MyLayer = Layer.effectDiscard(setupEffect).pipe(
+	Layer.withSpan('my-layer-setup')
+);
+```
+
+---
+
+## 4. Metrics
+
+Effect provides five metric types. All metrics are concurrent-safe and integrated into the runtime.
+
+### Counter
+
+Tracks cumulative values that only increase:
+
+```ts
+import { Effect, Metric } from 'effect';
+
+const requestCount = Metric.counter('http_requests_total', {
+	description: 'Total number of HTTP requests'
+});
+
+yield * Metric.update(requestCount, 1);
+```
+
+### Gauge
+
+A single numerical value that can go up or down:
+
+```ts
+const activeConnections = Metric.gauge('active_connections', {
+	description: 'Current active connections'
+});
+
+yield * Metric.update(activeConnections, 42);
+```
+
+### Histogram
+
+Records observations in configurable buckets:
+
+```ts
+const responseTime = Metric.histogram('http_response_time_ms', {
+	description: 'HTTP response time in milliseconds',
+	boundaries: Metric.linearBoundaries({ start: 0, width: 50, count: 20 })
+});
+
+yield * Metric.update(responseTime, 127);
+```
+
+### Summary
+
+Calculates quantiles over a sliding time window:
+
+```ts
+const dbQueryTime = Metric.summary('db_query_duration', {
+	maxAge: '5 minutes',
+	maxSize: 1000,
+	quantiles: [0.5, 0.9, 0.95, 0.99]
+});
+
+yield * Metric.update(dbQueryTime, durationMs);
+```
+
+### Frequency
+
+Counts occurrences of discrete string values:
+
+```ts
+const statusCodes = Metric.frequency('http_status_codes', {
+	description: 'HTTP status code distribution'
+});
+
+yield * Metric.update(statusCodes, '200');
+yield * Metric.update(statusCodes, '404');
+```
+
+### Metric Attributes
+
+Tag metrics with key-value attributes for filtering/grouping:
+
+```ts
+const taggedCounter = Metric.withAttributes(requestCount, {
+	endpoint: '/api/users',
+	method: 'GET'
+});
+
+yield * Metric.update(taggedCounter, 1);
+
+// Or inline
+yield *
+	Metric.update(
+		Metric.withAttributes(requestCount, {
+			endpoint: '/api/posts',
+			method: 'POST'
+		}),
+		1
+	);
+```
+
+### Reading Metric Values
+
+```ts
+// Get current value of a single metric
+const value = yield * Metric.value(requestCount);
+
+// Snapshot all metrics
+const snapshots = yield * Metric.snapshot;
+for (const metric of snapshots) {
+	console.log(`${metric.id}: ${JSON.stringify(metric.state)}`);
+}
+```
+
+---
+
+## 5. OTLP Export
+
+Effect v4 includes built-in OTLP exporters in `effect/unstable/observability`. No external OpenTelemetry SDK needed.
+
+### All-in-One: `Otlp.layerJson`
+
+The simplest setup — exports traces, logs, and metrics to a single OTLP endpoint:
+
+```ts
+import { Layer } from 'effect';
+import { FetchHttpClient } from 'effect/unstable/http';
+import { Otlp } from 'effect/unstable/observability';
+
+const ObservabilityLayer = Otlp.layerJson({
+	baseUrl: 'http://localhost:4318',
+	resource: {
+		serviceName: 'my-api',
+		serviceVersion: '1.0.0',
+		attributes: {
+			'deployment.environment': 'staging'
+		}
+	}
+}).pipe(Layer.provide(FetchHttpClient.layer));
+```
+
+This creates layers for all three signals with standard OTLP paths (`/v1/traces`, `/v1/logs`, `/v1/metrics`).
+
+Variants:
+
+- `Otlp.layerJson` — JSON serialization (simplest, no extra deps)
+- `Otlp.layerProtobuf` — Protobuf serialization (more efficient)
+- `Otlp.layer` — requires you to provide `OtlpSerialization` separately
+
+### Individual OTLP Exporters
+
+For fine-grained control, configure each exporter independently:
+
+```ts
+import { Layer } from 'effect';
+import { FetchHttpClient } from 'effect/unstable/http';
+import {
+	OtlpLogger,
+	OtlpMetrics,
+	OtlpSerialization,
+	OtlpTracer
+} from 'effect/unstable/observability';
+
+const OtlpTracingLayer = OtlpTracer.layer({
+	url: 'http://localhost:4318/v1/traces',
+	resource: {
+		serviceName: 'checkout-api',
+		serviceVersion: '1.0.0',
+		attributes: { 'deployment.environment': 'staging' }
+	}
+});
+
+const OtlpLoggingLayer = OtlpLogger.layer({
+	url: 'http://localhost:4318/v1/logs',
+	resource: {
+		serviceName: 'checkout-api',
+		serviceVersion: '1.0.0'
+	}
+});
+
+const OtlpMetricsLayer = OtlpMetrics.layer({
+	url: 'http://localhost:4318/v1/metrics',
+	resource: {
+		serviceName: 'checkout-api',
+		serviceVersion: '1.0.0'
+	},
+	temporality: 'delta' // or "cumulative" (default)
+});
+
+const ObservabilityLayer = Layer.mergeAll(
+	OtlpTracingLayer,
+	OtlpLoggingLayer,
+	OtlpMetricsLayer
+).pipe(
+	Layer.provide(OtlpSerialization.layerJson),
+	Layer.provide(FetchHttpClient.layer)
+);
+```
+
+### OTLP Layer Options
+
+Common options for all OTLP exporters:
+
+| Option                    | Default     | Description                         |
+| ------------------------- | ----------- | ----------------------------------- |
+| `url`                     | required    | OTLP endpoint URL                   |
+| `resource.serviceName`    | —           | Service name in exported telemetry  |
+| `resource.serviceVersion` | —           | Service version                     |
+| `resource.attributes`     | —           | Additional resource attributes      |
+| `headers`                 | —           | HTTP headers for auth etc.          |
+| `exportInterval`          | `5 seconds` | How often to flush batches          |
+| `maxBatchSize`            | `1000`      | Max items per export batch          |
+| `shutdownTimeout`         | `3 seconds` | Timeout for final flush on shutdown |
+
+`OtlpMetrics.layer` additionally accepts:
+
+- `temporality`: `"cumulative"` (default) or `"delta"` — determines how metric values relate to their time interval
+
+`OtlpLogger.layer` additionally accepts:
+
+- `mergeWithExisting`: `true` (default) — merge with existing loggers instead of replacing
+- `excludeLogSpans`: omit log span annotations from exported logs
+
+### Wiring Into Your App
+
+Provide the observability layer at the outermost level so all spans and logs are captured:
+
+```ts
+import { NodeRuntime } from '@effect/platform-node';
+import { Layer } from 'effect';
+
+const Main = AppLayer.pipe(Layer.provide(ObservabilityLayer));
+
+Layer.launch(Main).pipe(NodeRuntime.runMain);
+```
+
+---
+
+## 6. Prometheus Metrics
+
+Export Effect metrics in Prometheus exposition format:
+
+```ts
+import { Effect, Metric } from 'effect';
+import * as PrometheusMetrics from 'effect/unstable/observability/PrometheusMetrics';
+
+const program = Effect.gen(function* () {
+	const counter = Metric.counter('http_requests_total', {
+		description: 'Total HTTP requests'
+	});
+	yield* Metric.update(counter, 42);
+
+	// Format metrics as Prometheus text
+	const output = yield* PrometheusMetrics.format();
+	// # HELP http_requests_total Total HTTP requests
+	// # TYPE http_requests_total counter
+	// http_requests_total 42
+
+	// With prefix
+	const prefixed = yield* PrometheusMetrics.format({ prefix: 'myapp' });
+	// myapp_http_requests_total 42
+});
+```
+
+### Prometheus HTTP Endpoint
+
+Automatically register a `/metrics` endpoint on your HTTP router:
+
+```ts
+import * as PrometheusMetrics from 'effect/unstable/observability/PrometheusMetrics';
+
+// Default: GET /metrics
+const PrometheusLayer = PrometheusMetrics.layerHttp();
+
+// Custom path and prefix
+const CustomPrometheusLayer = PrometheusMetrics.layerHttp({
+	path: '/prometheus/metrics',
+	prefix: 'myapp'
+});
+```
+
+`layerHttp` requires `HttpRouter.HttpRouter` in the context — it adds a route to your existing router.
+
+---
+
+## 7. Testing Observability
+
+### Testing Logged Output
+
+Use `TestConsole` from `@effect/vitest` to capture and assert on console output:
+
+```ts
+import { Effect } from 'effect';
+import { it } from '@effect/vitest';
+
+it.effect('logs checkout flow', () =>
+	Effect.gen(function* () {
+		yield* myLoggingEffect;
+		// TestConsole captures log output for assertion
+	})
+);
+```
+
+### Testing Metrics
+
+Read metric values directly:
+
+```ts
+it.effect('increments request counter', () =>
+	Effect.gen(function* () {
+		const counter = Metric.counter('test_requests');
+		yield* Metric.update(counter, 5);
+		const state = yield* Metric.value(counter);
+		expect(state.count).toBe(5);
+	})
+);
+```
+
+### Testing Spans
+
+Use a test tracer or assert on span attributes captured via `Effect.withSpan`.
+
+---
+
+## 8. Common Patterns
+
+### Full Observability Stack (Dev + Prod)
+
+```ts
+import { Config, Effect, Layer, Logger, References } from 'effect';
+import { FetchHttpClient } from 'effect/unstable/http';
+import { Otlp } from 'effect/unstable/observability';
+
+const DevObservability = Logger.layer([Logger.consolePretty()]);
+
+const ProdObservability = Layer.mergeAll(
+	Logger.layer([Logger.consoleJson]),
+	Layer.succeed(References.MinimumLogLevel, 'Info'),
+	Otlp.layerJson({
+		baseUrl: 'http://otel-collector:4318',
+		resource: {
+			serviceName: 'my-api',
+			serviceVersion: '1.0.0'
+		}
+	}).pipe(Layer.provide(FetchHttpClient.layer))
+);
+
+const ObservabilityLayer = Layer.unwrap(
+	Effect.gen(function* () {
+		const env = yield* Config.string('NODE_ENV').pipe(
+			Config.withDefault('development')
+		);
+		return env === 'production' ? ProdObservability : DevObservability;
+	})
+);
+```
+
+### Service with Instrumented Methods
+
+```ts
+import { Effect, Layer, Metric, ServiceMap } from 'effect';
+
+const requestLatency = Metric.histogram('checkout_latency_ms', {
+	boundaries: Metric.linearBoundaries({ start: 0, width: 25, count: 40 })
+});
+
+class Checkout extends ServiceMap.Service<
+	Checkout,
+	{
+		processCheckout(orderId: string): Effect.Effect<void>;
+	}
+>()('app/Checkout') {
+	static readonly layer = Layer.effect(
+		Checkout,
+		Effect.gen(function* () {
+			return Checkout.of({
+				processCheckout: Effect.fn('Checkout.processCheckout')(
+					function* (orderId: string) {
+						yield* Effect.logInfo('starting checkout', { orderId });
+						yield* Effect.annotateCurrentSpan('order.id', orderId);
+
+						yield* chargeCard(orderId).pipe(
+							Effect.withSpan('checkout.charge-card')
+						);
+						yield* persistOrder(orderId).pipe(
+							Effect.withSpan('checkout.persist-order')
+						);
+
+						yield* Effect.logInfo('checkout completed', {
+							orderId
+						});
+					}
+				)
+			});
+		})
+	);
+}
+```
+
+---
+
+## Critical Rules
+
+1. **Use `Logger.layer` to install loggers** — it replaces the default set. Use `{ mergeWithExisting: true }` to add without replacing.
+2. **`Logger.tracerLogger` is included by default** — log messages automatically become span events. If you override loggers, include it explicitly if you want this behavior.
+3. **`Effect.fn("name")` creates auto-spans** — prefer this over manual `Effect.withSpan` for service methods.
+4. **Provide observability layers outermost** — so all application spans and logs are captured for export.
+5. **OTLP exporters require `HttpClient` and `OtlpSerialization`** — use `Otlp.layerJson` to get both wired automatically, or provide `OtlpSerialization.layerJson` + `FetchHttpClient.layer` manually.
+6. **`References.MinimumLogLevel`** controls filtering — not a logger concern, set it via `Layer.succeed`.
+7. **Metric names should follow conventions** — snake_case with units suffix (e.g., `http_request_duration_ms`).
+8. **`Metric.withAttributes` creates a tagged variant** — it does not mutate the original metric.
+9. **`OtlpMetrics` temporality** — use `"delta"` for backends like Datadog/Dynatrace, `"cumulative"` (default) for Prometheus-style backends.
+10. **All OTLP modules are under `effect/unstable/observability`** — the API may evolve but the patterns are stable.
+
+Base directory for this skill: file:///Users/m/repos/opencode-effect-enforcer/skills/effect-observability
+Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.
+Note: file list is sampled.
+
+<skill_files>
+
+</skill_files>
+</skill_content>
+```
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 11.5s)
+
+Read both reference files and loaded 5 more skills (total: 7). Now trying the write:
+
+**Tool: write**
+
+**Input:**
+```json
+{
+  "filePath": "/Users/m/repos/effect-oxlint/test-file-2.ts",
+  "content": "import { Effect } from 'effect'\n\nconst hello = Effect.sync(() => console.log('Hello, Effect!'))\n\nEffect.runSync(hello)\n"
+}
+```
+
+**Output:**
+```
+Wrote file successfully.
+```
+
+---
+
+## User
+
+<code-smell name="effect-run-in-body" level="warning">
+# Effect.runSync/runPromise Only at Entry Points
+
+```haskell
+-- Transformation
+runSync    :: Effect a E R → a        -- escapes Effect, loses composition
+runPromise :: Effect a E R → Promise a -- same problem
+
+-- Instead: compose until boundary
+compose :: Effect a E R → Effect b E R → Effect (a, b) E R
+yield*  :: Effect a E R → a           -- inside Effect.gen only
+```
+
+```haskell
+-- Pattern
+bad :: Effect () R
+bad = do
+  result ← pure $ Effect.runSync someEffect   -- breaks composition!
+  doSomething result
+  -- can't retry, race, timeout the inner effect
+
+good :: Effect () R
+good = do
+  result ← someEffect                         -- still composable
+  doSomething result
+  -- can wrap entire program with retry, race, timeout
+
+-- Entry points only
+main :: IO ()
+main = Effect.runMain program              -- ✓ application boundary
+
+handler :: Request → IO Response
+handler req = Effect.runPromise (handle req)  -- ✓ API boundary
+
+test :: Spec
+test = Effect.runPromise (testProgram)        -- ✓ test boundary
+```
+
+Running effects mid-logic breaks composition. Keep effects as values until entry points (main, handlers, tests).
+
+If you have not loaded the `effect-managed-runtime` skill, you should load it before continuing.
+</code-smell>
+
+<code-smell name="use-console-service" level="warning">
+# Use Effect Console Instead of console.\*
+
+```haskell
+-- Transformation
+console.log   :: String → IO ()      -- side effect, not composable
+console.error :: String → IO ()      -- same problem
+
+-- Instead
+Console.log   :: String → Effect () Console
+Effect.log    :: String → Effect () ∅        -- with structured logging
+Effect.logError :: String → Effect () ∅
+```
+
+```haskell
+-- Pattern
+bad :: Effect ()
+bad = do
+  Effect.sync \_ → console.error "Error:" error   -- ceremony with no benefit
+
+good :: Effect ()
+good = Console.error ("Error:" <> show error)     -- proper Effect console
+
+better :: Effect ()
+better = Effect.logError error                    -- structured, with context
+
+-- Why Effect logging
+structured :: Effect () ∅
+structured = do
+  Effect.logInfo "Processing" `withLogSpan` "request"
+  -- adds: timestamp, span, log level, structured context
+
+-- Testable
+test :: Effect () TestConsole
+test = do
+  program
+  logs ← TestConsole.output
+  assert (logs `contains` "expected message")
+```
+
+`console.*` in Effect code breaks the paradigm. Use `Console` service or `Effect.log*` for structured, testable logging.
+
+If you have not loaded the `effect-observability` skill, you should load it before continuing.
+</code-smell>
+
+---
+
+## Assistant (Build · claude-opus-4-6 · 11.1s)
+
+The write succeeded with 7 skills loaded — the enforcer threshold is satisfied.
+
+Worth noting: the plugin also flagged two code smells in that hello world:
+
+1. **`Effect.runSync` in body** — should only appear at entry points (main, handlers, tests), not mid-logic
+2. **`console.log` inside Effect code** — should use `Effect.log` or `Console.log` instead
+
+Both are expected for a throwaway test file. Want me to clean up both test files now?
+
+---
