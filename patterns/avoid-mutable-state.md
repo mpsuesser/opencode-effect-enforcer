@@ -37,3 +37,18 @@ Mutable `let` bindings in Effect services break referential transparency and are
 - Destructuring reassignment in narrow scopes
 
 The `info` level reflects that `let` has legitimate uses — this pattern surfaces it for review, not as an error.
+
+## When `Effect.cached` Replaces `let`
+
+Mutable fields used for deduplication or caching (`task?: Promise<T>`, `fiber?: Fiber<T>`, `result?: T`) should be replaced with `Effect.cached`:
+
+```ts
+// Before: mutable dedup tracking
+let task: Promise<Result> | undefined;
+const getResult = () => (task ??= computeExpensive());
+
+// After: Effect.cached inside service make block
+const cachedResult = yield* Effect.cached(computeExpensive());
+```
+
+For invalidatable caches, use `Effect.cachedInvalidateWithTTL(effect, Duration.infinity)` instead of rebinding a `let`.
