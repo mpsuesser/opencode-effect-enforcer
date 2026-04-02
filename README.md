@@ -1,3 +1,5 @@
+[![npm version](https://img.shields.io/npm/v/opencode-effect-enforcer.svg)](https://www.npmjs.com/package/opencode-effect-enforcer)
+
 # opencode-effect-enforcer
 
 An [OpenCode](https://opencode.ai) plugin that enforces **Effect v4** development patterns in real time. It watches every tool call your coding agent makes — edits, writes, bash commands — and catches code smells, blocks dangerous patterns, and nudges your agent toward idiomatic Effect code before mistakes land in your codebase.

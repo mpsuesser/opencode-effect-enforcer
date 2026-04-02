@@ -3,12 +3,35 @@
   "name": "opencode-effect-enforcer",
   "version": "0.1.0",
   "description": "OpenCode plugin that enforces Effect-first development patterns via real-time code smell detection, 39 Effect skills, and comprehensive reference docs.",
+  "keywords": [
+    "opencode",
+    "effect",
+    "plugin",
+    "code-smells",
+    "patterns",
+    "skills",
+    "guidance",
+    "lint",
+    "typescript"
+  ],
+  "homepage": "https://github.com/mpsuesser/opencode-effect-enforcer#readme",
+  "bugs": {
+    "url": "https://github.com/mpsuesser/opencode-effect-enforcer/issues"
+  },
   "license": "MIT",
+  "author": "Marc Suesser",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mpsuesser/opencode-effect-enforcer.git"
+  },
   "files": [
     "src",
     "patterns",
     "skills",
-    "docs"
+    "docs",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "type": "module",
   "exports": {
