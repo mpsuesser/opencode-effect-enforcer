@@ -22,9 +22,17 @@ import {
 	sortByLevel
 } from './patterns.ts';
 
-// Bun's text loader inlines these at import time — no fs reads or caching needed.
-import guidanceDoc from '../docs/effect-first-development.md' with { type: 'text' };
-import progressiveDisclosureDoc from '../docs/progressive-disclosure-guidance.md' with { type: 'text' };
+// Read guidance docs from disk — avoids Bun-specific `with { type: 'text' }` import
+// assertions that fail in OpenCode's embedded runtime.
+const docsDir = path.join(import.meta.dirname ?? '.', '..', 'docs');
+const guidanceDoc = fs.readFileSync(
+	path.join(docsDir, 'effect-first-development.md'),
+	'utf-8'
+);
+const progressiveDisclosureDoc = fs.readFileSync(
+	path.join(docsDir, 'progressive-disclosure-guidance.md'),
+	'utf-8'
+);
 
 // ─── Session State ────────────────────────────────────────────
 
