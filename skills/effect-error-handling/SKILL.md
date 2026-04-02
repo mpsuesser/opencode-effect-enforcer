@@ -669,6 +669,8 @@ const program = process().pipe(
 );
 ```
 
+**Migration note:** When replacing `Effect.promise(() => Service.method())` with direct service yields (`yield* service.method()`), errors that previously flowed as defects (untyped Promise rejections) become typed channel errors. Existing `catchDefect` handlers must be replaced with `catch` or `catchTag` to match the now-typed error channel.
+
 ### catchEager - Synchronous Recovery (v4)
 
 `Effect.catchEager` is an optimization of `catch` that evaluates synchronous recovery effects immediately rather than suspending. Use for lightweight wrapping where the recovery handler is always synchronous:
@@ -985,6 +987,37 @@ const program = fetchFromDatabase().pipe(
 	)
 );
 ```
+
+### Idempotent Error Wrapping
+
+When writing reusable error-mapping combinators shared across multiple call sites, guard against double-wrapping:
+
+```typescript
+import { Effect, Schema } from 'effect';
+
+class ServiceError extends Schema.TaggedErrorClass<ServiceError>()(
+	'ServiceError',
+	{
+		message: Schema.String,
+		cause: Schema.optional(Schema.Unknown)
+	}
+) {}
+
+const mapServiceError =
+	(message = 'Service operation failed') =>
+	<A, E, R>(
+		effect: Effect.Effect<A, E, R>
+	): Effect.Effect<A, ServiceError, R> =>
+		effect.pipe(
+			Effect.mapError((cause) =>
+				cause instanceof ServiceError
+					? cause
+					: new ServiceError({ message, cause })
+			)
+		);
+```
+
+The `instanceof` guard prevents double-wrapping when an upstream operation already returns the target error type.
 
 ## Error Recovery Patterns
 
@@ -1306,6 +1339,43 @@ const createUser = (data: UserData) =>
 ```
 
 ## Domain-Specific Error Patterns
+
+### HTTP Response Discrimination
+
+Model ambiguous HTTP responses (where the body structure differs for success vs error) as a `Schema.Union` of `Schema.Class` types:
+
+```typescript
+import { Effect, Schema } from 'effect';
+import { HttpClientResponse } from 'effect/unstable/HttpClient';
+
+class TokenSuccess extends Schema.Class<TokenSuccess>(
+	'TokenSuccess'
+)({
+	access_token: AccessToken,
+	expires_in: Schema.Number
+}) {}
+
+class TokenError extends Schema.Class<TokenError>(
+	'TokenError'
+)({
+	error: Schema.String,
+	error_description: Schema.optional(Schema.String)
+}) {}
+
+const TokenResponse = Schema.Union([TokenSuccess, TokenError]);
+
+// Decode and discriminate
+const response = yield* HttpClientResponse.schemaBodyJson(
+	TokenResponse
+)(res);
+if (response instanceof TokenError) {
+	return yield* new AuthError({
+		message: response.error_description ?? response.error
+	});
+}
+```
+
+This replaces ad-hoc optional-field checking (`if (!body.access_token)`) with compile-time-safe discrimination via `instanceof`.
 
 ### Repository Errors
 
