@@ -38,17 +38,7 @@ When your coding agent writes or edits code in an OpenCode session, this plugin:
 
 ## Installation
 
-Install the package:
-
-```bash
-npm install opencode-effect-enforcer
-# or
-bun add opencode-effect-enforcer
-# or
-pnpm add opencode-effect-enforcer
-```
-
-Then add it to your OpenCode config:
+Add the plugin to your OpenCode config:
 
 ```jsonc
 // opencode.json
@@ -58,7 +48,7 @@ Then add it to your OpenCode config:
 }
 ```
 
-That's it. The plugin activates automatically on the next OpenCode session.
+The plugin activates automatically on the next OpenCode session. [(ref)](https://opencode.ai/docs/plugins/#from-npm)
 
 ## How It Works
 
@@ -66,7 +56,7 @@ The plugin registers hooks on four OpenCode lifecycle events: `config`, `chat.me
 
 ### Pattern Detection Engine
 
-The core of the plugin is a pattern matching engine that loads definitions from markdown files in `patterns/code-smells/`. Each definition is a `.md` file with YAML frontmatter specifying the detection rules.
+The core of the plugin is a pattern matching engine that loads definitions from markdown files in `patterns/`. Each definition is a `.md` file with YAML frontmatter specifying the detection rules.
 
 On every `tool.execute.before` and `tool.execute.after` event, the engine:
 
@@ -289,7 +279,7 @@ bun run build
 bun run test
 
 # Run a single test file
-bunx vitest run patterns/code-smells/avoid-any.test.ts
+bunx vitest run test/avoid-any.test.ts
 
 # Run tests matching a name pattern
 bunx vitest run -t "throw-in-effect-gen"
@@ -297,11 +287,11 @@ bunx vitest run -t "throw-in-effect-gen"
 
 ### Adding a New Pattern
 
-1. Create a `.md` file in `patterns/code-smells/` with YAML frontmatter defining the detection rules
-2. Create a co-located `.test.ts` file using the test harness:
+1. Create a `.md` file in `patterns/` with YAML frontmatter defining the detection rules
+2. Create a `.test.ts` file in `test/` using the test harness:
 
 ```ts
-import { testPattern } from '../../test/pattern-test-harness';
+import { testPattern } from './pattern-test-harness.ts';
 
 testPattern({
 	name: 'my-pattern-name',
@@ -310,7 +300,7 @@ testPattern({
 });
 ```
 
-3. Run the test: `bunx vitest run patterns/code-smells/my-pattern-name.test.ts`
+3. Run the test: `bunx vitest run test/my-pattern-name.test.ts`
 
 The test harness exports `testPattern`, `testBashPattern`, `testWritePattern`, and `testFilePathPattern` depending on what kind of pattern you're testing.
 

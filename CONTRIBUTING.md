@@ -24,7 +24,7 @@ bun run test        # run all tests
 Run a single test file or by name:
 
 ```sh
-bunx vitest run patterns/code-smells/avoid-any.test.ts
+bunx vitest run test/avoid-any.test.ts
 bunx vitest run -t "throw-in-effect-gen"
 ```
 
@@ -51,9 +51,9 @@ See [AGENTS.md](./AGENTS.md) for detailed formatting, import ordering, naming co
 
 ## Adding a New Pattern
 
-1. Create a `.md` file in `patterns/code-smells/` with YAML frontmatter
-2. Create a co-located `.test.ts` using the test harness from `test/pattern-test-harness.ts`
-3. Run the test: `bunx vitest run patterns/code-smells/your-pattern.test.ts`
+1. Create a `.md` file in `patterns/` with YAML frontmatter
+2. Create a `.test.ts` in `test/` using the test harness from `test/pattern-test-harness.ts`
+3. Run the test: `bunx vitest run test/your-pattern.test.ts`
 
 ## Reporting Issues
 

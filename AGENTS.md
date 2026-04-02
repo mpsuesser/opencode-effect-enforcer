@@ -23,17 +23,17 @@ bun run build            # runs: vp build
 bun run test             # runs: vitest run
 
 # Run a single test file
-bunx vitest run patterns/code-smells/avoid-any.test.ts
+bunx vitest run test/avoid-any.test.ts
 
 # Run tests matching a name pattern
 bunx vitest run -t "avoid-any"
 
 # Run tests in watch mode (not in scripts, but useful during dev)
-bunx vitest patterns/code-smells/avoid-any.test.ts
+bunx vitest test/avoid-any.test.ts
 ```
 
 Test timeout is 30 seconds. Pool is `forks` with `isolate: false`.
-Tests live in `test/` (harness) and `patterns/code-smells/*.test.ts` (pattern tests).
+Tests live in `test/` (harness and all pattern tests).
 
 ## Project Structure
 
@@ -51,7 +51,8 @@ src/
   text-imports.d.ts      # Ambient module declaration for *.md text imports
 test/
   pattern-test-harness.ts  # Shared test builders (testPattern, testBashPattern, etc.)
-patterns/code-smells/      # Pattern definitions (.md) + co-located tests (.test.ts)
+  *.test.ts                # Pattern tests (one per pattern definition)
+patterns/                  # Pattern definitions (.md files with YAML frontmatter)
 skills/                    # 39 effect-* skill directories
 docs/                      # Guidance documents injected into sessions
 ```
@@ -139,7 +140,7 @@ docs/                      # Guidance documents injected into sessions
 
 - Test framework: **vitest** with **@effect/vitest** for Effect-aware matchers.
 - Pattern tests use the shared harness from `test/pattern-test-harness.ts`.
-  Each pattern `.md` has a co-located `.test.ts` in `patterns/code-smells/`.
+  Each pattern `.md` in `patterns/` has a corresponding `.test.ts` in `test/`.
 - Harness exports: `testPattern`, `testBashPattern`, `testWritePattern`,
   `testFilePathPattern` — pick the one matching the pattern's tool/detector.
 - Pattern test files are concise — typically under 25 lines. They call
@@ -163,5 +164,5 @@ Pattern `.md` files use YAML frontmatter with these fields:
 - `suggestSkills`: array of skill names to suggest loading
 - Body after frontmatter is the explanation shown to the agent.
 
-When adding a new pattern, always create both the `.md` definition and a
-co-located `.test.ts` file. Run the test to verify match/non-match behavior.
+When adding a new pattern, create the `.md` definition in `patterns/` and a
+corresponding `.test.ts` in `test/`. Run the test to verify match/non-match behavior.
