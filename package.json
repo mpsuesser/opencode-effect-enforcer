@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.schemastore.org/package.json",
   "name": "opencode-effect-enforcer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OpenCode plugin that enforces Effect-first development patterns via real-time code smell detection, 39 Effect skills, and comprehensive reference docs.",
   "keywords": [
     "code-smells",
