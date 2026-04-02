@@ -28,6 +28,6 @@ good = Layer.provide(platformLayer)          -- no platform coupling
 good = -- runtime provides CommandExecutor, FileSystem, etc.
 ```
 
-Binding packages wrap external systems (CLIs, APIs, databases) and must be platform-agnostic. They should depend on `@effect/platform` (abstract interfaces like `CommandExecutor`, `HttpClient`, `FileSystem`) but never on `@effect/platform-bun` or `@effect/platform-node` (concrete implementations).
+Binding packages wrap external systems (CLIs, APIs, databases) and must be platform-agnostic. They should depend on `@effect/platform` (abstract interfaces like `ChildProcessSpawner`, `HttpClient`, `FileSystem`) but never on `@effect/platform-bun` or `@effect/platform-node` (concrete implementations).
 
 Platform-specific layers (`BunContext.layer`, `NodeContext.layer`) belong in the runtime or CLI entry point, not in bindings. The terminal runtime merges `BunContext.layer` and provides `CommandExecutor` to all services automatically.

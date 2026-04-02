@@ -32,7 +32,7 @@ bad = do
 good :: Effect a (FileSystem | CommandExecutor | Path)
 good = do
   fs <- FileSystem.FileSystem             -- R = FileSystem
-  executor <- CommandExecutor             -- R = CommandExecutor
+  spawner <- ChildProcessSpawner          -- R = ChildProcessSpawner
   path <- Path.Path                       -- R = Path
 ```
 
@@ -44,7 +44,7 @@ Direct `node:` imports couple code to Node.js runtime. Use `@effect/platform` fo
 | -------------------- | ----------------------------- |
 | `node:fs`            | `FileSystem.FileSystem`       |
 | `node:path`          | `Path.Path`                   |
-| `node:child_process` | `Command` + `CommandExecutor` |
+| `node:child_process` | `ChildProcess` + `ChildProcessSpawner` from `effect/unstable/process` |
 | `node:http`          | `HttpClient.HttpClient`       |
 | `node:stream`        | `Stream` from effect          |
 | `node:readline`      | `Terminal.Terminal`           |
