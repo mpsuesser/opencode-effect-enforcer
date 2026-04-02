@@ -5,7 +5,7 @@ import { defineConfig } from 'vite-plus';
 export default defineConfig({
 	test: {
 		setupFiles: [path.join(import.meta.dirname, 'vitest.setup.ts')],
-		include: ['test/**/*.test.ts'],
+		include: ['test/**/*.test.ts', 'patterns/**/*.test.ts'],
 		passWithNoTests: true,
 		globals: false,
 		testTimeout: 30000,

@@ -26,6 +26,6 @@
     "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src", "test"],
+  "include": ["src", "test", "patterns"],
   "exclude": ["node_modules"]
 }

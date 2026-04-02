@@ -79,11 +79,11 @@ docs/                      # Guidance documents injected into sessions
   should be `import type`.
 - Effect subpath imports — import from `effect/Array`, `effect/Option`, etc.,
   not from the top-level `effect` barrel:
-  ```ts
-  import * as Arr from 'effect/Array';
-  import * as Option from 'effect/Option';
-  import * as Schema from 'effect/Schema';
-  ```
+    ```ts
+    import * as Arr from 'effect/Array';
+    import * as Option from 'effect/Option';
+    import * as Schema from 'effect/Schema';
+    ```
 - Node built-ins use the `node:` prefix: `import * as fs from 'node:fs';`
 - **Import order**: (1) `import type` / third-party types, (2) node builtins,
   (3) third-party packages, (4) local imports. Blank line between groups.
@@ -152,6 +152,7 @@ docs/                      # Guidance documents injected into sessions
 ### Pattern Definitions
 
 Pattern `.md` files use YAML frontmatter with these fields:
+
 - `name` (required), `description`, `pattern` (required, regex or AST pattern)
 - `detector`: `regex` (default) or `ast` (uses @ast-grep/napi)
 - `event`: `before` or `after` (when to check)
