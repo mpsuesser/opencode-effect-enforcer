@@ -1,40 +1,34 @@
-[![npm version](https://img.shields.io/npm/v/opencode-effect-enforcer.svg)](https://www.npmjs.com/package/opencode-effect-enforcer)
-
 # opencode-effect-enforcer
 
-An [OpenCode](https://opencode.ai) plugin that enforces **Effect v4** development patterns in real time. It watches every tool call your coding agent makes — edits, writes, bash commands — and catches code smells, blocks dangerous patterns, and nudges your agent toward idiomatic Effect code before mistakes land in your codebase.
+[![npm version](https://img.shields.io/npm/v/opencode-effect-enforcer.svg)](https://www.npmjs.com/package/opencode-effect-enforcer)
 
-Ships with **44 code smell detectors**, **39 loadable Effect skills**, and **comprehensive guidance docs** that get injected into every session. Designed for teams and individuals who want their AI coding agent to write Effect v4 the way it should be written.
+An [OpenCode](https://opencode.ai) plugin that enforces relatively aggressive and opinionated Effect v4 development guardrails in real time.
+
+1. **Maintains a local Effect v4 reference** — On startup and periodically during sessions, the plugin ensures a shallow clone of the Effect v4 source code exists at `.references/effect-v4/` in your project. This gives the agent a local copy of Effect source, schema docs, migration guides, and HTTP API docs to read from directly, rather than hallucinating APIs.
+
+2. **Enforces skill loading** — Before the agent can write any Effect code, it must have loaded at least 7 of the 39 bundled `effect-*` skills. This prevents the agent from guessing at Effect v4 APIs (which differ substantially from v3) and forces it to read the actual documentation first.
+
+3. **Injects session guidance** — On the first message of every session (and after context compaction), the plugin injects two documents: a progressive disclosure guide that teaches the agent how to use the local Effect v4 reference, and a comprehensive Effect-first development guide covering 39 laws and conventions with code examples.
+
+4. **Detects pattern violations** — 44 pattern definitions intercept tool calls in real time via regex and AST matching. When a violation is detected, the plugin immediately injects targeted guidance explaining the idiomatic Effect v4 alternative — or blocks the call outright for critical violations. Each pattern carries its own remediation prose, so the agent gets specific instructions for resolving that exact anti-pattern the Effect-first way, not just a lint warning.
 
 ## Table of Contents
 
-- [What This Plugin Does](#what-this-plugin-does)
 - [Installation](#installation)
 - [How It Works](#how-it-works)
-    - [Pattern Detection Engine](#pattern-detection-engine)
+    - [Reference Clone](#reference-clone)
     - [Skill Gate](#skill-gate)
     - [Guidance Injection](#guidance-injection)
-    - [Reference Clone](#reference-clone)
-- [Code Smell Patterns](#code-smell-patterns)
+    - [Pattern Detection Engine](#pattern-detection-engine)
+- [Pattern Violations](#pattern-violations)
     - [Full Pattern List](#full-pattern-list)
     - [Action Levels](#action-levels)
     - [Pattern Anatomy](#pattern-anatomy)
 - [Effect Skills](#effect-skills)
 - [Configuration](#configuration)
 - [Development](#development)
+- [Credits](#credits)
 - [License](#license)
-
-## What This Plugin Does
-
-When your coding agent writes or edits code in an OpenCode session, this plugin:
-
-1. **Detects code smells** — 44 pattern definitions catch common anti-patterns like `as any`, `throw` inside `Effect.gen`, raw `try/catch`, direct `node:fs` imports, `JSON.parse` usage, mutable state, and more. Each pattern triggers a context hint, a warning, or a hard block depending on severity.
-
-2. **Enforces skill loading** — Before the agent can write any Effect code, it must have loaded at least 7 of the 39 bundled `effect-*` skills. This prevents the agent from guessing at Effect v4 APIs (which differ substantially from v3) and forces it to read the actual documentation first.
-
-3. **Injects session guidance** — On the first message of every session (and after context compaction), the plugin injects two documents: a progressive disclosure guide that teaches the agent how to use the local Effect v4 reference, and a comprehensive Effect-first development guide covering 39 laws and conventions with code examples.
-
-4. **Maintains a local Effect v4 reference** — On startup and periodically during sessions, the plugin ensures a shallow clone of the Effect v4 source code exists at `.references/effect-v4/` in your project. This gives the agent a local copy of Effect source, schema docs, migration guides, and HTTP API docs to read from directly, rather than hallucinating APIs.
 
 ## Installation
 
@@ -54,21 +48,18 @@ The plugin activates automatically on the next OpenCode session. [(ref)](https:/
 
 The plugin registers hooks on four OpenCode lifecycle events: `config`, `chat.message`, `tool.execute.before`, and `tool.execute.after`. Here's what each one does.
 
-### Pattern Detection Engine
+### Reference Clone
 
-The core of the plugin is a pattern matching engine that loads definitions from markdown files in `patterns/`. Each definition is a `.md` file with YAML frontmatter specifying the detection rules.
+On plugin initialization and periodically during tool calls, the plugin ensures a shallow git clone of `Effect-TS/effect-smol` exists at `.references/effect-v4/` in your project directory. The clone targets the git tag matching your project's installed Effect version (detected from `node_modules/effect/package.json`, falling back to `4.0.0-beta.43`).
 
-On every `tool.execute.before` and `tool.execute.after` event, the engine:
+The clone is:
 
-1. Loads all pattern definitions (cached after first read)
-2. Filters to patterns matching the current tool name, event timing, and file glob
-3. Tests the tool's content (code being written, command being run) against each pattern's regex or AST rule
-4. Groups matches by action: `deny` patterns throw an error to block the tool call, `ask` patterns inject a warning, and `context` patterns inject informational hints
+- **Shallow** (`--depth 1`) to minimize disk usage
+- **Atomic** (clones to a `.cloning` temp directory, then renames into place)
+- **Concurrent-safe** (a shared promise prevents duplicate clone operations)
+- **Silent on failure** (a failed clone never blocks the agent)
 
-Patterns support two detectors:
-
-- **Regex** (default) — tests content against a regular expression
-- **AST** — uses [@ast-grep/napi](https://ast-grep.github.io/) to match structural code patterns with optional `inside` constraints (e.g., "match `throw` only inside `Effect.gen`")
+This gives the agent direct read access to Effect v4 source code, which is critical for answering API questions accurately.
 
 ### Skill Gate
 
@@ -88,20 +79,23 @@ On the first message in each session, the plugin injects two documents as synthe
 
 Both documents are re-injected after context compaction events to ensure they remain available even in long sessions.
 
-### Reference Clone
+### Pattern Detection Engine
 
-On plugin initialization and periodically during tool calls, the plugin ensures a shallow git clone of `Effect-TS/effect-smol` exists at `.references/effect-v4/` in your project directory. The clone targets the git tag matching your project's installed Effect version (detected from `node_modules/effect/package.json`, falling back to `4.0.0-beta.43`).
+The core of the plugin is a pattern matching engine that loads definitions from markdown files in `patterns/`. Each definition is a `.md` file with YAML frontmatter specifying the detection rules.
 
-The clone is:
+On every `tool.execute.before` and `tool.execute.after` event, the engine:
 
-- **Shallow** (`--depth 1`) to minimize disk usage
-- **Atomic** (clones to a `.cloning` temp directory, then renames into place)
-- **Concurrent-safe** (a shared promise prevents duplicate clone operations)
-- **Silent on failure** (a failed clone never blocks the agent)
+1. Loads all pattern definitions (cached after first read)
+2. Filters to patterns matching the current tool name, event timing, and file glob
+3. Tests the tool's content (code being written, command being run) against each pattern's regex or AST rule
+4. Groups matches by action: `deny` patterns throw an error to block the tool call, `ask` patterns inject a warning, and `context` patterns inject informational hints
 
-This gives the agent direct read access to Effect v4 source code, which is critical for answering API questions accurately.
+Patterns support two detectors:
 
-## Code Smell Patterns
+- **Regex** (default) — tests content against a regular expression
+- **AST** — uses [@ast-grep/napi](https://ast-grep.github.io/) to match structural code patterns with optional `inside` constraints (e.g., "match `throw` only inside `Effect.gen`")
+
+## Pattern Violations
 
 ### Full Pattern List
 

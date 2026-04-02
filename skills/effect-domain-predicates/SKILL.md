@@ -9,8 +9,8 @@ Generate complete sets of predicates and Order instances for domain types, deriv
 
 ## Effect Source Reference
 
-Use `effect_ref_read` to read Effect v4 source files and `effect_ref_list` to browse directories.
-These tools automatically fetch source matching your installed Effect version.
+The Effect v4 source is available at `.references/effect-v4/` in your project root.
+Browse and read files there directly to look up APIs, types, and implementations.
 
 Reference this for:
 
