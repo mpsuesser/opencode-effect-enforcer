@@ -27,7 +27,6 @@ An [OpenCode](https://opencode.ai) plugin that enforces relatively aggressive an
 - [Effect Skills](#effect-skills)
 - [Configuration](#configuration)
 - [Development](#development)
-- [Credits](#credits)
 - [License](#license)
 
 ## Installation
