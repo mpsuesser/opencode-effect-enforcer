@@ -2,33 +2,27 @@
  * opencode-effect-enforcer
  *
  * An OpenCode plugin that enforces Effect-first development patterns.
- * Detects code smells and dangerous commands in real-time via pattern
- * definitions, provides custom tools for reading Effect v4 source code,
- * and ships 39 Effect skills + comprehensive reference docs.
+ * Detects code smells via pattern definitions, enforces minimum skill
+ * loading before Effect code writes, ensures a local Effect v4 source
+ * reference clone, and ships 39 Effect skills + comprehensive docs.
  *
  * @module
  */
 
 export {
 	EffectEnforcerPlugin,
-	EffectEnforcerPlugin as default,
-	PatternsPlugin
-} from './patterns.ts';
+	EffectEnforcerPlugin as default
+} from './enforcer.ts';
 
+export type { PatternDefinition } from './patterns.ts';
 export {
-	OpenCodeClient,
-	OpenCodeError,
-	OpenCodeProject,
-	OpenCodeTool,
-	initPluginContext,
-	structToZodShape
-} from './helpers.ts';
+	bodyWithSkillHints,
+	getPatterns,
+	matches,
+	sortByLevel
+} from './patterns.ts';
 
 export { extractBody, parseFrontmatter } from './frontmatter.ts';
 
-export {
-	createReferenceTools,
-	detectEffectVersion,
-	ensureCachedFile,
-	extractReferencePath
-} from './reference-tools.ts';
+export { detectEffectVersion } from './functions/detectEffectVersion.ts';
+export { ensureReferenceClone } from './functions/ensureReferenceClone.ts';

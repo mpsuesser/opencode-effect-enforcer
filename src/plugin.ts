@@ -5,4 +5,4 @@
  * double-registration, this entry point exports ONLY the default plugin
  * function. Use the main `"."` export for programmatic access to helpers.
  */
-export { EffectEnforcerPlugin as default } from './patterns.ts';
+export { EffectEnforcerPlugin as default } from './enforcer.ts';
