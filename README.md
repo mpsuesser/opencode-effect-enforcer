@@ -4,7 +4,7 @@
 
 An [OpenCode](https://opencode.ai) plugin that enforces relatively aggressive and opinionated Effect v4 development guardrails in real time.
 
-1. **Maintains a local Effect v4 reference** — On startup and periodically during sessions, the plugin ensures a shallow clone of the Effect v4 source code exists at `.references/effect-v4/` in your project. This gives the agent a local copy of Effect source, schema docs, migration guides, and HTTP API docs to read from directly, rather than hallucinating APIs.
+1. **Maintains a local Effect v4 reference** — On startup and on each tool call, the plugin ensures a shallow clone of the Effect v4 source code exists at `.references/effect-v4/` in your project. This gives the agent a local copy of Effect source, schema docs, migration guides, and HTTP API docs to read from directly, rather than hallucinating APIs.
 
 2. **Enforces skill loading** — Before the agent can write any Effect code, it must have loaded at least 7 of the 39 bundled `effect-*` skills. This prevents the agent from guessing at Effect v4 APIs (which differ substantially from v3) and forces it to read the actual documentation first.
 
@@ -50,7 +50,7 @@ The plugin registers hooks on four OpenCode lifecycle events: `config`, `chat.me
 
 ### Reference Clone
 
-On plugin initialization and periodically during tool calls, the plugin ensures a shallow git clone of `Effect-TS/effect-smol` exists at `.references/effect-v4/` in your project directory. The clone targets the git tag matching your project's installed Effect version (detected from `node_modules/effect/package.json`, falling back to `4.0.0-beta.43`).
+On plugin initialization and on each tool call, the plugin ensures a shallow git clone of `Effect-TS/effect-smol` exists at `.references/effect-v4/` in your project directory. The clone targets the git tag matching your project's installed Effect version (detected from `node_modules/effect/package.json`, falling back to `4.0.0-beta.43`).
 
 The clone is:
 
