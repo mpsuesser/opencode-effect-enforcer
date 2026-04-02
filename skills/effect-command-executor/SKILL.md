@@ -71,16 +71,24 @@ const cmd2 = ChildProcess.make({
 import { ChildProcess } from 'effect/unstable/process';
 
 // Explicit command + args array
-const cmd = ChildProcess.make('git', ['status']);
+const cmd = ChildProcess.make('git', ['status'], {
+	extendEnv: true,
+	stdin: 'ignore'
+});
 
 // With options
 const cmd2 = ChildProcess.make('bun', ['lint'], {
 	env: { FORCE_COLOR: '1' },
-	extendEnv: true
+	extendEnv: true,
+	stdin: 'ignore'
 });
 
 // Command only (no args)
-const cmd3 = ChildProcess.make('node', { cwd: '/app' });
+const cmd3 = ChildProcess.make('node', {
+	cwd: '/app',
+	extendEnv: true,
+	stdin: 'ignore'
+});
 ```
 
 ### Command Options
@@ -104,14 +112,14 @@ const cmd = ChildProcess.make('node', ['script.js'], {
 	// Detach from parent (default: true on non-Windows)
 	detached: true,
 
-	// stdio configuration
-	stdin: 'pipe', // "pipe" | "inherit" | "ignore" | Stream
+	// stdio configuration — use 'ignore' for non-interactive commands
+	stdin: 'ignore', // "pipe" | "inherit" | "ignore" | Stream
 	stdout: 'pipe', // "pipe" | "inherit" | "ignore" | Sink
 	stderr: 'pipe', // "pipe" | "inherit" | "ignore" | Sink
 
 	// Kill signal defaults
 	killSignal: 'SIGTERM',
-	forceKillAfter: '5 seconds',
+	forceKillAfter: '3 seconds',
 
 	// Additional file descriptors
 	additionalFds: {
@@ -185,6 +193,35 @@ const program = Effect.gen(function* () {
 });
 ```
 
+### Progressive Output with Side Effects
+
+```typescript
+import { Effect, Stream } from 'effect';
+import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+
+const program = Effect.gen(function* () {
+	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+	let output = '';
+	const handle = yield* spawner.spawn(
+		ChildProcess.make('bun', ['test'], {
+			extendEnv: true,
+			stdin: 'ignore'
+		})
+	);
+	yield* Stream.runForEach(
+		Stream.decodeText(handle.all),
+		(chunk) =>
+			Effect.sync(() => {
+				output += chunk;
+			})
+	).pipe(Effect.forkScoped);
+	const exitCode = yield* handle.exitCode;
+	return { output, exitCode };
+}).pipe(Effect.scoped);
+```
+
+Use this pattern when you need per-chunk side effects (progress reporting, streaming to UI) during command execution. `spawner.string`/`spawner.lines` cannot provide per-chunk callbacks.
+
 ### Get Exit Code
 
 ```typescript
@@ -238,7 +275,8 @@ const program = Effect.gen(function* () {
 	const handle = yield* spawner.spawn(
 		ChildProcess.make('bun', ['lint'], {
 			env: { FORCE_COLOR: '1' },
-			extendEnv: true
+			extendEnv: true,
+			stdin: 'ignore'
 		})
 	);
 
@@ -264,7 +302,7 @@ const program = Effect.gen(function* () {
 | `pid`             | `ProcessId`                                    | Process identifier (branded number) |
 | `exitCode`        | `Effect<ExitCode, PlatformError>`              | Waits for exit, returns exit code   |
 | `isRunning`       | `Effect<boolean, PlatformError>`               | Check if still running              |
-| `kill(options?)`  | `Effect<void, PlatformError>`                  | Kill with signal (default SIGTERM)  |
+| `kill(options?)`  | `Effect<void, PlatformError>`                  | Kill with signal; pass `{ forceKillAfter: '3 seconds' }` to ensure cleanup |
 | `stdin`           | `Sink<void, Uint8Array, never, PlatformError>` | Write to process stdin              |
 | `stdout`          | `Stream<Uint8Array, PlatformError>`            | Read process stdout                 |
 | `stderr`          | `Stream<Uint8Array, PlatformError>`            | Read process stderr                 |
@@ -419,7 +457,8 @@ class DevTools extends ServiceMap.Service<
 					.spawn(
 						ChildProcess.make('bun', ['lint'], {
 							env: { FORCE_COLOR: '1' },
-							extendEnv: true
+							extendEnv: true,
+							stdin: 'ignore'
 						})
 					)
 					.pipe(
@@ -578,6 +617,47 @@ const program = Effect.gen(function* () {
 			)
 		);
 });
+```
+
+## Bridging External Signals
+
+Use `Effect.callback` to convert an `AbortSignal` (or any event-driven API) into an Effect. The cleanup Effect removes the listener, and the already-aborted edge case is handled first:
+
+```typescript
+import { Effect } from 'effect';
+
+const fromAbortSignal = (signal: AbortSignal) =>
+	Effect.callback<void>((resume) => {
+		if (signal.aborted) return resume(Effect.void);
+		const handler = () => resume(Effect.void);
+		signal.addEventListener('abort', handler, { once: true });
+		return Effect.sync(() =>
+			signal.removeEventListener('abort', handler)
+		);
+	});
+```
+
+### Abort / Timeout Multiplexing
+
+Combine `Effect.raceAll` with discriminated result types to handle exit, abort, and timeout in a single expression:
+
+```typescript
+import { Effect } from 'effect';
+
+const exit = yield* Effect.raceAll([
+	handle.exitCode.pipe(
+		Effect.map((code) => ({ kind: 'exit' as const, code }))
+	),
+	fromAbortSignal(signal).pipe(
+		Effect.map(() => ({ kind: 'abort' as const }))
+	),
+	Effect.sleep(timeout).pipe(
+		Effect.map(() => ({ kind: 'timeout' as const }))
+	)
+]);
+if (exit.kind !== 'exit') {
+	yield* handle.kill({ forceKillAfter: '3 seconds' });
+}
 ```
 
 ## Related Skills
