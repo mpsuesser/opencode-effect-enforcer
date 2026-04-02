@@ -174,7 +174,7 @@ export const EffectEnforcerPlugin: Plugin = async (pluginInput) => {
 					const skills = getLoadedEffectSkills(input.sessionID);
 					if (skills.size < MIN_EFFECT_SKILLS) {
 						throw new Error(
-							`you have loaded ${String(skills.size)} of the minimum-required ${String(MIN_EFFECT_SKILLS)} Effect skills`
+							`You have loaded ${String(skills.size)} of the minimum-required ${String(MIN_EFFECT_SKILLS)} Effect skills.`
 						);
 					}
 				}
