@@ -402,6 +402,15 @@ const testProgram = Effect.gen(function* () {
 }).pipe(Effect.provide(TestWebhook));
 ```
 
+```typescript
+// Concise alternative using Layer.mock (v4)
+const TestWebhook = Layer.mock(PaymentWebhookGateway)({
+	validateWebhook: () => Effect.succeed(undefined)
+});
+```
+
+`Layer.mock(Service)({...})` is shorthand for `Layer.succeed(Service, Service.of({...}))` — use whichever reads more clearly in context.
+
 ## Naming Convention
 
 Use descriptive capability names:

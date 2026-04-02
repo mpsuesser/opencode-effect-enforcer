@@ -226,6 +226,54 @@ Result:
 - **Requirements**: Outer layer's requirements (`never`)
 - **Output**: Inner layer's output (`Logger`)
 
+## Pattern: Lazy Composition with Layer.unwrap
+
+When composing a fully-wired `defaultLayer` that references other modules' default layers, use `Layer.unwrap(Effect.sync(...))` to defer composition until runtime. This avoids `undefined` values caused by circular import evaluation order.
+
+```typescript
+import { Effect, Layer } from 'effect';
+
+// Raw layer — declares its dependencies in the type
+export const layer: Layer.Layer<MyService, never, DepA | DepB> =
+	Layer.effect(
+		MyService,
+		Effect.gen(function* () {
+			const depA = yield* DepA;
+			const depB = yield* DepB;
+			return MyService.of({ /* ... */ });
+		})
+	);
+
+// Fully-wired layer — deferred to avoid circular imports
+export const defaultLayer = Layer.unwrap(
+	Effect.sync(() =>
+		layer.pipe(
+			Layer.provide(DepA.defaultLayer),
+			Layer.provide(DepB.defaultLayer)
+		)
+	)
+);
+```
+
+**Naming convention:** `layer` exposes the service's true dependency graph in its type signature. `defaultLayer` is the opinionated production wiring with all dependencies satisfied. Tests compose against `layer` directly, providing mock layers.
+
+## Pattern: Breaking Circular Dependencies with Layer.suspend
+
+When two modules' default layers depend on each other (true circular dependency), use `Layer.suspend` to break the cycle:
+
+```typescript
+import { Layer } from 'effect';
+
+export const defaultLayer = Layer.suspend(() =>
+	layer.pipe(
+		Layer.provide(ServiceA.defaultLayer),
+		Layer.provide(ServiceB.defaultLayer)
+	)
+);
+```
+
+Prefer `Layer.unwrap(Effect.sync(...))` when simple deferral suffices. Reserve `Layer.suspend` for true circular dependencies where both modules reference each other's layers.
+
 ## Pattern: Layered Architecture
 
 Build applications in layers:
