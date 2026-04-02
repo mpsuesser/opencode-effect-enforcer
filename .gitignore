@@ -5,6 +5,7 @@ build/
 *.tsbuildinfo
 .turbo/
 .opencode/
+.references/
 opencode.json
 .vscode/
 .env
