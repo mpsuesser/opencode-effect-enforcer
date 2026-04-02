@@ -655,7 +655,7 @@ const findUserOptional = (id: string) =>
 ### EF-31: Separate expected failures from defects
 
 - Use `Effect.fail` for expected business/domain failures.
-- Reserve `Effect.die` / `Effect.orDie` for invariant violations and impossible states.
+- Reserve `Effect.die` / `Effect.orDie` for invariant violations, impossible states, and unrecoverable infrastructure failures where surfacing the error provides no actionable recovery path (e.g., the data directory is unwritable).
 - Do not model normal user-facing errors as defects.
 - Reference: [die](packages/effect/src/Effect.ts:1745) (via effect_ref_read) and [orDie](packages/effect/src/Effect.ts:3557) (via effect_ref_read).
 
@@ -684,6 +684,7 @@ const validateInput = Effect.fn('Input.validate')(function* (value: string) {
 - Understand that layer provisioning is shared by default.
 - When isolation is required, use `Effect.provide(..., { local: true })` or `Layer.fresh`.
 - Document why isolation is necessary for behavior-sensitive paths.
+- When composing `defaultLayer` values that reference other modules' layers, use `Layer.unwrap(Effect.sync(() => ...))` to defer composition and avoid circular import issues.
 - Reference: [Effect.provide local option](packages/effect/src/Effect.ts:5592) (via effect_ref_read) and [Layer.fresh](packages/effect/src/Layer.ts:1621) (via effect_ref_read).
 
 Example:
@@ -757,6 +758,7 @@ export class VersionSyncOptions extends Schema.Class<VersionSyncOptions>(
 - Keep guard intent and reusable check intent in schema annotations and check metadata.
 - For internal literal domains, use `Schema.is(Schema.Literal(...))` for type guards, `Match` for exhaustive matching, and `Schema.Literal(...).annotate({...})` for annotated schema values.
 - Prefer named intermediate schemas; export them only when reusable or when they materially clarify the module's domain model.
+- Propagate branded schema types through the persistence layer (e.g., ORM column types: `text().$type<AccessToken>()`) to enforce compile-time safety across the entire stack and prevent parameter-swapping bugs.
 
 Example:
 
@@ -945,6 +947,30 @@ const UnknownToString = Schema.Unknown.pipe(
 		})
 	)
 );
+```
+
+### EF-40: Use Effect.cached for memoization and deduplication
+
+- Replace ad-hoc memoization (Promise-based `task` fields, `Fiber` tracking, mutable `result` caches) with `Effect.cached`.
+- `Effect.cached(effect)` returns an Effect that runs `effect` at most once, sharing the result with all subsequent callers.
+- For invalidatable caches, use `Effect.cachedInvalidateWithTTL(effect, Duration.infinity)` which returns a `[cachedEffect, invalidate]` tuple. Call `yield* invalidate` to force re-computation on next access.
+- For time-based caches, use `Effect.cachedWithTTL(effect, duration)`.
+- Prefer `Effect.cachedInvalidateWithTTL` with `Duration.infinity` over mutable `let` rebinding of cached effects.
+
+Example:
+
+```ts
+import { Duration, Effect } from 'effect';
+
+// One-shot lazy memoization
+const cachedConfig = yield* Effect.cached(loadConfig());
+
+// Manually invalidatable cache
+const [cachedConfig, invalidate] = yield* Effect.cachedInvalidateWithTTL(
+	loadConfig().pipe(Effect.orElseSucceed(() => defaultConfig)),
+	Duration.infinity
+);
+// Later: yield* invalidate to force reload on next access
 ```
 
 ## Copy-Paste Templates
