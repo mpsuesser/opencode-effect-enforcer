@@ -1,0 +1,60 @@
+{
+  "$schema": "https://www.schemastore.org/package.json",
+  "name": "opencode-effect-enforcer",
+  "version": "0.1.0",
+  "description": "OpenCode V2 plugin for Effect v4 skills, guidance, and pattern enforcement",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "effect",
+    "effect-ts"
+  ],
+  "homepage": "https://github.com/mpsuesser/opencode-effect-enforcer#readme",
+  "bugs": {
+    "url": "https://github.com/mpsuesser/opencode-effect-enforcer/issues"
+  },
+  "license": "MIT",
+  "author": "Marc Suesser",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mpsuesser/opencode-effect-enforcer.git"
+  },
+  "type": "module",
+  "exports": "./src/index.ts",
+  "files": [
+    "src",
+    "skills",
+    "guidance",
+    "patterns",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "fmt": "dprint fmt",
+    "fmt:check": "dprint check",
+    "lint": "oxlint -c oxlintrc.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check": "bun run fmt:check && bun run lint && bun run typecheck",
+    "prepublishOnly": "bun run check && bun run test"
+  },
+  "dependencies": {
+    "@ast-grep/napi": "^0.42.3",
+    "@opencode-ai/plugin": "0.0.0-next-17148",
+    "diff": "^9.0.0",
+    "effect": "4.0.0-beta.101",
+    "picomatch": "^4.0.3",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "@types/diff": "^8.0.0",
+    "@types/json-schema": "^7.0.15",
+    "@types/picomatch": "^4.0.2",
+    "dprint": "^0.50.2",
+    "oxlint": "^1.12.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "packageManager": "bun@1.3.14"
+}
