@@ -506,11 +506,11 @@ const program = Effect.gen(function* () {
 
 `run` options: `{ propagateInterruption? }` (no `onlyIfMissing` — there is no key; `startImmediately` is in the type but is a no-op). On a closed set, `FiberSet.run` returns an already-interrupted fiber (it does **not** interrupt the caller, unlike FiberHandle/FiberMap).
 
-Runtime helpers mirror the others in shape, with one source quirk: the `FiberSet.runtime` runner's option type accepts `propagateInterruption` but never forwards it to the set (`addUnsafe` is called without options) — set it via `FiberSet.run`/`add` instead:
+Runtime helpers mirror the others in shape. `FiberSet.runtime` and `runtimePromise` forward `propagateInterruption` when registering the managed fiber:
 
 ```ts
 const run = yield* FiberSet.runtime(set)<MyService>();
-run(taskNeedingMyService);
+run(taskNeedingMyService, { propagateInterruption: true });
 const runPromise = yield* FiberSet.runtimePromise(set)<MyService>(); // Promise runner for an existing set
 
 const run2 = yield* FiberSet.makeRuntime(); // scoped set + runner
@@ -555,7 +555,7 @@ This is exactly what the FiberHandle/Map/Set runtime helpers wrap for you — pr
 
 ### Keep-alive and runMain
 
-In beta.80 there is **no per-fiber keep-alive in the core runtime** (it existed earlier in v4 but was removed — the `migration/fiber-keep-alive.md` doc predates the removal). A bare `Effect.runFork`/`Effect.runPromise` whose fiber is suspended on a pure Effect primitive (e.g. `Deferred.await`, `Effect.never`) does not by itself hold the Node.js process open.
+In the current v4 runtime there is **no per-fiber keep-alive in the core runtime** (it existed earlier in v4 but was removed in beta.80; the `migration/fiber-keep-alive.md` doc predates the removal). A bare `Effect.runFork`/`Effect.runPromise` whose fiber is suspended on a pure Effect primitive (e.g. `Deferred.await`, `Effect.never`) does not by itself hold the Node.js process open.
 
 `Runtime.makeRunMain`-based runners — `NodeRuntime.runMain` from `@effect/platform-node`, `BunRuntime.runMain`, etc. — install a long-interval timer that keeps the process alive until the main fiber completes, and additionally provide SIGINT/SIGTERM handling (interrupting the root fiber gracefully), exit-code mapping (interruption-only causes → 130), and error reporting. Always use `runMain` for long-lived program entry points:
 
@@ -595,7 +595,9 @@ const searchBox = Effect.gen(function* () {
 
 ```ts
 const worker = consumeJobs.pipe(
-	Effect.retry(Schedule.exponential('250 millis').pipe(Schedule.take(10)))
+	Effect.retry(
+		Schedule.exponential('250 millis').pipe(Schedule.upTo({ times: 10 }))
+	)
 );
 
 const supervisor = Effect.gen(function* () {

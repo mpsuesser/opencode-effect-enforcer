@@ -50,10 +50,10 @@ good path = do
 -- Platform provision at entry point
 main :: Effect () (FileSystem | Console | ...)
 main = program
-  & provide BunContext.layer    -- or NodeContext.layer
+  & provide BunServices.layer    -- or NodeServices.layer
   & runMain
 ```
 
-Direct `fs` / `fs/promises` imports couple code to Node.js and bypass the Effect error channel. Use `@effect/platform` FileSystem for portability across Node, Bun, and browser, with typed errors and composable I/O.
+Direct `fs` / `fs/promises` imports couple code to Node.js and bypass the Effect error channel. Use `FileSystem` from `effect` for portability across Node and Bun, with typed errors and composable I/O; provide the concrete platform layer only at the runtime boundary.
 
 This pattern subsumes the legacy `avoid-fs-promises` pattern — both `fs` and `fs/promises` are covered here.

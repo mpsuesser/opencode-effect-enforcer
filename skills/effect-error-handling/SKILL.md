@@ -1,6 +1,6 @@
 ---
 name: effect-error-handling
-description: Implement typed error handling in Effect v4 using Schema.TaggedErrorClass, catchTag/catchTags, catchReason/catchReasons, Cause, ErrorReporter, and recovery patterns. Use this skill when working with Effect error channels, handling expected failures, or designing error recovery strategies.
+description: Implement typed error handling in Effect v4 using Schema.TaggedError, catchTag/catchTags, catchReason/catchReasons, Cause, ErrorReporter, and recovery patterns. Use this skill when working with Effect error channels, handling expected failures, or designing error recovery strategies.
 ---
 
 You are an Effect TypeScript expert specializing in typed error handling, recovery patterns, and error channel management in **Effect v4**.
@@ -12,7 +12,7 @@ Browse and read files there directly to look up APIs, types, and implementations
 
 Reference this for:
 
-- Schema.TaggedErrorClass and error class creation
+- Schema.TaggedError and error class creation
 - Error handling combinators (catchTag, catchTags, catch, catchReason, catchReasons)
 - Error transformation and recovery patterns
 - Cause structure and inspection
@@ -79,10 +79,13 @@ Reference this for:
 
 ### Schema Error Renames
 
-| v3 (DO NOT USE)      | v4 (USE THIS)             |
-| -------------------- | ------------------------- |
-| `Schema.TaggedError` | `Schema.TaggedErrorClass` |
-| `ParseError`         | `Schema.SchemaError`      |
+| Old API (DO NOT USE)              | beta.107 API (USE THIS)        |
+| --------------------------------- | ------------------------------ |
+| `Schema.TaggedErrorClass`         | `Schema.TaggedError`           |
+| `Schema.ErrorClass`               | `Schema.Error`                 |
+| `Schema.Error` (instance schema)  | `Schema.ErrorInstance`         |
+| `Schema.ErrorReviver`             | `Schema.ErrorInstanceReviver`  |
+| `ParseError`                      | `Schema.SchemaError`           |
 
 ## Core Error Handling Philosophy
 
@@ -140,7 +143,7 @@ interface User {
 }
 
 // CORRECT - Expected business failures in error channel
-class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()(
+class UserNotFound extends Schema.TaggedError<UserNotFound>()(
 	'UserNotFound',
 	{
 		userId: Schema.String,
@@ -148,7 +151,7 @@ class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()(
 	}
 ) {}
 
-class InvalidCredentials extends Schema.TaggedErrorClass<InvalidCredentials>()(
+class InvalidCredentials extends Schema.TaggedError<InvalidCredentials>()(
 	'InvalidCredentials',
 	{ reason: Schema.String, message: Schema.String }
 ) {}
@@ -187,14 +190,14 @@ const findUserWrong = (userId: string): Effect.Effect<User> =>
 
 Effect v4 provides three ways to define error classes. Choose based on context:
 
-### `Schema.TaggedErrorClass` — Primary choice for domain errors
+### `Schema.TaggedError` — Primary choice for domain errors
 
 Schema-validated, automatically tagged with `_tag`, catchable via `catchTag`. Use for all cross-module and public API errors.
 
 ```typescript
 import * as Schema from 'effect/Schema';
 
-class NotFound extends Schema.TaggedErrorClass<NotFound>()(
+class NotFound extends Schema.TaggedError<NotFound>()(
 	'NotFound',
 	{ id: Schema.String, message: Schema.String },
 	{ description: 'Entity was not found.' }
@@ -205,14 +208,14 @@ const error = new NotFound({ id: '123', message: 'User not found' });
 error._tag; // "NotFound"
 ```
 
-### `Schema.ErrorClass` — For manual tag control
+### `Schema.Error` — For manual tag control
 
 Schema-validated but no automatic `_tag`. Use when you need a custom discriminator field (e.g., HttpApiError types use `_tag: Schema.tag("NotFound")` manually).
 
 ```typescript
 import * as Schema from 'effect/Schema';
 
-class NotFound extends Schema.ErrorClass<NotFound>('NotFound')({
+class NotFound extends Schema.Error<NotFound>('NotFound')({
 	_tag: Schema.tag('NotFound'),
 	message: Schema.String
 }) {}
@@ -239,15 +242,15 @@ const program = Effect.fail(new InternalError({ message: 'oops' })).pipe(
 
 | Scenario                                    | Use                       |
 | ------------------------------------------- | ------------------------- |
-| Cross-module / public API errors            | `Schema.TaggedErrorClass` |
-| Errors that need `httpApiStatus` annotation | `Schema.TaggedErrorClass` |
-| Errors with a `reason` union field          | `Schema.TaggedErrorClass` |
-| Custom discriminator field (not `_tag`)     | `Schema.ErrorClass`       |
+| Cross-module / public API errors            | `Schema.TaggedError` |
+| Errors that need `httpApiStatus` annotation | `Schema.TaggedError` |
+| Errors with a `reason` union field          | `Schema.TaggedError` |
+| Custom discriminator field (not `_tag`)     | `Schema.Error`       |
 | Module-internal, no serialization needed    | `Data.TaggedError`        |
 
 ## Creating Tagged Errors
 
-Always use `Schema.TaggedErrorClass` for domain errors with a `message` field.
+Always use `Schema.TaggedError` for domain errors with a `message` field.
 
 ### Basic Tagged Error
 
@@ -255,14 +258,14 @@ Always use `Schema.TaggedErrorClass` for domain errors with a `message` field.
 import * as Schema from 'effect/Schema';
 
 // Simple error with message only
-export class NetworkError extends Schema.TaggedErrorClass<NetworkError>()(
+export class NetworkError extends Schema.TaggedError<NetworkError>()(
 	'NetworkError',
 	{ message: Schema.String },
 	{ description: 'Network request failed.' }
 ) {}
 
 // Error with rich context
-export class ValidationError extends Schema.TaggedErrorClass<ValidationError>()(
+export class ValidationError extends Schema.TaggedError<ValidationError>()(
 	'ValidationError',
 	{
 		field: Schema.String,
@@ -287,7 +290,7 @@ For bindings that wrap a single external system, use a `reason` literal union to
 ```typescript
 import * as Schema from 'effect/Schema';
 
-export class ApiError extends Schema.TaggedErrorClass<ApiError>()(
+export class ApiError extends Schema.TaggedError<ApiError>()(
 	'ApiError',
 	{
 		reason: Schema.Literals([
@@ -308,30 +311,30 @@ export class ApiError extends Schema.TaggedErrorClass<ApiError>()(
 
 ### Error with Nested Reason Types (for `catchReason`/`catchReasons`)
 
-When reason variants carry distinct payloads, model each as a separate `TaggedErrorClass` and compose with `Schema.Union`. This enables v4's `catchReason` and `catchReasons`:
+When reason variants carry distinct payloads, model each as a separate `TaggedError` and compose with `Schema.Union`. This enables v4's `catchReason` and `catchReasons`:
 
 ```typescript
 import * as Schema from 'effect/Schema';
 
-export class RateLimitError extends Schema.TaggedErrorClass<RateLimitError>()(
+export class RateLimitError extends Schema.TaggedError<RateLimitError>()(
 	'RateLimitError',
 	{ retryAfter: Schema.Number },
 	{ description: 'Rate limit exceeded.' }
 ) {}
 
-export class QuotaExceededError extends Schema.TaggedErrorClass<QuotaExceededError>()(
+export class QuotaExceededError extends Schema.TaggedError<QuotaExceededError>()(
 	'QuotaExceededError',
 	{ limit: Schema.Number },
 	{ description: 'Quota exhausted.' }
 ) {}
 
-export class SafetyBlockedError extends Schema.TaggedErrorClass<SafetyBlockedError>()(
+export class SafetyBlockedError extends Schema.TaggedError<SafetyBlockedError>()(
 	'SafetyBlockedError',
 	{ category: Schema.String },
 	{ description: 'Blocked by safety filter.' }
 ) {}
 
-export class AiError extends Schema.TaggedErrorClass<AiError>()(
+export class AiError extends Schema.TaggedError<AiError>()(
 	'AiError',
 	{
 		reason: Schema.Union([
@@ -351,7 +354,7 @@ For errors that map to HTTP responses, use the `httpApiStatus` annotation:
 ```typescript
 import * as Schema from 'effect/Schema';
 
-export class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
+export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
 	'Unauthorized',
 	{ message: Schema.String },
 	{
@@ -360,7 +363,7 @@ export class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
 	}
 ) {}
 
-export class EntityNotFound extends Schema.TaggedErrorClass<EntityNotFound>()(
+export class EntityNotFound extends Schema.TaggedError<EntityNotFound>()(
 	'EntityNotFound',
 	{ entityType: Schema.String, id: Schema.String, message: Schema.String },
 	{
@@ -375,7 +378,7 @@ export class EntityNotFound extends Schema.TaggedErrorClass<EntityNotFound>()(
 ```typescript
 import * as Schema from 'effect/Schema';
 
-export class HttpError extends Schema.TaggedErrorClass<HttpError>()(
+export class HttpError extends Schema.TaggedError<HttpError>()(
 	'HttpError',
 	{
 		status: Schema.Number,
@@ -409,7 +412,7 @@ When wrapping upstream errors in domain error classes, choose the `cause` field 
 import * as Schema from 'effect/Schema';
 
 // Defect-style: wraps throwables and unknown failures
-export class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()(
+export class DatabaseError extends Schema.TaggedError<DatabaseError>()(
 	'DatabaseError',
 	{
 		operation: Schema.String,
@@ -420,7 +423,7 @@ export class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()(
 ) {}
 
 // Unknown-style: preserves full upstream error
-export class FetchError extends Schema.TaggedErrorClass<FetchError>()(
+export class FetchError extends Schema.TaggedError<FetchError>()(
 	'FetchError',
 	{
 		url: Schema.String,
@@ -431,7 +434,7 @@ export class FetchError extends Schema.TaggedErrorClass<FetchError>()(
 ) {}
 
 // String-style: message-only wrapper
-export class AuthError extends Schema.TaggedErrorClass<AuthError>()(
+export class AuthError extends Schema.TaggedError<AuthError>()(
 	'AuthError',
 	{
 		cause: Schema.String
@@ -442,13 +445,13 @@ export class AuthError extends Schema.TaggedErrorClass<AuthError>()(
 
 ## Yieldable Errors
 
-In `Effect.gen` blocks, tagged error instances can be yielded directly as a shorthand for `yield* Effect.fail(...)`. This works because `Schema.TaggedErrorClass`, `Schema.ErrorClass`, and `Data.TaggedError` all extend `Cause.YieldableError`.
+In `Effect.gen` blocks, tagged error instances can be yielded directly as a shorthand for `yield* Effect.fail(...)`. This works because `Schema.TaggedError`, `Schema.Error`, and `Data.TaggedError` all extend `Cause.YieldableError`.
 
 ```typescript
 import { Effect } from 'effect';
 import * as Schema from 'effect/Schema';
 
-class NotFound extends Schema.TaggedErrorClass<NotFound>()('NotFound', {
+class NotFound extends Schema.TaggedError<NotFound>()('NotFound', {
 	id: Schema.String,
 	message: Schema.String
 }) {}
@@ -482,12 +485,12 @@ interface User {
 	readonly name: string;
 }
 
-class NotFound extends Schema.TaggedErrorClass<NotFound>()('NotFound', {
+class NotFound extends Schema.TaggedError<NotFound>()('NotFound', {
 	id: Schema.String,
 	message: Schema.String
 }) {}
 
-class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
+class Unauthorized extends Schema.TaggedError<Unauthorized>()(
 	'Unauthorized',
 	{
 		message: Schema.String
@@ -517,12 +520,12 @@ In Effect v4, `catchTag` accepts an array of tags to handle multiple error types
 ```typescript
 import { Effect, Schema } from 'effect';
 
-class ParseError extends Schema.TaggedErrorClass<ParseError>()('ParseError', {
+class ParseError extends Schema.TaggedError<ParseError>()('ParseError', {
 	input: Schema.String,
 	message: Schema.String
 }) {}
 
-class ReservedPortError extends Schema.TaggedErrorClass<ReservedPortError>()(
+class ReservedPortError extends Schema.TaggedError<ReservedPortError>()(
 	'ReservedPortError',
 	{
 		port: Schema.Number
@@ -548,15 +551,15 @@ In v4, `catchTag`, `catchTags`, and `catchIf` accept an optional trailing `orEls
 ```typescript
 import { Effect, Schema } from 'effect';
 
-class NotFound extends Schema.TaggedErrorClass<NotFound>()('NotFound', {
+class NotFound extends Schema.TaggedError<NotFound>()('NotFound', {
 	message: Schema.String
 }) {}
 
-class Forbidden extends Schema.TaggedErrorClass<Forbidden>()('Forbidden', {
+class Forbidden extends Schema.TaggedError<Forbidden>()('Forbidden', {
 	message: Schema.String
 }) {}
 
-class ServerError extends Schema.TaggedErrorClass<ServerError>()(
+class ServerError extends Schema.TaggedError<ServerError>()(
 	'ServerError',
 	{
 		message: Schema.String
@@ -604,21 +607,21 @@ interface Data {
 	readonly parseError?: boolean;
 }
 
-class NetworkError extends Schema.TaggedErrorClass<NetworkError>()(
+class NetworkError extends Schema.TaggedError<NetworkError>()(
 	'NetworkError',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class TimeoutError extends Schema.TaggedErrorClass<TimeoutError>()(
+class TimeoutError extends Schema.TaggedError<TimeoutError>()(
 	'TimeoutError',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class ParseError extends Schema.TaggedErrorClass<ParseError>()('ParseError', {
+class ParseError extends Schema.TaggedError<ParseError>()('ParseError', {
 	input: Schema.String,
 	message: Schema.String
 }) {}
@@ -662,14 +665,14 @@ interface Result {
 	readonly value: string;
 }
 
-class InvalidInput extends Schema.TaggedErrorClass<InvalidInput>()(
+class InvalidInput extends Schema.TaggedError<InvalidInput>()(
 	'InvalidInput',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class ProcessingError extends Schema.TaggedErrorClass<ProcessingError>()(
+class ProcessingError extends Schema.TaggedError<ProcessingError>()(
 	'ProcessingError',
 	{
 		message: Schema.String
@@ -698,7 +701,7 @@ const program = process().pipe(
 ```typescript
 import { Effect, Schema } from 'effect';
 
-class CliConfigError extends Schema.TaggedErrorClass<CliConfigError>()(
+class CliConfigError extends Schema.TaggedError<CliConfigError>()(
 	'CliConfigError',
 	{
 		message: Schema.String
@@ -939,18 +942,18 @@ import * as Schema from 'effect/Schema';
 
 declare const dangerousOperation: () => Effect.Effect<string, AppError>;
 
-class ConnectionError extends Schema.TaggedErrorClass<ConnectionError>()(
+class ConnectionError extends Schema.TaggedError<ConnectionError>()(
 	'ConnectionError',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class AuthError extends Schema.TaggedErrorClass<AuthError>()('AuthError', {
+class AuthError extends Schema.TaggedError<AuthError>()('AuthError', {
 	message: Schema.String
 }) {}
 
-class DataError extends Schema.TaggedErrorClass<DataError>()('DataError', {
+class DataError extends Schema.TaggedError<DataError>()('DataError', {
 	message: Schema.String
 }) {}
 
@@ -985,14 +988,14 @@ interface Data {
 	readonly value: string;
 }
 
-class DomainError extends Schema.TaggedErrorClass<DomainError>()(
+class DomainError extends Schema.TaggedError<DomainError>()(
 	'DomainError',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class InfrastructureError extends Schema.TaggedErrorClass<InfrastructureError>()(
+class InfrastructureError extends Schema.TaggedError<InfrastructureError>()(
 	'InfrastructureError',
 	{ message: Schema.String, cause: Schema.optional(Schema.Unknown) }
 ) {}
@@ -1015,7 +1018,7 @@ When writing reusable error-mapping combinators shared across multiple call site
 ```typescript
 import { Effect, Schema } from 'effect';
 
-class ServiceError extends Schema.TaggedErrorClass<ServiceError>()(
+class ServiceError extends Schema.TaggedError<ServiceError>()(
 	'ServiceError',
 	{
 		message: Schema.String,
@@ -1051,12 +1054,12 @@ interface Data {
 	readonly value: string;
 }
 
-class PrimaryServiceError extends Schema.TaggedErrorClass<PrimaryServiceError>()(
+class PrimaryServiceError extends Schema.TaggedError<PrimaryServiceError>()(
 	'PrimaryServiceError',
 	{ message: Schema.String }
 ) {}
 
-class SecondaryServiceError extends Schema.TaggedErrorClass<SecondaryServiceError>()(
+class SecondaryServiceError extends Schema.TaggedError<SecondaryServiceError>()(
 	'SecondaryServiceError',
 	{ message: Schema.String }
 ) {}
@@ -1083,7 +1086,7 @@ interface Data {
 	readonly value: string;
 }
 
-class TransientError extends Schema.TaggedErrorClass<TransientError>()(
+class TransientError extends Schema.TaggedError<TransientError>()(
 	'TransientError',
 	{
 		message: Schema.String
@@ -1115,7 +1118,7 @@ interface Config {
 	readonly host: string;
 }
 
-class FetchError extends Schema.TaggedErrorClass<FetchError>()('FetchError', {
+class FetchError extends Schema.TaggedError<FetchError>()('FetchError', {
 	message: Schema.String
 }) {}
 
@@ -1140,7 +1143,7 @@ interface Item {
 	readonly name: string;
 }
 
-class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()(
+class NotFoundError extends Schema.TaggedError<NotFoundError>()(
 	'NotFoundError',
 	{
 		message: Schema.String
@@ -1169,7 +1172,7 @@ interface Config {
 	readonly host: string;
 }
 
-class ConfigError extends Schema.TaggedErrorClass<ConfigError>()(
+class ConfigError extends Schema.TaggedError<ConfigError>()(
 	'ConfigError',
 	{
 		message: Schema.String
@@ -1251,7 +1254,7 @@ Error objects can carry reporting annotations as string-keyed properties (the ke
 ```typescript
 import { ErrorReporter, Schema } from 'effect';
 
-class MyError extends Schema.TaggedErrorClass<MyError>()('MyError', {
+class MyError extends Schema.TaggedError<MyError>()('MyError', {
 	message: Schema.String
 }) {}
 
@@ -1300,28 +1303,28 @@ interface ValidatedUserData {
 	readonly email: string;
 }
 
-class ValidationError extends Schema.TaggedErrorClass<ValidationError>()(
+class ValidationError extends Schema.TaggedError<ValidationError>()(
 	'ValidationError',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()(
+class DatabaseError extends Schema.TaggedError<DatabaseError>()(
 	'DatabaseError',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class NetworkError extends Schema.TaggedErrorClass<NetworkError>()(
+class NetworkError extends Schema.TaggedError<NetworkError>()(
 	'NetworkError',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class UnknownError extends Schema.TaggedErrorClass<UnknownError>()(
+class UnknownError extends Schema.TaggedError<UnknownError>()(
 	'UnknownError',
 	{
 		message: Schema.String,
@@ -1402,7 +1405,7 @@ This replaces ad-hoc optional-field checking (`if (!body.access_token)`) with co
 ```typescript
 import * as Schema from 'effect/Schema';
 
-export class EntityNotFound extends Schema.TaggedErrorClass<EntityNotFound>()(
+export class EntityNotFound extends Schema.TaggedError<EntityNotFound>()(
 	'EntityNotFound',
 	{
 		entityType: Schema.String,
@@ -1412,7 +1415,7 @@ export class EntityNotFound extends Schema.TaggedErrorClass<EntityNotFound>()(
 	{ httpApiStatus: 404, description: 'Requested entity does not exist.' }
 ) {}
 
-export class DuplicateEntity extends Schema.TaggedErrorClass<DuplicateEntity>()(
+export class DuplicateEntity extends Schema.TaggedError<DuplicateEntity>()(
 	'DuplicateEntity',
 	{
 		entityType: Schema.String,
@@ -1422,7 +1425,7 @@ export class DuplicateEntity extends Schema.TaggedErrorClass<DuplicateEntity>()(
 	{ httpApiStatus: 409, description: 'Entity already exists.' }
 ) {}
 
-export class QueryError extends Schema.TaggedErrorClass<QueryError>()(
+export class QueryError extends Schema.TaggedError<QueryError>()(
 	'QueryError',
 	{
 		query: Schema.String,
@@ -1440,7 +1443,7 @@ export type RepositoryError = EntityNotFound | DuplicateEntity | QueryError;
 ```typescript
 import * as Schema from 'effect/Schema';
 
-export class ServiceUnavailable extends Schema.TaggedErrorClass<ServiceUnavailable>()(
+export class ServiceUnavailable extends Schema.TaggedError<ServiceUnavailable>()(
 	'ServiceUnavailable',
 	{
 		service: Schema.String,
@@ -1450,7 +1453,7 @@ export class ServiceUnavailable extends Schema.TaggedErrorClass<ServiceUnavailab
 	{ httpApiStatus: 503, description: 'Upstream service is unavailable.' }
 ) {}
 
-export class ServiceTimeout extends Schema.TaggedErrorClass<ServiceTimeout>()(
+export class ServiceTimeout extends Schema.TaggedError<ServiceTimeout>()(
 	'ServiceTimeout',
 	{
 		service: Schema.String,
@@ -1460,7 +1463,7 @@ export class ServiceTimeout extends Schema.TaggedErrorClass<ServiceTimeout>()(
 	{ httpApiStatus: 504, description: 'Upstream service timed out.' }
 ) {}
 
-export class InvalidResponse extends Schema.TaggedErrorClass<InvalidResponse>()(
+export class InvalidResponse extends Schema.TaggedError<InvalidResponse>()(
 	'InvalidResponse',
 	{
 		service: Schema.String,
@@ -1499,21 +1502,21 @@ interface Response {
 	readonly status: number;
 }
 
-class ValidationError extends Schema.TaggedErrorClass<ValidationError>()(
+class ValidationError extends Schema.TaggedError<ValidationError>()(
 	'ValidationError',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()(
+class NotFoundError extends Schema.TaggedError<NotFoundError>()(
 	'NotFoundError',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()(
+class DatabaseError extends Schema.TaggedError<DatabaseError>()(
 	'DatabaseError',
 	{
 		message: Schema.String
@@ -1543,7 +1546,7 @@ const apiEndpoint = (request: Request) =>
 
 Before completing error handling implementation:
 
-- [ ] All domain errors use `Schema.TaggedErrorClass` with a `message` field
+- [ ] All domain errors use `Schema.TaggedError` with a `message` field
 - [ ] Error types have meaningful, specific names and `description` annotation
 - [ ] Errors include relevant context (ids, values, reasons)
 - [ ] Business failures in error channel, programmer errors as defects

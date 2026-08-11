@@ -206,6 +206,8 @@ const fileOperations = Effect.gen(function* () {
 });
 ```
 
+`fs.watch(directory)` reports direct-child changes by default; pass `{ recursive: true }` to include nested subdirectories. For open handles, `file.seek(offset, 'start' | 'current')` returns the new offset as a branded `FileSystem.Size`. The old `FileSystem.File.Descriptor` type and `file.descriptor` property were removed in beta.103; use scoped `File` methods instead.
+
 **Streaming Files:**
 
 ```typescript
@@ -308,6 +310,8 @@ const pathOps = Effect.gen(function* () {
 	const fromUrl = yield* path.fromFileUrl(new URL('file:///path/to/file'));
 });
 ```
+
+`Migrator.fromFileSystem` requires both `FileSystem.FileSystem` and `Path.Path` as of beta.107 because migration module paths are converted to file URLs before dynamic import. Aggregate Node/Bun service layers satisfy both requirements. When providing services individually on Windows, use the host-aware path layer rather than core `Path.layer`, which has POSIX semantics.
 
 ### ChildProcess - Process Execution
 

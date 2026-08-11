@@ -3,13 +3,19 @@ action: context
 tool: (edit|write)
 event: after
 name: avoid-untagged-errors
-description: Avoid instanceof Error and new Error for recoverable domain failures - use Schema.TaggedErrorClass for typed errors
+description: Review raw Error usage; recoverable domain failures should use Schema.TaggedError
 glob: '**/*.{ts,tsx}'
 detector: ast
-pattern:
-    - 'new Error($$$)'
-    - '$A instanceof Error'
-level: warning
+rule:
+    any:
+        - all:
+              - pattern: 'new Error($$$)'
+              - not:
+                    inside:
+                        pattern: Effect.die($$$)
+                        stopBy: end
+        - pattern: '$A instanceof Error'
+level: info
 suggestSkills:
     - effect-error-handling
 ---
@@ -23,7 +29,7 @@ newError        :: String → Error         -- untagged, untrackable
 
 -- Instead
 data MyError = MyError { message :: Schema.String }
-  deriving Schema.TaggedErrorClass "MyError"
+  deriving Schema.TaggedError "MyError"
 
 taggedFail :: MyError → Effect a MyError
 catchTag   :: "MyError" → (MyError → Effect a) → Effect a E → Effect a (E - MyError)
@@ -50,7 +56,7 @@ handle = catchTags
   }
 ```
 
-`Schema.TaggedErrorClass` enables exhaustive pattern matching via `_tag`, serialization, and RPC compatibility. Use `catchTag` for type-safe error discrimination.
+`Schema.TaggedError` enables exhaustive pattern matching via `_tag`, serialization, and RPC compatibility. Use `catchTag` for type-safe error discrimination.
 
 Exceptions:
 
@@ -58,4 +64,4 @@ Exceptions:
 - invariant branches inside runtime adapters where the failure should remain a defect
 - interop callbacks that must produce a raw throwable before being re-captured at the boundary
 
-Do not use those exceptions for user-facing or recoverable domain failures.
+Do not use those exceptions for user-facing or recoverable domain failures. Because syntax alone cannot establish whether a raw error is a defect, interop value, or recoverable failure, this diagnostic is informational and requires contextual review.

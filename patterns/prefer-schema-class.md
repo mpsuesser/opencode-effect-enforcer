@@ -3,11 +3,11 @@ action: context
 tool: (edit|write)
 event: after
 name: prefer-schema-class
-description: Use Schema.Class instead of Schema.Struct for object/domain schemas
+description: Review Schema.Struct used for decoded or domain objects; prefer Schema.Class when identity matters
 glob: '**/*.{ts,tsx}'
 detector: ast
 pattern: Schema.Struct($$$)
-level: warning
+level: info
 suggestSkills:
     - effect-domain-modeling
 ---
@@ -49,6 +49,6 @@ extend = class Admin extends User.extend<Admin>("Admin")({
 }) {}
 ```
 
-`Schema.Struct` produces an anonymous schema without a constructor or `instanceof` support. `Schema.Class` provides a named type, constructor, extensibility, and optional annotation support when docs or introspection actually benefit from it. Prefer `Schema.Class` for all domain/object schemas.
+`Schema.Struct` produces an anonymous schema without a constructor or `instanceof` support. `Schema.Class` provides a named type, constructor, extensibility, and optional annotation support when docs or introspection benefit from it. Prefer `Schema.Class` for decoded domain/API shapes, union members, and values that need identity. `Schema.Struct` remains appropriate for local structural composition, configuration internals, and schemas where class identity adds no value, so review this informational finding in context.
 
 References: EF-3, EF-33 in effect-first-development.md

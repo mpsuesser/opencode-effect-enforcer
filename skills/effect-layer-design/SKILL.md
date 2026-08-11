@@ -435,14 +435,14 @@ interface Connection {
 	readonly close: () => void;
 }
 
-class ConnectionError extends Schema.TaggedErrorClass<ConnectionError>()(
+class ConnectionError extends Schema.TaggedError<ConnectionError>()(
 	'ConnectionError',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class DatabaseConstructionError extends Schema.TaggedErrorClass<DatabaseConstructionError>()(
+class DatabaseConstructionError extends Schema.TaggedError<DatabaseConstructionError>()(
 	'DatabaseConstructionError',
 	{ cause: ConnectionError }
 ) {}

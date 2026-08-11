@@ -224,7 +224,7 @@ Provide exactly one of these to satisfy `RpcClient.Protocol`:
 | Layer | Requires | supportsAck | Notes |
 |---|---|---|---|
 | `RpcClient.layerProtocolHttp({ url, transformClient? })` | `RpcSerialization`, `HttpClient` | no | One POST per request. Framed serializations stream the response body, so streaming rpcs work over plain HTTP |
-| `RpcClient.layerProtocolSocket({ retryTransientErrors? })` | `RpcSerialization`, `Socket.Socket` | yes | Full duplex; pings every 5s; auto-reconnects (section 9). Works for WebSocket and raw TCP — the `Socket.Socket` layer decides which |
+| `RpcClient.layerProtocolSocket({ retryTransientErrors?, onTransientError? })` | `RpcSerialization`, `Socket.Socket` | yes | Full duplex; pings every 5s; auto-reconnects (section 9). Works for WebSocket and raw TCP — the `Socket.Socket` layer decides which |
 | `RpcClient.layerProtocolWorker(poolOptions)` | `Worker.WorkerPlatform`, `Worker.Spawner` | yes | Pool of workers; supports transferables and `RpcWorker.InitialMessage`; the only protocol layer with an error channel — `WorkerError` (section 10) |
 
 Each has a `makeProtocol*` Effect counterpart (`makeProtocolHttp(client)`, `makeProtocolSocket(options?)`, `makeProtocolWorker(options)`) for inline composition — `makeProtocolSocket` additionally accepts a `retryPolicy: Schedule<any, SocketError>` that the layer constructor does **not** expose.
@@ -381,7 +381,7 @@ On the server, a client-initiated interrupt carries the `RpcSchema.ClientAbort` 
 
 ## 8. Error Handling — the `RpcClientError` Taxonomy
 
-`RpcClientError` is a `Schema.ErrorClass` with `_tag: 'RpcClientError'` and a `reason` union. Its `message` is `` `${reason._tag}: ${reason.message}` ``.
+`RpcClientError` is a `Schema.Error` with `_tag: 'RpcClientError'` and a `reason` union. Its `message` is `` `${reason._tag}: ${reason.message}` ``.
 
 | `reason._tag` | Transport | Meaning |
 |---|---|---|
@@ -420,9 +420,10 @@ Semantics to remember:
 The socket protocol owns a long-lived connection loop:
 
 - **Keepalive** — the client sends `Ping` every 5 seconds; a missing `Pong` by the next tick fails the connection with a `SocketOpenError` (kind `'Timeout'`) and triggers reconnect.
-- **Reconnect policy** — the loop retries with `Schedule.exponential(500, 1.5)` capped at 5s between attempts, forever, by default. Customize via `makeProtocolSocket({ retryPolicy })` + `Layer.effect(RpcClient.Protocol)(...)` — the `layerProtocolSocket` constructor only exposes `retryTransientErrors`.
+- **Reconnect policy** — the loop retries with `Schedule.min([Schedule.exponential(500, 1.5), Schedule.spaced(5000)])`, capped at 5s between attempts, forever, by default. Customize the schedule via `makeProtocolSocket({ retryPolicy })` + `Layer.effect(RpcClient.Protocol)(...)`; both constructors accept `retryTransientErrors` and `onTransientError`.
 - **Failure broadcast** — on a connection error, all in-flight requests fail with `RpcClientError`, and subsequent `send`s fail fast with the same error until the socket reopens.
 - **`retryTransientErrors: true`** — `SocketOpenError` failures (failure to connect, and ping timeouts, which are classified as open errors) are not broadcast: pending requests stay pending across reconnect attempts instead of failing. Read/write/close errors on an established connection still fail in-flight requests.
+- **`onTransientError`** — called for every retried `SocketOpenError` (including ping timeouts) while `retryTransientErrors` is enabled. Its infallible, service-free effect is for logging/metrics; defects in the hook are logged and ignored.
 
 ```ts
 const ProtocolLive = RpcClient.layerProtocolSocket({ retryTransientErrors: true }).pipe(
@@ -651,7 +652,7 @@ const WorkerClientLive = UsersClient.layer.pipe(
 7. **Expecting `discard: true` to be error-free.** It only removes the rpc's *declared* error; `RpcClientError` and middleware errors remain, and over HTTP the POST round-trip is still awaited.
 8. **Catching server defects with `catchTag`.** Handler `Effect.die`s arrive as `Cause.Die`, not typed failures. Use `Effect.sandbox`/`Effect.catchAllCause`, and remember one server fatal defect can fail *all* in-flight requests on the connection.
 9. **Assuming requests survive a reconnect.** A socket/worker failure fails every in-flight call with `RpcClientError`; after reconnect nothing is replayed. Add `Effect.retry` at call sites; `retryTransientErrors: true` only keeps requests pending across *connection-establishment* failures.
-10. **Passing `retryPolicy` to `layerProtocolSocket`.** The layer only accepts `{ retryTransientErrors }`. For a custom reconnect schedule use `Layer.effect(RpcClient.Protocol)(RpcClient.makeProtocolSocket({ retryPolicy }))`.
+10. **Passing `retryPolicy` to `layerProtocolSocket`.** The layer accepts `retryTransientErrors` and `onTransientError`, but not `retryPolicy`. For a custom reconnect schedule use `Layer.effect(RpcClient.Protocol)(RpcClient.makeProtocolSocket({ retryPolicy, retryTransientErrors, onTransientError }))`.
 11. **Treating a flattened client like an object client.** With `flatten: true` you call `client('GetUser', payload)`; `client.GetUser(payload)` is not a function. Pick one shape per client.
 12. **Waiting for a queue value to signal end-of-stream.** With `asQueue: true`, completion is `Cause.Done` in the `Queue.take` error channel, and the `Dequeue` lives in a `Scope` — closing that scope interrupts the request on the server.
 13. **Expecting a graceful interrupt over HTTP.** The HTTP protocol drops `Interrupt` messages; interruption aborts the in-flight POST instead. Server handlers are still interrupted, but only when the connection abort is observed.

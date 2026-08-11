@@ -92,6 +92,25 @@ export const cartSummary = Atom.make((get) => {
 });
 ```
 
+### Custom Equality
+
+Use `Atom.withEquality` when recomputation produces referentially new values that should not notify subscribers when they are semantically unchanged. The default comparison is `Object.is`.
+
+```typescript
+interface Point {
+	readonly x: number;
+	readonly y: number;
+}
+
+export const point = Atom.make<Point>({ x: 0, y: 0 }).pipe(
+	Atom.withEquality((current, next) =>
+		current.x === next.x && current.y === next.y
+	)
+);
+```
+
+Equality changes notification behavior, not computation or mutation. Keep the comparator pure, fast, and consistent; use schema-derived equivalence for schema-modeled domain values.
+
 ## Pattern: Atom Family (Dynamic Atoms)
 
 Use `Atom.family` for stable references to dynamically created atoms:
@@ -428,6 +447,7 @@ export const wsConnection = Atom.make(
 8. **Services in Runtime**: Wrap layers once, use in multiple atoms
 9. **Immutable Updates**: Always create new values, never mutate
 10. **Scoped Effects**: Leverage finalizers for resource cleanup
+11. **Intentional Equality**: Use `Atom.withEquality` to suppress semantically redundant notifications
 
 ## Common Patterns
 

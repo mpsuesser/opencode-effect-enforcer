@@ -17,14 +17,14 @@ testPattern({
   ],
   shouldNotMatch: [
     "type User = Option<{ name: string }>",
-    "const result: Option<string> = Option.fromNullable(getValue())",
+    "const result: Option<string> = Option.fromNullishOr(getValue())",
     "Option.none()",
     "if (value === null)",
     "const nullable = null",
     "return null",
     "null ?? defaultValue",
     "const getUser: (id: string) => Option<User>",
-    "Option.fromNullable(value)",
+    "Option.fromNullishOr(value)",
     "const value = null",
     "function test(x = null) {}"
   ]

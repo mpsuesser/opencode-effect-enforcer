@@ -335,6 +335,19 @@ export const itemCount = Atom.map(cart, (c) => c.items.length);
 export const isEmpty = Atom.map(cart, (c) => c.items.length === 0);
 
 /**
+ * Stable summary: suppress notifications when a rebuilt summary is equal.
+ */
+export const summary = Atom.make((get) => {
+	const value = get(cart);
+	return { itemCount: value.items.length, total: value.total };
+}).pipe(
+	Atom.withEquality(
+		(current, next) =>
+			current.itemCount === next.itemCount && current.total === next.total
+	)
+);
+
+/**
  * Add item to cart
  */
 export const addItem = Atom.fn(
@@ -868,6 +881,7 @@ When implementing React components with Effect Atom, ensure:
 - [ ] State lifted to appropriate level (above all components that need it)
 - [ ] Atomic components compose into features
 - [ ] Effect Atom used for shared/complex state
+- [ ] `Atom.withEquality` used when derived object identity would cause redundant renders
 - [ ] Avoid unnecessary `useEffect` - prefer direct calculation, `useMemo`, or `useTransition`
 - [ ] AsyncResult types used for async operations with explicit error handling
 - [ ] Context only for component-specific state, Atoms for app-wide state

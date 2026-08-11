@@ -37,7 +37,7 @@ class User extends Schema.Class<User>('User')({
 	email: Schema.String
 }) {}
 
-class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()(
+class UserNotFound extends Schema.TaggedError<UserNotFound>()(
 	'UserNotFound',
 	{
 		id: Schema.Number
@@ -365,7 +365,7 @@ class User extends Schema.Class<User>('User')({
 	email: Schema.String
 }) {}
 
-class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()(
+class UserNotFound extends Schema.TaggedError<UserNotFound>()(
 	'UserNotFound',
 	{
 		id: Schema.Number
@@ -509,6 +509,8 @@ const deleteUser = SqlResolver.request(DeleteUser);
 ### Transaction awareness
 
 `SqlResolver` automatically groups requests by the transaction connection captured in each `Request.Entry.context`, so requests within a transaction are batched separately from those outside one. This depends on using the same `SqlClient` service instance that opened the transaction; requests executed with another client or a manually reserved connection do not join that transaction.
+
+Encoding failures are completed as their underlying schema errors before batch execution. If every request in a batch fails encoding, the non-empty execute callback is not invoked; duplicate `findById` requests are all completed rather than surfacing a resolver-incomplete defect.
 
 ## Resolver Combinators
 

@@ -142,6 +142,8 @@ const _defined = Optic.id<number | undefined>().notUndefined();
 // getResult succeeds on 42, fails on undefined
 ```
 
+Calling `notUndefined()` on an `Optional` returns another `Optional`, not a `Prism`, because writing can still fail through the existing optional focus.
+
 ### `.check(...checks)` — Validate with Schema checks
 
 Adds Schema validation. `getResult` fails when any check fails; `set` passes through unchanged:
@@ -197,7 +199,7 @@ const _inner = Optic.id<State>().key('value').compose(Optic.some());
 | Method          | Returns             | When to use                          |
 | --------------- | ------------------- | ------------------------------------ |
 | `.get(s)`       | `A`                 | Lens/Iso only — always succeeds      |
-| `.getResult(s)` | `Result<A, string>` | Any optic — explicit success/failure |
+| `.getResult(s)` | `Result<A, SchemaIssue.Issue>` | Any optic — explicit structured failure |
 
 ```ts
 const _a = Optic.id<{ a: number }>().key('a');
@@ -217,7 +219,7 @@ getPositive({ a: [3, -1, 5] }); // [3, 5]
 | Method                 | Behavior                                                                                 |
 | ---------------------- | ---------------------------------------------------------------------------------------- |
 | `.replace(a, s)`       | Returns new `S` with focused value replaced. Silently returns original on focus failure. |
-| `.replaceResult(a, s)` | Returns `Result<S, string>` — explicit failure.                                          |
+| `.replaceResult(a, s)` | Returns `Result<S, SchemaIssue.Issue>` — explicit structured failure.                    |
 | `.modify(f)`           | Returns `(s: S) => S`. On focus failure, returns `s` unchanged.                          |
 | `.modifyAll(f)`        | Traversal only. Maps `f` over each focused element.                                      |
 | `.set(a)`              | Prism/Iso only — builds `S` from `A` without needing original.                           |
@@ -253,9 +255,13 @@ const _first = Optic.makeLens<readonly [string, number], string>(
 );
 
 // Prism — focus may not exist, set doesn't need original
+import { Optic, Result, SchemaIssue } from 'effect';
+
 const numeric = Optic.makePrism<string, number>((s) => {
 	const n = Number(s);
-	return Number.isNaN(n) ? Result.fail('not a number') : Result.succeed(n);
+	return Number.isNaN(n)
+		? Result.fail(new SchemaIssue.InvalidValue({ message: 'not a number' }))
+		: Result.succeed(n);
 }, String);
 
 // Prism from Schema checks
@@ -270,12 +276,32 @@ const atKey = (key: string) =>
 		(s) =>
 			Object.hasOwn(s, key)
 				? Result.succeed(s[key])
-				: Result.fail(`Key "${key}" not found`),
+				: Result.fail(
+						new SchemaIssue.Pointer(
+							[key],
+							new SchemaIssue.MissingKey(undefined)
+						)
+					),
 		(a, s) =>
 			Object.hasOwn(s, key)
 				? Result.succeed({ ...s, [key]: a })
-				: Result.fail(`Key "${key}" not found`)
+				: Result.fail(
+						new SchemaIssue.Pointer(
+							[key],
+							new SchemaIssue.MissingKey(undefined)
+						)
+					)
 	);
+```
+
+Since beta.105, all fallible optic operations use `SchemaIssue.Issue`, not `string`. Custom `makePrism` and `makeOptional` implementations must return structured issues. Issues do not format themselves through `toString`; use `SchemaIssue.makeFormatterDefault()` when a human-readable message is needed:
+
+```ts
+const formatIssue = SchemaIssue.makeFormatterDefault();
+const message = Result.match(_a.getResult({}), {
+	onSuccess: (value) => `value: ${value}`,
+	onFailure: formatIssue
+});
 ```
 
 ## Built-in Prisms

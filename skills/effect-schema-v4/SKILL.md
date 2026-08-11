@@ -26,11 +26,13 @@ Reference this for:
 | `typeSchema(schema)`          | `toType(schema)`                    |                                           |
 | `asSchema(schema)`            | `revealCodec(schema)`               |                                           |
 | `equivalence()`               | `toEquivalence()`                   |                                           |
-| `arbitrary()`                 | `toArbitrary()`                     |                                           |
+| `arbitrary()`                 | `toArbitrary()`                     | Returns a factory that accepts the `fast-check` module |
 | `pretty()`                    | `toFormatter()`                     |                                           |
-| `parseJson()`                 | `UnknownFromJsonString`             | No-arg version is now a standalone schema |
+| `parseJson()`                 | `fromJsonString(Schema.Unknown)`    | `UnknownFromJsonString` is internal as of beta.103 |
 | `parseJson(schema)`           | `fromJsonString(schema)`            | With-schema version                       |
-| `TaggedError`                 | `TaggedErrorClass`                  | Class name change                         |
+| `TaggedErrorClass`            | `TaggedError`                       | Renamed in beta.104                       |
+| `ErrorClass`                  | `Error`                             | Renamed in beta.104                       |
+| `Error` (instance schema)     | `ErrorInstance`                     | Renamed in beta.104                       |
 | `BigIntFromSelf`              | `BigInt`                            |                                           |
 | `SymbolFromSelf`              | `Symbol`                            |                                           |
 | `URLFromSelf`                 | `URL`                               |                                           |
@@ -148,6 +150,8 @@ const isNonNegative = Schema.isGreaterThanOrEqualTo(0);
 const isNegative = Schema.isLessThan(0);
 const isNonPositive = Schema.isLessThanOrEqualTo(0);
 ```
+
+For the common non-negative safe-integer domain, use the canonical `Schema.Natural` added in beta.102 instead of composing checks manually.
 
 ### Custom Filters
 
@@ -366,13 +370,14 @@ const User = Schema.Struct({
 const fallback = SchemaGetter.withDefault(Effect.succeed('viewer'));
 ```
 
-### Beta.46 Additions
+### Later Beta Updates
 
-- `Schema.makeEffect(input, options?)` on schemas and schema-backed classes returns an `Effect` that fails with `Schema.SchemaError`.
+- `Schema.makeEffect(input, options?)` on schemas and schema-backed classes returns an `Effect` that fails directly with `SchemaIssue.Issue`, not `Schema.SchemaError`.
 - `Schema.resolveInto` was renamed to `Schema.resolveAnnotations`.
 - `Schema.resolveAnnotationsKey(schema)` returns key-level annotations.
 - `Schema.annotateEncoded({...})` annotates the encoded side of a transformed schema; use `Schema.annotate({...})` for the decoded Type side.
-- `Schema.asClass(schema)` turns any schema into an extendable class with static helpers.
+- Schemas are directly extendable as classes; `Schema.asClass` was removed in beta.102.
+- `Schema.toArbitrary(schema)` returns a factory that must be called with the `fast-check` module; `Schema.toArbitraryLazy` and arbitrary derivation reports were removed in beta.106.
 - New built-in schemas:
     - `Schema.DateFromString`
     - `Schema.BigIntFromString`
@@ -388,8 +393,9 @@ const fallback = SchemaGetter.withDefault(Effect.succeed('viewer'));
 
 ```ts
 import { Effect, Schema } from 'effect';
+import * as FastCheck from 'fast-check';
 
-class UserName extends Schema.asClass(Schema.NonEmptyString) {
+class UserName extends Schema.NonEmptyString {
 	static readonly decodeUnknownSync = Schema.decodeUnknownSync(this);
 }
 
@@ -410,6 +416,9 @@ const annotatedEncoded = Schema.NumberFromString.pipe(
 const duration = Schema.DurationFromString;
 
 const parsed = Schema.String.makeEffect('alice');
+
+const makeNameArbitrary = Schema.toArbitrary(Schema.NonEmptyString);
+const nameArbitrary = makeNameArbitrary(FastCheck);
 ```
 
 ## 8. New Modules
@@ -563,14 +572,14 @@ class Cat extends Schema.TaggedClass<Cat>()('Cat', {
 // new Cat({ lives: 9 }) → { _tag: "Cat", lives: 9 }
 ```
 
-## 10. TaggedErrorClass
+## 10. TaggedError
 
-Renamed FROM `TaggedError` in v3. Pattern is unchanged:
+`Schema.TaggedErrorClass` was renamed to `Schema.TaggedError` in beta.104. The constructor pattern is unchanged:
 
 ```ts
 import { Effect, Schema } from 'effect';
 
-class HttpError extends Schema.TaggedErrorClass<HttpError>()('HttpError', {
+class HttpError extends Schema.TaggedError<HttpError>()('HttpError', {
 	status: Schema.Number,
 	message: Schema.String
 }) {}
@@ -609,9 +618,9 @@ const recovered = program.pipe(
 | Make fields optional       | `struct.mapFields(Struct.map(Schema.optionalKey))`                                                       |
 | Pick/omit fields           | `struct.mapFields(Struct.pick(["a"]))`                                                                   |
 | Extend a struct            | `struct.mapFields(Struct.assign({ newField: Schema.X }))`                                                |
-| Parse JSON string          | `Schema.UnknownFromJsonString` or `Schema.fromJsonString(schema)`                                        |
+| Parse JSON string          | `Schema.fromJsonString(Schema.Unknown)` or `Schema.fromJsonString(schema)`                               |
 | Add default value          | `Schema.withDecodingDefault(Effect.succeed(encoded))` or `Schema.withDecodingDefaultType(Effect.succeed(type))` |
-| Create tagged error        | `class E extends Schema.TaggedErrorClass<E>()("E", { ... }) {}`                                          |
+| Create tagged error        | `class E extends Schema.TaggedError<E>()("E", { ... }) {}`                                          |
 | Rename fields              | `struct.pipe(Schema.encodeKeys({ oldName: "newName" }))`                                                 |
 | Discriminated union        | `Schema.Union([TaggedClassA, TaggedClassB])`                                                             |
 | Decode unknown safely      | `Schema.decodeUnknownSync(schema)(input)` (sync) or `Schema.decodeUnknownEffect(schema)(input)` (Effect) |

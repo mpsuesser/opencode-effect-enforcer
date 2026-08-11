@@ -261,7 +261,7 @@ export namespace Items {
 import { Effect, Layer, Schema, Context } from 'effect';
 import { makeRuntime } from './runtime-bridge';
 
-class ItemsError extends Schema.TaggedErrorClass<ItemsError>()('ItemsError', {
+class ItemsError extends Schema.TaggedError<ItemsError>()('ItemsError', {
 	message: Schema.String
 }) {}
 

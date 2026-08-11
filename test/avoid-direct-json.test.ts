@@ -20,7 +20,7 @@ testPattern({
     "/* use Schema codecs instead of JSON.parse */",
     // Schema codecs and other APIs
     "Schema.fromJsonString(User)",
-    "Schema.UnknownFromJsonString",
+    "Schema.fromJsonString(Schema.Unknown)",
     // Method with similar name on a different object
     "json.parse(data)",
     "myCodec.stringify(value)"

@@ -28,7 +28,7 @@ The main payoff is a visible service graph. Prefer patterns that make dependenci
 ```typescript
 import { Effect, Layer, Schema, Context } from 'effect';
 
-class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()(
+class UserNotFound extends Schema.TaggedError<UserNotFound>()(
 	'UserNotFound',
 	{
 		userId: Schema.String,
@@ -175,14 +175,14 @@ Each service represents ONE cohesive capability:
 ```typescript
 import { Effect, Layer, Schema, Context } from 'effect';
 
-class HandoffError extends Schema.TaggedErrorClass<HandoffError>()(
+class HandoffError extends Schema.TaggedError<HandoffError>()(
 	'HandoffError',
 	{
 		message: Schema.String
 	}
 ) {}
 
-class RefundError extends Schema.TaggedErrorClass<RefundError>()(
+class RefundError extends Schema.TaggedError<RefundError>()(
 	'RefundError',
 	{
 		message: Schema.String
@@ -325,7 +325,7 @@ Service methods should **never** have requirements in their return type:
 ```typescript
 import { Effect, Layer, Schema, Context } from 'effect';
 
-class QueryError extends Schema.TaggedErrorClass<QueryError>()('QueryError', {
+class QueryError extends Schema.TaggedError<QueryError>()('QueryError', {
 	message: Schema.String
 }) {}
 

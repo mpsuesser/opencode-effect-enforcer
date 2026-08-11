@@ -590,7 +590,7 @@ const engine = WorkflowEngine.makeUnsafe({
   execute: (workflow, { executionId, payload, discard, parent }) => ...,
   poll: (workflow, executionId) => ...,
   interrupt: (workflow, executionId) => ...,
-  // Required by beta.74 WorkflowEngine.Encoded. interruptUnsafe is a more
+  // Required by WorkflowEngine.Encoded. interruptUnsafe is a more
   // direct stop that CAN bypass compensation and parent/child cleanup
   // guarantees that `interrupt` upholds — prefer `interrupt` unless you
   // explicitly need the harder stop.
@@ -607,7 +607,7 @@ The `Encoded` interface works with raw/encoded values (JSON-safe), while the `Wo
 
 ### Suspended Retry Schedule
 
-When a workflow suspends (waiting for an activity or deferred), the engine retries with a default schedule of `Schedule.exponential(200, 1.5)` (200ms base, 1.5x factor) combined with `Schedule.either(Schedule.spaced(30000))` (capped at 30s). Override per-workflow:
+When a workflow suspends (waiting for an activity or deferred), the engine retries with `Schedule.min([Schedule.exponential(200, 1.5), Schedule.spaced(30000)])`: exponential backoff from 200ms, capped at 30s. (`Schedule.andThen` / `andThenResult` were renamed to `Schedule.concat` / `concatResult`, and the old `Schedule.either` cap pattern is now `Schedule.min`.) Override per-workflow:
 
 ```ts
 const MyWorkflow = Workflow.make({

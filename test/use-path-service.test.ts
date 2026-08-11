@@ -10,9 +10,9 @@ testPattern({
     "import { dirname, basename } from 'path'"
   ],
   shouldNotMatch: [
-    "import { Path } from '@effect/platform'",
+    "import { Path } from 'effect'",
     "yield* Path.join(dir, file)",
-    "import { join } from '@effect/platform/Path'",
+    "import * as Path from 'effect/Path'",
     "const filePath = '/some/path'",
     "import fs from 'node:fs'"
   ]

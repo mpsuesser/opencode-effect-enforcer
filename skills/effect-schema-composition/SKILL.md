@@ -200,6 +200,7 @@ Schema.Number.check(Schema.isInt()); // integer
 Schema.Number.check(Schema.isInt32()); // 32-bit integer
 Schema.Number.check(Schema.isFinite()); // not Infinity/NaN
 Schema.Number.check(Schema.isMultipleOf(5));
+Schema.Natural; // canonical non-negative safe integer
 
 // Sign constraints (use comparison filters)
 Schema.Number.check(Schema.isGreaterThan(0)); // positive (> 0)
@@ -207,6 +208,8 @@ Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)); // non-negative (>= 0)
 Schema.Number.check(Schema.isLessThan(0)); // negative (< 0)
 Schema.Number.check(Schema.isLessThanOrEqualTo(0)); // non-positive (<= 0)
 ```
+
+Prefer `Schema.Natural` over a hand-built combination of integer, safe-integer, and non-negative checks when that is the domain invariant.
 
 ### Array Filters
 

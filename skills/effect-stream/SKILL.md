@@ -95,7 +95,7 @@ const fetchAllPages = Stream.paginate(
 ### From async iterables
 
 ```ts
-class IterError extends Schema.TaggedErrorClass<IterError>()('IterError', {
+class IterError extends Schema.TaggedError<IterError>()('IterError', {
 	cause: Schema.Defect()
 }) {}
 
@@ -155,7 +155,7 @@ const webStream = Stream.fromReadableStream({
 import { NodeStream } from '@effect/platform-node';
 import { Readable } from 'node:stream';
 
-class NodeErr extends Schema.TaggedErrorClass<NodeErr>()('NodeErr', {
+class NodeErr extends Schema.TaggedError<NodeErr>()('NodeErr', {
 	cause: Schema.Defect()
 }) {}
 
@@ -452,6 +452,22 @@ stream.pipe(Stream.retry(Schedule.recurs(3)));
 stream.pipe(Stream.retry(Schedule.exponential('100 millis')));
 ```
 
+Schedules can be effectful and fail. `Stream.retry` includes the schedule's error in the resulting stream error channel; `Effect.schedule` and `Effect.scheduleFrom` likewise union schedule errors into their error channels. Recover or map that error explicitly rather than assuming only the repeated operation can fail. For sequential schedule composition, use `Schedule.concat` / `Schedule.concatResult`; the former `andThen` names were removed.
+
+### Execution-plan attempt events
+
+`Stream.withExecutionPlan` accepts an `onEvent` observer for attempt-level logs and metrics:
+
+```ts
+const planned = stream.pipe(
+	Stream.withExecutionPlan(plan, {
+		onEvent: (event) => Effect.log('execution plan event', event)
+	})
+);
+```
+
+Events are `AttemptStart`, `AttemptSuccess`, or `AttemptFailure`. Every start has one terminal event, failures carry the full `Cause`, and `attempt` is cumulative while `stepAttempt` is 1-based within a step. The observer must have a `never` error channel; an observer defect is isolated from the attempt outcome and does not leave events unpaired. If a downstream consumer intentionally stops pulling early, the truncated attempt is reported as successful.
+
 ### orElseIfEmpty / orElseSucceed
 
 ```ts
@@ -680,16 +696,18 @@ const filterErrors = fileStream.pipe(
 
 ```ts
 const resilient = unreliableStream.pipe(
-	Stream.retry(Schedule.exponential('100 millis').pipe(Schedule.take(5))),
+	Stream.retry(
+		Schedule.exponential('100 millis').pipe(Schedule.upTo({ times: 5 }))
+	),
 	Stream.runCollect
 );
 ```
 
-`Schedule.take(n)` bounds an unbounded schedule to `n` recurrences (`Schedule.compose` is not exported in beta.74). To log full retry metadata without changing the schedule's behavior, add `Schedule.tap`, whose callback receives `{ attempt, input, output, duration, elapsed }`:
+`Schedule.upTo({ times: n })` bounds an unbounded schedule to `n` recurrences. To log full retry metadata without changing the schedule's behavior, add `Schedule.tap`, whose callback receives `{ attempt, input, output, duration, elapsed }`:
 
 ```ts
 const monitored = Schedule.exponential('100 millis').pipe(
-	Schedule.take(5),
+	Schedule.upTo({ times: 5 }),
 	Schedule.tap((meta) =>
 		Effect.log(
 			`attempt ${meta.attempt}, next delay ${meta.duration}, elapsed ${meta.elapsed}`

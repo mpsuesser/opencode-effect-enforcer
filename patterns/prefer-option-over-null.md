@@ -44,11 +44,11 @@ bad :: Id → User | Null
 bad id = users.get id             -- caller must check null
 
 good :: Id → Option User
-good id = Option.fromNullable (users.get id)
+good id = Option.fromNullishOr (users.get id)
 
 -- Composition
 findEmail :: Id → Option Email
-findEmail = good >=> (_.email >>> Option.fromNullable)
+findEmail = good >=> (_.email >>> Option.fromNullishOr)
 ```
 
 `Option<T>` provides chainable operations. Use `| null` or `| undefined` only at external boundaries (JSON, DOM, third-party libs).

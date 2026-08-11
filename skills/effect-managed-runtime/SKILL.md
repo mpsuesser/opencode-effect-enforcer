@@ -134,6 +134,13 @@ await runtime.dispose();
 yield* runtime.disposeEffect;
 ```
 
+`ManagedRuntime` also implements `Symbol.asyncDispose`, so environments with explicit resource management can dispose it automatically:
+
+```ts
+await using runtime = ManagedRuntime.make(AppLayer);
+const result = await runtime.runPromise(program);
+```
+
 ### Shutdown hook pattern
 
 ```ts
@@ -166,7 +173,7 @@ class CreateTodoPayload extends Schema.Class<CreateTodoPayload>(
 	title: Schema.String
 }) {}
 
-class TodoNotFound extends Schema.TaggedErrorClass<TodoNotFound>()(
+class TodoNotFound extends Schema.TaggedError<TodoNotFound>()(
 	'TodoNotFound',
 	{
 		id: Schema.Number

@@ -34,7 +34,7 @@ Use three layers:
 ### EF-1: Errors are data, not side effects
 
 - If logic can fail, return `Effect.Effect<A, E, R>` with a typed error `E`.
-- Use `Schema.TaggedErrorClass` for public or cross-module failures.
+- Use `Schema.TaggedError` for public or cross-module failures.
 - Do not `throw` or use `new Error(...)` in production domain logic.
 - Do not use `try { } catch` blocks in Effect code; use `Effect.try` or `Effect.tryPromise` to capture throwable operations into the typed error channel.
 
@@ -45,9 +45,7 @@ import { Effect } from 'effect';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
 
-class MissingConfigError extends Schema.TaggedErrorClass<MissingConfigError>(
-	'MissingConfigError'
-)(
+class MissingConfigError extends Schema.TaggedError<MissingConfigError>()(
 	'MissingConfigError',
 	{ key: Schema.String },
 	{ description: 'Required configuration key is missing' }
@@ -90,7 +88,7 @@ const toDisplayName = (rawName: string | null | undefined) =>
 
 - Unknown or external data must be decoded at the boundary.
 - Prefer `Schema.decodeUnknownEffect` for effectful paths and `Schema.decodeUnknownSync` only where sync failure handling is explicit.
-- Never use `JSON.parse` / `JSON.stringify`; use schema JSON codecs (`Schema.UnknownFromJsonString`, `Schema.fromJsonString`, `Schema.decodeUnknown*`, `Schema.encode*`).
+- Never use `JSON.parse` / `JSON.stringify`; use schema JSON codecs (`Schema.fromJsonString`, `Schema.decodeUnknown*`, `Schema.encode*`). For unknown JSON, use `Schema.fromJsonString(Schema.Unknown)`.
 - Prefer `Schema.Class` over `Schema.Struct` for all decoded shapes — including HTTP response bodies, API payloads, and ephemeral wire formats, not just domain models. Named `Schema.Class` types enable `instanceof` discrimination (e.g., `Schema.Union([SuccessResponse, ErrorResponse])` then `if (parsed instanceof ErrorResponse)`), which is compile-time safe.
 - Do not name schemas with a `Schema` suffix; schema constants should be named after the domain type.
 - For non-class schemas, export type aliases with the same identifier name as the schema value.
@@ -223,7 +221,7 @@ export class MyService extends Context.Service<
 
 - Do not use native `fetch` in runtime source.
 - Compose requests/responses with `HttpClientRequest`, `HttpClientResponse`, `Headers`, `UrlParams`, `HttpMethod`, and `HttpBody`.
-- Provide runtime client layers explicitly (`@effect/platform-bun/BunHttpClient.layer` for Bun runtimes).
+- Provide runtime client layers explicitly (`BunHttpClient.layer` from `@effect/platform-bun` for Bun runtimes).
 
 ### EF-10: Tests stay effect-native
 
@@ -303,10 +301,10 @@ export class ExternalJobCompleted extends Schema.Class<ExternalJobCompleted>(
 	{ description: 'Completed event from external job source.' }
 ) {}
 
-export const ExternalJobEvent = Schema.Union(
+export const ExternalJobEvent = Schema.Union([
 	ExternalJobCreated,
 	ExternalJobCompleted
-)
+])
 	.pipe(Schema.toTaggedUnion('kind'))
 	.annotate({
 		title: 'ExternalJobEvent',
@@ -342,7 +340,7 @@ export const loadUser = Effect.fn('User.load')(function* (userId: string) {
 });
 
 const parseInternal = Effect.fnUntraced(function* (input: string) {
-	return yield* Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
+	return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(
 		input
 	);
 });
@@ -444,10 +442,10 @@ const b = pipe('value', addPrefix('p:'));
 
 ### EF-19: JSON parse/stringify must use Schema
 
-- Use `Schema.UnknownFromJsonString` for unknown JSON payloads.
+- Use `Schema.fromJsonString(Schema.Unknown)` for unknown JSON payloads. `Schema.UnknownFromJsonString` is internal as of beta.103.
 - Use `Schema.fromJsonString(MySchema)` for typed JSON string boundaries.
 - Avoid direct `JSON.parse` / `JSON.stringify` in Effect-first code.
-- Reference: [UnknownFromJsonString](packages/effect/SCHEMA.md:4011) (via effect_ref_read) and [fromJsonString](packages/effect/SCHEMA.md:4028) (via effect_ref_read).
+- Reference: [`fromJsonString`](packages/effect/src/Schema.ts) in the Effect v4 source.
 
 Example:
 
@@ -588,7 +586,8 @@ const runWithHeartbeat = Effect.fn('Worker.run')(function* () {
 - For non-trivial fan-out, set concurrency in `Effect.forEach`, `Effect.all`, or `Effect.validate`.
 - Avoid implicit unbounded parallelism on large collections.
 - Concurrency should be part of API intent for throughput-sensitive paths.
-- Reference: [forEach concurrency](packages/effect/src/Effect.ts:990) (via effect_ref_read), [all concurrency](packages/effect/src/Effect.ts:751) (via effect_ref_read), [withConcurrency](packages/effect/src/Effect.ts:6001) (via effect_ref_read).
+- Use an explicit number or `"unbounded"`. The `"inherit"` option and `Effect.withConcurrency` were removed in beta.102.
+- Reference: `Effect.forEach`, `Effect.all`, and `Types.Concurrency` in the Effect v4 source.
 
 Example:
 
@@ -734,6 +733,7 @@ export class CreateOrderInput extends Schema.Class<CreateOrderInput>(
 - Put defaults in schema definitions, not in handler/service fallback object literals.
 - Use `Schema.withConstructorDefault` for constructor-time defaults.
 - Use `Schema.withDecodingDefault` / `Schema.withDecodingDefaultKey` for decode-time defaults.
+- Constructor defaults may fail with `SchemaIssue.Issue`. Likewise, `Schema.makeEffect` returns validation failures directly as `SchemaIssue.Issue`, not wrapped in `Schema.SchemaError`.
 
 Example:
 
@@ -990,7 +990,7 @@ const [cachedConfig, invalidate] =
 ```ts
 import * as Schema from 'effect/Schema';
 
-class DomainError extends Schema.TaggedErrorClass<DomainError>('DomainError')(
+class DomainError extends Schema.TaggedError<DomainError>()(
 	'DomainError',
 	{
 		message: Schema.String

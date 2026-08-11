@@ -253,7 +253,7 @@ Rpc.make('GetUser', { ... })
 
 These are **wrappers**, not options. They wrap a handler's *return value* (Effect or Stream) and tell the server to:
 
-- `Rpc.fork(value)` — bypass the server's per-connection concurrency semaphore. Use for read-only or idempotent handlers that should not back up behind sequential ones.
+- `Rpc.fork(value)` — bypass the server instance's shared concurrency semaphore. Use for read-only or idempotent handlers that should not back up behind sequential ones.
 - `Rpc.uninterruptible(value)` — run the handler in `Effect.uninterruptible`. Use for handlers that must complete (cleanup, finalize-then-return) regardless of client cancellation.
 - `Rpc.wrap({ fork?, uninterruptible? })(value)` — apply both at once.
 
@@ -480,7 +480,7 @@ const ServerLayer = RpcServer.layer(UsersGroup, {
 
 Server options:
 
-- **`concurrency: number | 'unbounded'`** (default `'unbounded'`) — semaphore around handler execution. Per-connection. `Rpc.fork(...)` opts a single handler out of this limit.
+- **`concurrency: number | 'unbounded'`** (default `'unbounded'`) — one semaphore around handler execution for the whole server instance, shared by all clients. `Rpc.fork(...)` opts a single handler out of this limit.
 - **`disableFatalDefects: boolean`** (default `false`) — by default, a `die` inside a handler is treated as a *connection-level* defect and crashes the whole connection's response stream. With `true`, defects come back to the client as a normal `Cause.Die` in the request's exit. Production servers usually want `true`; the cluster fixture uses it.
 - **`disableTracing: boolean`** + **`spanPrefix`** + **`spanAttributes`** — span control. Each rpc gets a span named `${spanPrefix}.${rpc._tag}`.
 
@@ -583,7 +583,7 @@ Each generated method is `(payload, options?) => Effect | Stream`. The option sh
 client.GetUser({ id: 'u1' }, {
 	headers?: Headers.Input,    // per-call headers
 	context?: Context<never>,   // per-call context (rare)
-	discard?: true              // returns Effect<void, never, R>; no response decoding
+	discard?: true              // returns Effect<void, transport | middleware errors>; no response decoding
 });
 
 // Stream rpc
@@ -638,7 +638,7 @@ Rpc.Error<R>                    // your declared rpc error
 `RpcClientError` is a tagged union itself:
 
 ```ts
-class RpcClientError extends Schema.ErrorClass(...)({
+class RpcClientError extends Schema.Error(...)({
 	_tag: 'RpcClientError',
 	reason: Schema.Union([
 		WorkerErrorReason,
@@ -656,7 +656,7 @@ Pattern-match on `error.reason._tag` to handle transport faults (network down, m
 | Layer | Requires | Notes |
 |---|---|---|
 | `RpcClient.layerProtocolHttp({ url, transformClient? })` | `RpcSerialization`, `HttpClient` | request/response. `transformClient` lets you rewrite the underlying `HttpClient` (e.g., add auth headers, prepend URL paths) |
-| `RpcClient.layerProtocolSocket({ retryTransientErrors? })` | `RpcSerialization`, `Socket.Socket` | full duplex. Auto-pings every 5s; reconnects on transient socket errors |
+| `RpcClient.layerProtocolSocket({ retryTransientErrors?, onTransientError? })` | `RpcSerialization`, `Socket.Socket` | full duplex. Auto-pings every 5s; reconnects on transient socket errors; reports retried open failures through `onTransientError` |
 | `RpcClient.layerProtocolWorker(options)` | `Worker.WorkerPlatform`, `Worker.Spawner` | pool of worker-backed clients. Options: either `{ size, concurrency?, targetUtilization? }` or `{ minSize, maxSize, timeToLive, concurrency?, targetUtilization? }` |
 
 For each there's a corresponding `make*` Effect (`makeProtocolHttp`, `makeProtocolSocket`, `makeProtocolWorker`) when you need finer control over context.
@@ -698,7 +698,7 @@ import { Context, Schema } from 'effect';
 
 class CurrentUser extends Context.Service<CurrentUser, User>()('CurrentUser') {}
 
-class Unauthorized extends Schema.ErrorClass<Unauthorized>('Unauthorized')({
+class Unauthorized extends Schema.Error<Unauthorized>('Unauthorized')({
 	_tag: Schema.tag('Unauthorized')
 }) {}
 
@@ -1061,7 +1061,7 @@ const useCounter = Effect.gen(function*() {
 Required context: `Sharding`. The client's error channel is augmented with cluster-specific errors:
 
 ```
-Rpc.Error<R> | MailboxFull | AlreadyProcessingMessage | PersistenceError
+Rpc.Error<R> | MailboxFull | AlreadyProcessingMessage | PersistenceError | EntityNotAssignedToRunner
 ```
 
 Use `discard: true` for fire-and-forget commands (skip the reply round-trip):
@@ -1311,7 +1311,11 @@ const ApiLayer = HttpApiBuilder.layer(Api).pipe(
 );
 ```
 
-The generated **RPC** payload wraps the original payload as `{ entityId: string, payload: <original payload> }`. The generated **HTTP** endpoints are shaped differently: `entityId` is a route param (`POST /counter/increment/:entityId`) read server-side via `params.entityId`, and the request **body** is the original payload directly — there is no `{ entityId, payload }` wrapper over HTTP. Either way, errors include the original error type plus `MailboxFull | AlreadyProcessingMessage | PersistenceError`.
+The generated **RPC** payload wraps the original payload as `{ entityId: string, payload: <original payload> }`. The generated **HTTP** endpoints are shaped differently: `entityId` is a route param (`POST /counter/increment/:entityId`) read server-side via `params.entityId`, and the request **body** is the original payload directly — there is no `{ entityId, payload }` wrapper over HTTP. Request/reply endpoints include the original error type plus `MailboxFull | AlreadyProcessingMessage | PersistenceError | EntityNotAssignedToRunner`; discard endpoints remain unchanged because they do not await assignment or a reply.
+
+### Encrypted Event-Log Compatibility
+
+As of beta.106, `EventLogEncryption.encrypt` returns `{ iv, encryptedEntry }` for every input entry, and `EventLogMessage.WriteEntries.encryptedEntries` carries `{ entryId, iv, encryptedEntry }` values. A fresh AES-GCM IV is generated per entry. This changes the encrypted replication wire format: upgrade encrypted event-log clients and servers together rather than performing a mixed-version rolling deployment.
 
 ### `WorkflowProxy` — workflow → RPC / HTTP
 
@@ -1411,12 +1415,12 @@ export class User extends Schema.Class<User>('User')({
 	name: Schema.String
 }) {}
 
-export class UserNotFound extends Schema.ErrorClass<UserNotFound>('UserNotFound')({
+export class UserNotFound extends Schema.Error<UserNotFound>('UserNotFound')({
 	_tag: Schema.tag('UserNotFound'),
 	id: Schema.String
 }) {}
 
-export class Unauthorized extends Schema.ErrorClass<Unauthorized>('Unauthorized')({
+export class Unauthorized extends Schema.Error<Unauthorized>('Unauthorized')({
 	_tag: Schema.tag('Unauthorized')
 }) {}
 
@@ -1570,7 +1574,7 @@ const usersByName = Effect.gen(function*() {
 - Define rpcs in shared modules so server, client, entity, proxy, and AtomRpc all consume the same definitions.
 - Pick `class extends Rpc.make(...)` for nominal types you import widely; pick `const` for ad-hoc ones.
 - Use `Schema.Class` for non-trivial payloads/successes/errors; let `Rpc.make` build a struct only for tiny inline payloads.
-- Use `Schema.TaggedErrorClass` (or `Schema.ErrorClass` with a `Schema.tag` field) for every rpc/middleware error.
+- Use `Schema.TaggedError` (or `Schema.Error` with a `Schema.tag` field) for every rpc/middleware error.
 - Set `defect: Schema.Defect({ includeStack: true })` on rpcs whose defects you want to debug across the wire.
 - Set `primaryKey` on every rpc that gets persisted or retried; cluster will dedupe based on it.
 - Annotate persistent entities with `ClusterSchema.Persisted` (via `entity.annotateRpcs`).

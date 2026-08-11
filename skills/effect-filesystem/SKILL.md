@@ -5,7 +5,7 @@ description: Use Effect FileSystem for platform-abstract file I/O with Node.js/B
 
 # FileSystem Platform Abstraction
 
-Use `effect` FileSystem for platform-abstract file I/O. Stock layers are provided for Node.js and Bun; `@effect/platform-browser` does not provide a FileSystem layer in beta.74, so browser code needs a custom/injected implementation.
+Use `effect` FileSystem for platform-abstract file I/O. Stock layers are provided for Node.js and Bun; `@effect/platform-browser` does not provide a FileSystem layer, so browser code needs a custom/injected implementation.
 
 ## Basic Pattern
 
@@ -207,13 +207,16 @@ const useFileHandle = Effect.gen(function* () {
 		Effect.gen(function* () {
 			const file = yield* fs.open('data.txt', { flag: 'r' });
 
-			// Use file.read(), file.write(), etc.
+			// File methods return branded Size values for byte counts and offsets.
 			const buffer = new Uint8Array(1024);
 			const bytesRead = yield* file.read(buffer);
+			const offset = yield* file.seek(FileSystem.Size(0), 'start');
 		})
 	);
 });
 ```
+
+`file.seek(offset, from)` accepts a `SizeInput`, supports `from: 'start' | 'current'`, and returns the new offset as `FileSystem.Size` (not `void` or a plain number). Open `File` handles no longer expose a `descriptor` property or `File.Descriptor` type as of beta.103; use the scoped handle operations (`read`, `readAlloc`, `write`, `writeAll`, `seek`, `stat`, `sync`, and `truncate`) instead.
 
 ## Directory Operations
 
@@ -281,7 +284,7 @@ const getFileInfo = Effect.gen(function* () {
 
 	yield* Console.log(`Type: ${info.type}`);
 	// "File" | "Directory" | "SymbolicLink" | "BlockDevice" | "CharacterDevice" | "FIFO" | "Socket" | "Unknown"
-	yield* Console.log(`Size: ${info.size}`); // bigint
+	yield* Console.log(`Size: ${info.size}`); // FileSystem.Size (branded bigint)
 	yield* Console.log(`Modified: ${info.mtime}`); // Option<Date>
 	yield* Console.log(`Accessed: ${info.atime}`); // Option<Date>
 	yield* Console.log(`Created: ${info.birthtime}`); // Option<Date>
@@ -410,7 +413,7 @@ import { Effect, Stream, Console, pipe } from 'effect';
 const watchFiles = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
 	// fs.watch() returns a Stream directly — not an Effect
-	const events = fs.watch('src/');
+	const events = fs.watch('src/'); // direct children only
 
 	return events; // Stream<WatchEvent, PlatformError>
 });
@@ -418,7 +421,7 @@ const watchFiles = Effect.gen(function* () {
 // Consume watch events
 const consumeWatchEvents = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
-	const events = fs.watch('config/');
+	const events = fs.watch('config/', { recursive: true });
 
 	yield* pipe(
 		events,
@@ -428,6 +431,8 @@ const consumeWatchEvents = Effect.gen(function* () {
 	);
 });
 ```
+
+Directory watching is non-recursive by default. Pass `{ recursive: true }` to include changes in nested subdirectories. Watching a file watches that file; the recursive option matters for directory trees.
 
 ## Size Helpers
 
@@ -451,7 +456,7 @@ const checkFileSize = Effect.gen(function* () {
 	const info = yield* fs.stat('large-file.bin');
 
 	const maxSize = MiB(100);
-	if (info.size > BigInt(maxSize)) {
+	if (info.size > maxSize) {
 		yield* Effect.fail(new Error('File too large'));
 	}
 });
@@ -506,14 +511,14 @@ const readConfigWithFallback = pipe(
 import { FileSystem } from 'effect';
 import { Effect, Schema, pipe } from 'effect';
 
-class ConfigNotFound extends Schema.TaggedErrorClass<ConfigNotFound>()(
+class ConfigNotFound extends Schema.TaggedError<ConfigNotFound>()(
 	'ConfigNotFound',
 	{
 		path: Schema.String
 	}
 ) {}
 
-class ConfigInvalid extends Schema.TaggedErrorClass<ConfigInvalid>()(
+class ConfigInvalid extends Schema.TaggedError<ConfigInvalid>()(
 	'ConfigInvalid',
 	{
 		path: Schema.String,

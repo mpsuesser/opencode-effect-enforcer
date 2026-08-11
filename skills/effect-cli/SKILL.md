@@ -277,7 +277,7 @@ Command.make('deploy', config, handler).pipe(
 	Command.withDescription('Deploy the application'),
 	Command.withShortDescription('Deploy app'), // used in subcommand listings
 	Command.withAlias('d'), // alternate name
-	Command.withHidden, // hide internal/experimental subcommands from parent help
+	Command.unlisted, // omit internal/experimental subcommands from discovery
 	Command.withExamples([
 		{
 			command: 'myapp deploy --env prod',
@@ -288,7 +288,7 @@ Command.make('deploy', config, handler).pipe(
 );
 ```
 
-`Command.withHidden` keeps a subcommand invocable by exact name while omitting it from parent help output, shell completions, and "did you mean?" suggestions.
+`Command.unlisted` keeps a subcommand invocable by exact name while omitting it from parent help output, shell completions, and "did you mean?" suggestions. In beta.104, this replaced `Command.withHidden`, and the command metadata property was renamed from `hidden` to `unlisted`. `Flag.withHidden` is unchanged and remains the correct combinator for flags.
 
 ### Nested Config
 

@@ -88,7 +88,18 @@ const CalculatorTool = Tool.make('CalculatorTool', {
 	},
 	success: Schema.Number
 });
+
+const NotifyTool = Tool.make('NotifyTool', {
+	description: 'Send an optional notification',
+	parameters: {
+		message: Schema.String,
+		channel: Schema.optionalKey(Schema.String)
+	},
+	success: Schema.Void
+});
 ```
+
+MCP callers may omit fields declared with `Schema.optionalKey`; do not assume the protocol sends an `arguments` object containing every field. A `Schema.Void` tool may return `Effect.void`; `undefined` is a successful tool result, not an internal error.
 
 ### Creating a Toolkit
 

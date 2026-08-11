@@ -510,7 +510,7 @@ const completed =
 ### Migration Loaders
 
 ```ts
-// From filesystem (requires FileSystem service)
+// From filesystem (requires both FileSystem and Path services)
 Migrator.fromFileSystem('./migrations');
 
 // From Vite/bundler glob import; only .js/.ts/.mjs/.mts keys are loaded
@@ -531,6 +531,8 @@ Migrator.fromRecord({
 // From Babel-style glob (keys like _0001_createUsersTs or _0001_createUsersMts)
 Migrator.fromBabelGlob(migrations);
 ```
+
+`fromFileSystem` resolves dynamic imports through the platform `Path` service so absolute Windows paths become valid file URLs. Its loader requirement is `FileSystem | Path`; aggregate platform layers already provide both, but a standalone `FileSystem` layer must now be paired with the matching platform-aware `Path` layer (not a POSIX-only layer on Windows).
 
 ### Migration Errors
 

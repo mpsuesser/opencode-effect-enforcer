@@ -218,6 +218,7 @@ Why checkpoint-based merging:
 
 - With automatic framework tool resolution enabled, `finish` is deferred until tool handler streams complete so emitted tool results appear before finish.
 - `tool-result` parts can be preliminary or final. Use preliminary results for progress updates only; `Prompt.fromResponseParts` skips preliminary results and persists final results.
+- `Prompt.fromResponseParts` routes framework-executed final results into a tool message, but keeps provider-executed final results in the assistant message. It preserves `providerExecuted` and uses `encodedResult` in both cases.
 - Tools requiring approval emit `tool-approval-request`. Append a matching `Prompt.toolApprovalResponsePart` in a tool message and call the model again; approved/denied responses are pre-resolved into final tool results before the next provider call.
 - In OpenAI-specific SSE code, unknown future events decode through `OpenAiSchema.ResponseStreamEvent` and are ignored by `OpenAiLanguageModel`; malformed known events still fail decoding.
 
@@ -370,6 +371,12 @@ Stream.mapChunksEffect(Effect.fnUntraced(function* (chunk) {
 // Handle with:
 Match.when({ type: "error" }, ({ error }) => Effect.fail(error))
 ```
+
+## ExecutionPlan Streaming Nuances
+
+`Stream.withExecutionPlan(plan, { onEvent })` emits the same ordered `AttemptStart` / `AttemptSuccess` / `AttemptFailure` lifecycle as the Effect combinator. A downstream consumer that stops pulling early reports `AttemptSuccess`, because the consumer ended the attempt rather than the source failing.
+
+Set `preventFallbackOnPartialStream: true` when a provider failure after emitted chunks must fail the stream rather than append fallback-provider output to the partial response. Lifecycle observer defects are ignored and cannot change stream attempt outcomes.
 
 ## Quality Checklist
 

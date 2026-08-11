@@ -409,6 +409,8 @@ it.effect('should track time correctly', () =>
 );
 ```
 
+The clock separates Unix wall time (`Clock.currentTimeMillis` / `currentTimeNanos`) from monotonic elapsed time (`Clock.monotonicTimeNanos`). `TestClock.adjust` advances both, while `TestClock.setTime` may move wall time backward without decreasing monotonic time. Duration measurements such as `Effect.timed` therefore remain stable across wall-clock corrections. Nanosecond wall time also remains precise for large finite timestamps, and reads stay total after an infinite adjustment.
+
 ### TestClock with Deferred
 
 ```typescript
@@ -445,7 +447,7 @@ Use `Effect.flip` to convert failures to successes:
 import { it, expect } from '@effect/vitest';
 import { Effect, Schema } from 'effect';
 
-class UserNotFoundError extends Schema.TaggedErrorClass<UserNotFoundError>()(
+class UserNotFoundError extends Schema.TaggedError<UserNotFoundError>()(
 	'UserNotFoundError',
 	{
 		userId: Schema.String
@@ -495,7 +497,7 @@ import { it, expect } from '@effect/vitest';
 import { Effect, Exit, Cause, Schema } from 'effect';
 import * as Option from 'effect/Option';
 
-class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()(
+class NotFoundError extends Schema.TaggedError<NotFoundError>()(
 	'NotFoundError',
 	{
 		id: Schema.String
@@ -607,6 +609,18 @@ it.effect.prop('user validation works', { user: User }, ({ user }) =>
 	})
 );
 ```
+
+`it.prop` and `it.effect.prop` accept schemas directly and derive their arbitraries internally. For manual use, beta.106 consolidated derivation into `Schema.toArbitrary(schema)`, which returns a factory that must receive the fast-check module:
+
+```typescript
+import { Schema } from 'effect';
+import { FastCheck } from 'effect/testing';
+
+const UserArbitrary = Schema.toArbitrary(User)(FastCheck);
+const samples = FastCheck.sample(UserArbitrary, 10);
+```
+
+`Schema.toArbitraryLazy` and arbitrary derivation reports no longer exist.
 
 ### Configuring FastCheck
 

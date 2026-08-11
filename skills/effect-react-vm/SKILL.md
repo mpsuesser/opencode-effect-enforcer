@@ -383,6 +383,17 @@ registry.get(count$); // read
 registry.set(count$, 42); // write
 ```
 
+For UI-ready object values rebuilt from multiple atoms, use `Atom.withEquality` when semantic equality should suppress a React notification. The comparator must compare the complete rendered meaning of the value; omitting a rendered field can leave the UI stale.
+
+```typescript
+declare const HeaderViewEquivalence: (left: HeaderView, right: HeaderView) => boolean;
+
+const header$ = Atom.make((get) => {
+	const state = get(state$);
+	return toHeaderView(state);
+}).pipe(Atom.withEquality(HeaderViewEquivalence));
+```
+
 ### Data.TaggedEnum - State Machines
 
 ```tsx
@@ -655,6 +666,7 @@ function UserCard({ vm }: { vm: UserVM }) {
 - Use `Atom.family` for list item sub-VMs
 - Use `Effect.forkScoped` for background tasks
 - Handle all errors in actions (update atom on failure)
+- Use `Atom.withEquality` for rebuilt UI-ready objects only when a complete semantic equivalence is available
 
 **Testing**
 

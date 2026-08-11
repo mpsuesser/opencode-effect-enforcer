@@ -19,9 +19,9 @@ testPattern({
     "const fsp = require('node:fs/promises')"
   ],
   shouldNotMatch: [
-    "import { FileSystem } from '@effect/platform'",
+    "import { FileSystem } from 'effect'",
     "yield* FileSystem.readFile(path)",
-    "import { readFileString } from '@effect/platform/FileSystem'",
+    "import * as FileSystem from 'effect/FileSystem'",
     "import { join } from 'node:path'",
     // Strings / comments mentioning the banned modules
     "const note = 'use FileSystem instead of node:fs/promises'",

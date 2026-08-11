@@ -476,6 +476,22 @@ const ObservabilityLayer = Layer.mergeAll(
 );
 ```
 
+### Manual OTLP Flush
+
+Each OTLP signal layer now outputs the shared `OtlpExporter.Flusher` service. Use it before a controlled handoff or shutdown when buffered telemetry must be exported immediately:
+
+```ts
+import { Effect } from 'effect';
+import { OtlpExporter } from 'effect/unstable/observability';
+
+const flushTelemetry = Effect.gen(function* () {
+	const flusher = yield* OtlpExporter.Flusher;
+	yield* flusher.flush.pipe(Effect.timeoutOption('5 seconds'));
+});
+```
+
+All signal layers in the same memoized layer graph share one flusher registry, so one call drains logs, traces, and metrics concurrently. `flush` cannot fail and has no built-in timeout; it waits only for exports it starts, not an export already in flight.
+
 ### OTLP Layer Options
 
 Common options for the individual OTLP exporters (`OtlpLogger.layer`, `OtlpTracer.layer`, `OtlpMetrics.layer`):
@@ -700,3 +716,4 @@ class Checkout extends Context.Service<
 8. **`Metric.withAttributes` creates a tagged variant** — it does not mutate the original metric.
 9. **`OtlpMetrics` temporality** — use `"delta"` for backends like Datadog/Dynatrace, `"cumulative"` (default) for Prometheus-style backends.
 10. **All OTLP modules are under `effect/unstable/observability`** — the API may evolve but the patterns are stable.
+11. **Use `OtlpExporter.Flusher` for manual drains** — bound `flusher.flush` with `Effect.timeoutOption` when shutdown latency must be capped.

@@ -3,7 +3,7 @@ action: context
 tool: (edit|write)
 event: after
 name: use-command-executor-service
-description: Use Effect's Command / CommandExecutor / ChildProcessSpawner instead of node:child_process
+description: Use Effect's ChildProcessSpawner instead of node:child_process
 glob: '**/*.{ts,tsx}'
 detector: ast
 rule:
@@ -32,8 +32,6 @@ spawn / exec / execFile     :: Args → Promise / Stream  -- ad-hoc lifecycle
 -- Instead
 ChildProcess        :: Args → ChildProcess           -- pure value, declarative
 ChildProcessSpawner :: Effect a ChildProcessSpawner  -- typed I/O, scoped lifetime
-Command             :: Args → Command                -- Effect platform API
-CommandExecutor     :: Effect a CommandExecutor      -- typed errors, layered
 ```
 
 ```haskell
@@ -48,18 +46,9 @@ good = do
   -- typed output, error channel, scoped lifetime
 ```
 
-```haskell
--- Pattern (@effect/platform — older Command API, still supported)
-good₂ :: Effect String (CommandExecutor | Scope)
-good₂ = do
-  executor ← CommandExecutor.CommandExecutor
-  let cmd = Command.make "git" "status"
-  executor.string cmd
-```
-
-Direct `child_process` imports give you callback APIs, manual lifecycle, and no error channel. Use Effect's `ChildProcessSpawner` (or `CommandExecutor`) for typed errors, scoped resource lifetime, and platform-agnostic process spawning.
+Direct `child_process` imports give you callback APIs, manual lifecycle, and no error channel. Use `ChildProcessSpawner` and `ChildProcess` from `effect/unstable/process` for typed errors, scoped resource lifetime, and platform-agnostic process spawning.
 
 **Exceptions:**
 
 - Build scripts and tooling config that legitimately couple to Node
-- Platform-specific layers that implement `ChildProcessSpawner` / `CommandExecutor`
+- Platform-specific layers that implement `ChildProcessSpawner`

@@ -50,6 +50,8 @@ Prompt.setSystem  :: (Prompt, String) → Prompt
 fromResponseParts :: ReadonlyArray<Response.Part> → Prompt
 ```
 
+The beta.107 module also exports runtime schemas for every part and each role-specific part union: `TextPart`, `ReasoningPart`, `FilePart`, `ToolCallPart`, `ToolResultPart`, `ToolApprovalRequestPart`, `ToolApprovalResponsePart`, `UserMessagePart`, `AssistantMessagePart`, and `ToolMessagePart`. Use these schemas to decode unknown persisted or provider-adapter input instead of relying only on `isPart`.
+
 ## Message Types
 
 Each message has `role` and `content`. Content is an array of `Part` objects.
@@ -398,7 +400,9 @@ const responseParts: ReadonlyArray<Response.AnyPart> = [
 const historyPrompt = Prompt.fromResponseParts(responseParts);
 ```
 
-`Prompt.fromResponseParts` folds streaming text/reasoning only when the matching start/delta/end parts are present in the same input, places tool calls and approval requests in assistant messages, places non-preliminary tool results in tool messages using `encodedResult`, and skips preliminary tool results.
+`Prompt.fromResponseParts` folds streaming text/reasoning only when the matching start/delta/end parts are present in the same input, places tool calls and approval requests in assistant messages, and skips preliminary tool results. For final tool results it always uses `encodedResult`: framework-executed results (`providerExecuted: false`) become tool messages, while provider-executed results (`providerExecuted: true`) remain in the assistant message with that flag preserved.
+
+This distinction matters for hosted tools such as provider web search or code execution. Moving their results into a tool message changes the conversation shape expected by the provider.
 
 ### Effect-Returning Prompt/Message Helpers
 
@@ -717,6 +721,20 @@ const filtered = responseParts.filter((p) => p.type === 'text');
 // DO: Use fromResponseParts (handles streaming deltas, tool results, etc.)
 const historyPrompt = Prompt.fromResponseParts(responseParts);
 ```
+
+### Decoding Unknown Parts
+
+```typescript
+import * as Schema from 'effect/Schema';
+
+const decodeAssistantPart = Schema.decodeUnknownEffect(
+	Prompt.AssistantMessagePart
+);
+
+const decoded = yield* decodeAssistantPart(unknownPart);
+```
+
+Use `Prompt.Part` for the unrestricted part union or a role-specific schema when the destination message role is already known.
 
 ## Related Skills
 

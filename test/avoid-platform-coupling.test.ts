@@ -5,7 +5,9 @@ testPattern({
   shouldMatch: [
     `import * as BunServices from "@effect/platform-bun/BunServices"`,
     `import { BunRuntime } from "@effect/platform-bun/BunRuntime"`,
-    `import * as BunContext from "@effect/platform-bun/BunContext"`
+    `import { BunServices } from "@effect/platform-bun"`,
+    `import { NodeServices } from "@effect/platform-node"`,
+    `const platform = await import("@effect/platform-node/NodeServices")`
   ],
   shouldNotMatch: [
     `import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner"`,

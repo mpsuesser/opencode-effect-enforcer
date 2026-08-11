@@ -40,26 +40,25 @@ HttpClientResponse  :: Response codec helpers     -- schema-validated JSON, stre
 bad :: URL → IO Response
 bad url = http.get url (cb)                       -- callback, untyped errors
 
-good :: URL → Effect Response (HttpClient | Scope)
+good :: URL → Effect User HttpClient
 good url = pipe
-  (HttpClientRequest.get url)
-  HttpClient.execute
-  Effect.flatMap HttpClientResponse.json
-  -- typed Response, error channel, retries, timeouts, layer-based testing
+  (HttpClient.get url)
+  (Effect.flatMap (HttpClientResponse.schemaBodyJson User))
+  -- schema-decoded body, typed error channel, layer-based testing
 ```
 
 ```haskell
 -- Composable request building
-request :: HttpClientRequest
+request :: Effect HttpClientRequest HttpBodyError
 request = pipe
   (HttpClientRequest.post "/api/users")
   (HttpClientRequest.bodyJson { name: "Alice" })
-  (HttpClientRequest.setHeader "Authorization" "Bearer …")
 
 -- With retry, timeout, tracing
-resilient :: Effect Response (HttpClient | Scope)
+resilient :: Effect Response (HttpClient | HttpBodyError)
 resilient = pipe
-  (HttpClient.execute request)
+  request
+  (Effect.flatMap HttpClient.execute)
   (Effect.retry (Schedule.recurs 3))
   (Effect.timeout (Duration.seconds 10))
 

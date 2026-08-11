@@ -112,6 +112,8 @@ response.reasoningText; // string | undefined - concatenated reasoning content
 
 With toolkit auto-resolution enabled, normal framework tool calls run and return `tool-result` parts. Tools with `needsApproval` return `tool-approval-request` until the next prompt supplies a matching `Prompt.toolApprovalResponsePart`; approved calls execute, and denied calls become `execution-denied` tool results.
 
+When converting `response.content` back into history, `Prompt.fromResponseParts` keeps provider-executed final tool results in the assistant message and places framework-executed final results in a tool message. It skips preliminary results and uses each result's `encodedResult`, preserving the provider's expected conversation shape.
+
 ## generateObject Pattern (Structured Output)
 
 Force schema-validated output from the model:
@@ -594,6 +596,25 @@ const plan = ExecutionPlan.make(
 ```
 
 This allows automatic failover between providers with configurable retry attempts per provider.
+
+Observe fallback behavior with the lifecycle hook instead of instrumenting each provider separately:
+
+```typescript
+const generated = LanguageModel.generateText({ prompt: '...' }).pipe(
+	Effect.withExecutionPlan(plan, {
+		onEvent: (event) =>
+			Effect.logDebug('language model attempt').pipe(
+				Effect.annotateLogs({
+					event: event._tag,
+					attempt: event.attempt,
+					stepAttempt: event.stepAttempt,
+					stepIndex: event.stepIndex
+				})
+	})
+);
+```
+
+`AttemptFailure` contains the full `Cause`; every `AttemptStart` is paired with one success/failure terminal event, including interruption. Event handlers are awaited in order and their defects are ignored so observation cannot alter fallback outcomes.
 
 ### Model.ProviderName
 

@@ -86,6 +86,8 @@ Each platform context (`NodeServices.layer`, `BunServices.layer`) provides these
 
 `Crypto.Crypto` is included in the Node/Bun aggregate layers; browser applications can provide `BrowserCrypto.layer` when they need the crypto service. These aggregate layers are core service bundles: they do **not** provide specialized integrations such as HTTP clients/servers, sockets, workers, or Redis. For sockets, import `Socket.Socket` / `SocketServer.SocketServer` from `effect/unstable/socket` and provide socket-specific layers such as `NodeSocket.layerWebSocket(...)`, `NodeSocket.layerNet(...)`, `BunSocket.layerWebSocket(...)`, `BrowserSocket.layerWebSocket(...)`, or Node/Bun socket-server layers as appropriate.
 
+`Migrator.fromFileSystem` now requires both `FileSystem.FileSystem` and `Path.Path`. `NodeServices.layer` and `BunServices.layer` already satisfy both. If a migration runtime provides only an individual file-system layer, add the matching host path layer too; on Windows, core `Path.layer` is not a substitute for a platform-aware path implementation because it uses POSIX semantics.
+
 ### Usage Example
 
 ```typescript
@@ -296,7 +298,7 @@ interface Config {
 
 declare const ConfigSchema: Schema.Schema<Config>;
 
-class ConfigError extends Schema.TaggedErrorClass<ConfigError>()(
+class ConfigError extends Schema.TaggedError<ConfigError>()(
 	'ConfigError',
 	{
 		message: Schema.String

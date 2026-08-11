@@ -129,7 +129,7 @@ import { Effect, Result, Schema } from 'effect';
 declare const User: { name: string; id: string };
 type User = typeof User;
 
-class NotFound extends Schema.TaggedErrorClass<NotFound>()('NotFound', {
+class NotFound extends Schema.TaggedError<NotFound>()('NotFound', {
 	id: Schema.String
 }) {}
 
@@ -165,7 +165,7 @@ import { Effect, Schema } from 'effect';
 declare const User: { name: string; id: string };
 type User = typeof User;
 
-class NotFound extends Schema.TaggedErrorClass<NotFound>()('NotFound', {
+class NotFound extends Schema.TaggedError<NotFound>()('NotFound', {
 	id: Schema.String
 }) {}
 

@@ -295,6 +295,8 @@ handler.pipe(
 );
 ```
 
+The beta.106/107 parser stops consuming input as soon as a part-count, part-size, or field-size limit is exceeded. Active file-part streams are terminated with the multipart failure when a limit is exceeded or the body ends unexpectedly, so consumers fail promptly instead of hanging. Keep consuming or supervising every exposed file stream so that failure is observed.
+
 ---
 
 ## 4. Building Responses
@@ -431,7 +433,7 @@ Route handlers may fail with **any** error type — you do not have to reduce `E
 Implement `HttpServerRespondable.symbol` on the error class; throwing/failing with it anywhere in the handler produces the right response:
 
 ```ts
-class UserNotFound extends Schema.ErrorClass<UserNotFound>('UserNotFound')({
+class UserNotFound extends Schema.Error<UserNotFound>('UserNotFound')({
 	_tag: Schema.tag('UserNotFound'),
 	id: Schema.String
 }) {
@@ -765,7 +767,7 @@ class Todo extends Schema.Class<Todo>('Todo')({
 	title: Schema.String
 }) {}
 
-class TodoNotFound extends Schema.ErrorClass<TodoNotFound>('TodoNotFound')({
+class TodoNotFound extends Schema.Error<TodoNotFound>('TodoNotFound')({
 	_tag: Schema.tag('TodoNotFound'),
 	id: Schema.Number
 }) {

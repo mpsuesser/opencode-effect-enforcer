@@ -11,9 +11,8 @@ The Effect v4 source is at `~/.cache/effect-v4/`. Read it directly when in doubt
 
 Key files:
 
-- `packages/effect/src/Effect.ts` — `all`, `forEach`, `race`/`raceAll`/`raceFirst`/`raceAllFirst`, `firstSuccessOf`, `timeout`/`timeoutOption`/`timeoutOrElse`, `zip`/`zipWith`, `filter`/`filterMap`/`filterMapEffect`, `partition`, `validate`, `findFirst`, `replicate`/`replicateEffect`, `withConcurrency` (very large file — grep for the export, then read its JSDoc)
-- `packages/effect/src/Types.ts` — the `Concurrency` type (`number | "unbounded" | "inherit"`)
-- `packages/effect/src/References.ts` — `CurrentConcurrency` reference read by `"inherit"`
+- `packages/effect/src/Effect.ts` — `all`, `forEach`, `race`/`raceAll`/`raceFirst`/`raceAllFirst`, `firstSuccessOf`, `timeout`/`timeoutOption`/`timeoutOrElse`, `zip`/`zipWith`, `filter`/`filterMap`/`filterMapEffect`, `partition`, `validate`, `findFirst`, and `replicate`/`replicateEffect` (very large file — grep for the export, then read its JSDoc)
+- `packages/effect/src/Types.ts` — the `Concurrency` type (`number | "unbounded"`)
 - `packages/effect/src/Semaphore.ts` — counting semaphore: `make`, `withPermit(s)`, `withPermitsIfAvailable`, `take`/`release`/`releaseAll`, `resize`
 - `packages/effect/src/PartitionedSemaphore.ts` — keyed permit pool with round-robin fairness across partitions
 - `packages/effect/src/Latch.ts` — open/closed gate: `make`, `open`, `close`, `release`, `await`, `whenOpen`
@@ -28,7 +27,7 @@ Concurrency in Effect is declarative: combinators that operate on many effects t
 
 ```ts
 // Types.Concurrency
-type Concurrency = number | 'unbounded' | 'inherit';
+type Concurrency = number | 'unbounded';
 ```
 
 | Value | Meaning |
@@ -36,7 +35,6 @@ type Concurrency = number | 'unbounded' | 'inherit';
 | omitted | Sequential (concurrency 1). **This is the default.** |
 | `n: number` | At most `n` effects run at once (values < 1 are clamped to 1) |
 | `'unbounded'` | All effects start at once |
-| `'inherit'` | Read `References.CurrentConcurrency` from context — **defaults to `'unbounded'`** unless overridden via `Effect.withConcurrency` |
 
 The two central signatures:
 
@@ -80,19 +78,7 @@ yield* Effect.forEach(ids, fetchUser, { concurrency: 8 });
 yield* Effect.forEach(ids, fetchUser, { concurrency: 'unbounded' });
 ```
 
-`'inherit'` defers the decision to the caller through the `CurrentConcurrency` context reference, which `Effect.withConcurrency` sets:
-
-```ts
-const job = Effect.forEach(ids, fetchUser, { concurrency: 'inherit' });
-
-// Caller decides the limit
-yield* job.pipe(Effect.withConcurrency(4));
-
-// Without withConcurrency, CurrentConcurrency defaults to 'unbounded',
-// so a bare `yield* job` runs everything at once.
-```
-
-`Effect.withConcurrency` accepts `number | 'unbounded'` and only affects combinators that opted into `'inherit'` — it does not cap operations that pass an explicit number or `'unbounded'`, and it does not parallelize operations that omitted the option.
+As of beta.102, `"inherit"`, `References.CurrentConcurrency`, and `Effect.withConcurrency` are removed. Reusable APIs that expose fan-out policy should accept a `Types.Concurrency` value and pass it explicitly to each combinator instead of relying on ambient configuration.
 
 ### Failure semantics under concurrency
 
@@ -368,6 +354,7 @@ sem.withPermit(effect);            // acquire 1 permit, run, release on exit
 sem.withPermits(2)(effect);        // weighted — note: curried!
 sem.withPermitsIfAvailable(1)(effect); // Effect<Option<A>, E, R> — Option.none if permits unavailable, no waiting
 sem.take(2);                       // Effect<number> — manual acquire (waits; see fairness note below); returns acquired count
+sem.takeIfAvailable(2);            // Effect<boolean> — acquire immediately or return false
 sem.release(2);                    // Effect<number> — manual release; returns resulting free permits
 sem.releaseAll;                    // Effect<number> — return every taken permit
 sem.resize(8);                     // Effect<void> — change total permits in place
@@ -382,6 +369,7 @@ yield* Semaphore.withPermit(sem, criticalSection);
 yield* Semaphore.withPermits(sem, 2, heavyTask);
 yield* heavyTask.pipe(Semaphore.withPermits(sem, 2));
 yield* Semaphore.withPermitsIfAvailable(sem, 1, optionalWork); // Option<A>
+yield* Semaphore.takeIfAvailable(sem, 2); // boolean; manual non-blocking acquire
 yield* Semaphore.resize(sem, 8);
 ```
 
@@ -657,7 +645,7 @@ const checkConfig = (entries: ReadonlyArray<Entry>) =>
 ## Common Mistakes
 
 1. **Assuming `Effect.all` / `Effect.forEach` are parallel by default** — they are sequential. Pass `{ concurrency: n | 'unbounded' }` explicitly; without it you also silently lose request batching (see effect-batching).
-2. **Treating `'inherit'` as "same as omitted"** — `'inherit'` reads `CurrentConcurrency`, which defaults to `'unbounded'`. Omitted means 1. They are opposites unless `Effect.withConcurrency` is set.
+2. **Using removed ambient concurrency APIs** — beta.102 removed `"inherit"`, `References.CurrentConcurrency`, and `Effect.withConcurrency`. Pass a number or `"unbounded"` explicitly at each combinator.
 3. **Wrong option key on zips** — `Effect.zip`/`zipWith` take `{ concurrent: true }` (boolean), not `{ concurrency: ... }`.
 4. **v3 `mode: 'either'` / `mode: 'validate'` on `Effect.all`** — gone. v4 has `mode: 'result'` (slots become `Result<A, E>`); for accumulate-all-failures use `Effect.validate`, which fails with `NonEmptyArray<E>`.
 5. **`Effect.makeSemaphore` / `Effect.makeLatch` no longer exist** — they moved to their own modules: `Semaphore.make(n)`, `Latch.make(open?)`, both importable from `'effect'`.

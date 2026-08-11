@@ -24,7 +24,7 @@ testPattern({
     "foo!.bar!"
   ],
   shouldNotMatch: [
-    'const value = Option.fromNullable(map.get("key"))',
+    'const value = Option.fromNullishOr(map.get("key"))',
     "user?.name",
     "user?.contact?.email ?? defaultEmail",
     "const email = user?.email || 'none'",

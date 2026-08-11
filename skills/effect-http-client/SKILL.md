@@ -199,6 +199,8 @@ For standalone `UrlParams` values (e.g. `response.urlParamsBody`) the module mir
 request.pipe(
 	HttpClientRequest.setHeader('x-api-version', '2024-01-01'),
 	HttpClientRequest.setHeaders({ 'x-a': '1', 'x-b': ['v1', 'v2'] }), // arrays join with ', '
+	HttpClientRequest.updateHeaders((headers) => Headers.set(headers, 'x-trace', '1')),
+	HttpClientRequest.removeHeader('x-obsolete'),
 	HttpClientRequest.accept('application/vnd.api+json'),
 	HttpClientRequest.acceptJson,
 	HttpClientRequest.bearerToken(Redacted.make('secret-token')), // string | Redacted
@@ -523,7 +525,14 @@ const limited = Effect.gen(function* () {
 			window: '1 minute',
 			algorithm: 'fixed-window', // default; or 'token-bucket'
 			tokens: 1, // default; or (request) => number
-			disableResponseInspection: false // default: learn limits from headers
+			disableResponseInspection: false, // default: learn limits from headers
+			times: 5, // bounds automatic 429 retries; default is unbounded
+			responseHeaders: {
+				limit: 'x-custom-limit',
+				remaining: 'x-custom-remaining',
+				reset: 'x-custom-reset',
+				retryAfter: 'x-custom-retry-after'
+			}
 		})
 	);
 });
@@ -584,6 +593,14 @@ program.pipe(
 // Custom span names
 program.pipe(
 	Effect.provideService(HttpClient.SpanNameGenerator, (request) => `${request.method} ${request.url}`)
+);
+
+// Record only selected request/response headers as span attributes
+program.pipe(
+	Effect.provideService(
+		HttpClient.TracerHeaderFilter,
+		(name, phase) => phase === 'response' && name === 'x-request-id'
+	)
 );
 
 // Replace the redacted-header list (Context.Reference; accepts strings or RegExps)
@@ -707,7 +724,7 @@ class Todo extends Schema.Class<Todo>('Todo')({
 	completed: Schema.Boolean
 }) {}
 
-class TodosError extends Schema.TaggedErrorClass<TodosError>()('TodosError', {
+class TodosError extends Schema.TaggedError<TodosError>()('TodosError', {
 	cause: Schema.Defect()
 }) {}
 

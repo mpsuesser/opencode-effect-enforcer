@@ -167,6 +167,8 @@ yield* Cache.set(cache, 'k', 42);
 
 `set` stores a successful exit, applies the cache's TTL to it (`timeToLive(Exit.succeed(value), key)`), and enforces capacity. With a zero TTL the entry is removed rather than stored (`ScopedCache.set` instead stores an immediately-expired entry: the old entry's scope closes at once, but the dead entry counts toward `size` until next touched).
 
+If an older in-flight lookup is interrupted after `set` installs a newer value, its cleanup does not remove the newer entry. The explicit `set` value remains authoritative.
+
 ### invalidate / invalidateAll / invalidateWhen
 
 ```ts
@@ -256,7 +258,7 @@ const robust = yield* Cache.makeWith(fetchUser, {
 });
 ```
 
-**Interruption poisons entries the same way** (verified against beta.80): the lookup runs on the fiber of the caller that triggered the miss. If that fiber is interrupted mid-lookup, the entry's deferred completes with the interrupt exit — concurrent waiters fail with it, and with an infinite TTL later `get`s keep replaying the interrupt instead of retrying. The exit-aware TTL above also fixes this, because an interrupt is a non-success exit (`Exit.isSuccess(exit) === false`) and gets a zero/short TTL.
+**Interruption poisons entries the same way**: the lookup runs on the fiber of the caller that triggered the miss. If that fiber is interrupted mid-lookup, the entry's deferred completes with the interrupt exit — concurrent waiters fail with it, and with an infinite TTL later `get`s keep replaying the interrupt instead of retrying. The exit-aware TTL above also fixes this, because an interrupt is a non-success exit (`Exit.isSuccess(exit) === false`) and gets a zero/short TTL.
 
 `getSuccess`, `values`, and `entries` skip failed entries; `getOption` and `get` propagate the cached error; `invalidateWhen` returns `false` for failed entries (the predicate only sees successes).
 
@@ -425,7 +427,7 @@ class User extends Schema.Class<User>('User')({
 	name: Schema.String
 }) {}
 
-class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()('UserNotFound', {
+class UserNotFound extends Schema.TaggedError<UserNotFound>()('UserNotFound', {
 	id: Schema.Number
 }) {}
 

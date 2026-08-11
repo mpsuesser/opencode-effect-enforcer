@@ -3,7 +3,7 @@ action: context
 tool: (edit|write)
 event: after
 name: avoid-node-imports
-description: Use @effect/platform abstractions instead of node: imports — catch-all for modules without a dedicated rule
+description: Use Effect platform abstractions instead of node: imports — catch-all for modules without a dedicated rule
 glob: '**/*.{ts,tsx}'
 detector: ast
 rule:
@@ -29,7 +29,7 @@ suggestSkills:
     - effect-platform-abstraction
 ---
 
-# Use @effect/platform Instead of `node:` Imports
+# Use Effect Platform Services Instead of `node:` Imports
 
 This is the **catch-all** rule for `node:*` imports that don't have a more specific pattern. Modules with a dedicated rule are excluded here to avoid duplicate diagnostics:
 
@@ -48,7 +48,7 @@ Everything else (`node:stream`, `node:url`, `node:readline`, `node:crypto`, `nod
 import "node:*"     :: Node -> IO a        -- platform-coupled, untestable
 
 -- Instead
-@effect/platform   :: Effect a R          -- platform-agnostic, testable
+effect services    :: Effect a R          -- platform-agnostic, testable
 ```
 
 ```haskell
@@ -62,7 +62,7 @@ bad = do
 good :: Effect a (Stream | Terminal | …)
 good = do
   stream <- Stream.fromReadableStream      -- platform-agnostic
-  term   <- Terminal.Terminal              -- via @effect/platform
+  term   <- Terminal.Terminal              -- from effect
 ```
 
 **Platform module mappings (full):**

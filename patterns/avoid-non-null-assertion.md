@@ -30,7 +30,7 @@ bad :: Map → Value
 bad map = map.get("key")!         -- crash if key missing
 
 good :: Map → Maybe Value
-good map = Option.fromNullable (map.get "key")
+good map = Option.fromNullishOr (map.get "key")
 
 -- Or with chaining
 safe :: User → Maybe Email

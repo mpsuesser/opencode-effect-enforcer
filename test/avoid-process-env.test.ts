@@ -7,7 +7,7 @@ testPattern({
     "process.env.API_KEY",
     "const port = process.env.PORT || '3000'",
     "if (process.env.NODE_ENV === 'production')",
-    "Option.fromNullable(process.env.HOME)"
+    "Option.fromNullishOr(process.env.HOME)"
   ],
   shouldNotMatch: [
     "Config.string('HOME')",

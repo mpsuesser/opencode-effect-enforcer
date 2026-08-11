@@ -39,9 +39,9 @@ good = Effect.try
   , catch: DataError <<< show
   }
 
--- Or with TaggedErrorClass
+-- Or with TaggedError
 data DataError = DataError { message :: String }
-  deriving Schema.TaggedErrorClass "DataError"
+  deriving Schema.TaggedError "DataError"
 ```
 
-`try-catch` breaks the error channel—errors become opaque. Use `Effect.try` with `Schema.TaggedErrorClass` for typed, composable error handling.
+`try-catch` breaks the error channel—errors become opaque. Use `Effect.try` with `Schema.TaggedError` for typed, composable error handling.

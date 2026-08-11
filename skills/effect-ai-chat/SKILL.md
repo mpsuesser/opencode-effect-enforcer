@@ -178,7 +178,7 @@ for (const msg of history.content) {
 }
 ```
 
-Use `Prompt.fromResponseParts(response.content)` when manually folding model output back into history. It preserves text and reasoning, tool calls/results, approval requests, uses encoded tool results for tool messages, and skips preliminary tool results.
+Use `Prompt.fromResponseParts(response.content)` when manually folding model output back into history. It preserves text and reasoning, tool calls/results, approval requests, and skips preliminary tool results. Framework-executed final tool results become tool messages using `encodedResult`; provider-executed final tool results stay in the assistant message.
 
 ## Persistence: Export and Restore
 
@@ -360,7 +360,7 @@ Prefer overriding registry handles or test layers in tests rather than spying on
 Use `Context.Service` to expose a clean domain API:
 
 ```ts
-class AiAssistantError extends Schema.TaggedErrorClass<AiAssistantError>()(
+class AiAssistantError extends Schema.TaggedError<AiAssistantError>()(
 	'AiAssistantError',
 	{
 		reason: AiError.AiErrorReason

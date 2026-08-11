@@ -14,10 +14,9 @@ testPattern({
   shouldNotMatch: [
     "import { ChildProcess } from 'effect/unstable/process'",
     "import { ChildProcessSpawner } from 'effect/unstable/process'",
-    "import { Command, CommandExecutor } from '@effect/platform'",
     "import { spawn } from 'other-lib/child_process'",
     // Strings / comments mentioning the banned module
-    "const note = 'wrap node:child_process with CommandExecutor'",
+    "const note = 'wrap node:child_process with ChildProcessSpawner'",
     "// node:child_process gives callback APIs"
   ]
 })

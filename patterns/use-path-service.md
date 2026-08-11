@@ -50,4 +50,4 @@ extname   :: String → Effect String Path
 resolve   :: String → Effect String Path
 ```
 
-Direct `path` imports couple code to Node.js. Use `@effect/platform` Path for cross-platform path operations.
+Direct `path` imports couple code to Node.js. Use `Path` from `effect` for cross-platform path operations and provide the concrete platform layer at the runtime boundary.

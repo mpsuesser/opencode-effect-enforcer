@@ -520,7 +520,7 @@ const feed = Effect.gen(function*() {
 		Effect.tapError((error) => Effect.logWarning('socket disconnected', error)),
 		Effect.retry(
 			// RpcClient's defaultRetryPolicy: exponential from 500ms, capped at 5s
-			Schedule.exponential(500, 1.5).pipe(Schedule.either(Schedule.spaced(5000)))
+			Schedule.min([Schedule.exponential(500, 1.5), Schedule.spaced(5000)])
 		)
 	);
 }).pipe(Effect.provide(NodeSocket.layerWebSocket('wss://example.com/feed')));
@@ -611,7 +611,7 @@ const makeClient = Effect.gen(function*() {
 			})
 		),
 		Stream.runForEach((response) => Effect.log('response', response)),
-		Effect.retry(Schedule.exponential(500, 1.5).pipe(Schedule.either(Schedule.spaced(5000)))),
+		Effect.retry(Schedule.min([Schedule.exponential(500, 1.5), Schedule.spaced(5000)])),
 		Effect.forkScoped
 	);
 
@@ -663,7 +663,10 @@ const tradeFeed = Effect.gen(function*() {
 		onOpen: Effect.orDie(write(JSON.stringify({ type: 'subscribe', channel: 'trades' })))
 	}).pipe(
 		Effect.retry({
-			schedule: Schedule.exponential('1 second').pipe(Schedule.either(Schedule.spaced('30 seconds')))
+			schedule: Schedule.min([
+				Schedule.exponential('1 second'),
+				Schedule.spaced('30 seconds')
+			])
 		})
 	);
 }).pipe(

@@ -23,6 +23,11 @@ business ∪ user ∪ technical ∪ outcome
 effect-api    := Effect.annotateCurrentSpan ∨ Effect.annotateLogs
 queryable-via := annotations  ⊄  log-message-args
 // extra log-message args → message body, not auto-indexed dimensions
+
+execution-plan := Effect.withExecutionPlan ∨ Stream.withExecutionPlan
+attempt-events := onEvent(AttemptStart | AttemptSuccess | AttemptFailure)
+// AttemptFailure.cause retains typed failures, defects, and interruption
+// every AttemptStart has exactly one terminal event; observer defects are isolated
 </current-practice>
 
 <dimensionality>

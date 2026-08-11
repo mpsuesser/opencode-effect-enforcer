@@ -237,6 +237,30 @@ const draftsModel = yield* DraftPlan.captureRequirements;
 const result = yield* myEffect.pipe(Effect.withExecutionPlan(draftsModel));
 ```
 
+### Observing ExecutionPlan Lifecycle
+
+`Effect.withExecutionPlan` and `Stream.withExecutionPlan` accept an optional `onEvent` observer. Events are the `ExecutionPlan.Event` tagged union: `AttemptStart`, `AttemptSuccess`, and `AttemptFailure`.
+
+```typescript
+const result = yield* myEffect.pipe(
+	Effect.withExecutionPlan(draftsModel, {
+		onEvent: (event) =>
+			Effect.logInfo('AI provider attempt').pipe(
+				Effect.annotateLogs({
+					event: event._tag,
+					attempt: event.attempt,
+					stepAttempt: event.stepAttempt,
+					stepIndex: event.stepIndex
+				})
+		})
+);
+```
+
+- `attempt` is cumulative and 1-based across the plan; `stepAttempt` is 1-based within a step; `stepIndex` is 0-based.
+- Success and failure events include attempt `duration`; failure includes the full `Cause`, including defects and interruption.
+- Every start is paired with one terminal event, including interruption. Observers are awaited in order, should stay cheap, and their defects are ignored so telemetry cannot change the attempt outcome.
+- For `Stream.withExecutionPlan`, an attempt truncated by downstream cancellation is reported as `AttemptSuccess`; use `preventFallbackOnPartialStream` when mixing partial output with fallback output is unacceptable.
+
 ## Chat Service (Stateful Conversations)
 
 Maintain conversation history with automatic context management:
@@ -387,7 +411,7 @@ Wrap `AiError` into domain-specific tagged errors:
 import { Schema } from 'effect';
 import { AiError } from 'effect/unstable/ai';
 
-export class MyAiError extends Schema.TaggedErrorClass<MyAiError>()(
+export class MyAiError extends Schema.TaggedError<MyAiError>()(
 	'MyAiError',
 	{
 		reason: AiError.AiErrorReason
@@ -464,7 +488,7 @@ const DraftPlan = ExecutionPlan.make(
 // Custom error type
 // ---------------------------------------------------------------------------
 
-export class WriterError extends Schema.TaggedErrorClass<WriterError>()(
+export class WriterError extends Schema.TaggedError<WriterError>()(
 	'WriterError',
 	{
 		reason: AiError.AiErrorReason
@@ -609,7 +633,7 @@ import { BedrockClient } from '@effect/ai-amazon-bedrock'; // Does NOT exist
 - [ ] Use `apiUrl` for OpenAI-compatible base URLs; reserve client transforms for middleware/proxy/tracing/headers
 - [ ] Use `OpenAiTool` for OpenAI provider-defined tools
 - [ ] Use `Chat.fromPrompt` / `Chat.empty` / `Chat.fromJson` (not `Chat.make`)
-- [ ] Wrap `AiError` into domain-specific `TaggedErrorClass`
+- [ ] Wrap `AiError` into a domain-specific `Schema.TaggedError`
 - [ ] Use `Context.Service` with shape type parameter for service definitions
 
 ## Related Skills

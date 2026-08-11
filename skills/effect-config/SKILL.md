@@ -121,7 +121,7 @@ const dbConfig = Config.all({
 
 ## Config.schema — Structured Config from Schema
 
-For larger configs, use `Config.schema` with a `Schema.Struct`. The schema automatically decodes raw string values into target types (e.g. `"8080"` becomes `8080`, `"true"` becomes `true`).
+For larger configs, use `Config.schema` with a concrete `StringTree` shape. The schema's canonical encoded shape determines whether the provider loads a scalar, object, array, or each member of a mixed-shape union.
 
 ```ts
 const AppConfig = Config.schema(
@@ -155,6 +155,10 @@ const ServerConfig = Config.schema(
 | `Config.Port`               | `number`       | Integer in 1–65535                         |
 | `Config.LogLevel`           | `string`       | One of the standard log level literals     |
 | `Config.Record(key, value)` | `Record<K, V>` | Also parses flat `"k1=v1,k2=v2"` strings   |
+
+Plain `Schema.Array` and `Schema.Record` load structural provider children. Use `Config.Array` and `Config.Record` when a flat separated scalar should also be accepted. Opaque encodings such as `Schema.Any`, `Schema.Unknown`, and `Schema.Json` are rejected when `Config.schema` is constructed; use a concrete shape or `Schema.fromJsonString(Schema.Json)` to read scalar JSON.
+
+Missing or unavailable representations are decoded as `undefined` before `Config.withDefault` and `Config.option` decide semantic absence. A successful decoded `undefined` or an explicitly present empty structure remains a real value and is not replaced by a default.
 
 ## Two Ways to Run a Config
 
@@ -193,6 +197,20 @@ const provider = ConfigProvider.fromEnv({
 		DATABASE_HOST: 'localhost',
 		DATABASE_PORT: '5432'
 	}
+});
+```
+
+Empty strings are treated as missing by default. Pass `{ preserveEmptyStrings: true }` when an empty string is an explicit value.
+
+### `ConfigProvider.fromEnvRecord` — Explicit Environment Records
+
+Use `fromEnvRecord` when the environment record is supplied explicitly, especially in restricted runtimes where `fromEnv` cannot perform automatic environment detection. Unlike the `env` option of `fromEnv`, the record may contain `undefined` values; those entries are ignored.
+
+```ts
+const provider = ConfigProvider.fromEnvRecord({
+	HOST: 'localhost',
+	PORT: '3000',
+	OPTIONAL_VALUE: undefined
 });
 ```
 
@@ -305,6 +323,8 @@ const defaults = ConfigProvider.fromUnknown({
 const combined = ConfigProvider.orElse(envProvider, defaults);
 ```
 
+At the `Config` level, `Config.orElse` preserves evidence that the primary branch read provider input. Consequently, an outer `Config.withDefault` or `Config.option` does not hide a partially supplied `Config.all` group.
+
 ### `ConfigProvider.nested` — Prefix All Lookups
 
 Prepends path segments so that all lookups are scoped:
@@ -381,7 +401,7 @@ const program = Effect.gen(function* () {
 
 ## Testing Patterns
 
-Always use `ConfigProvider.fromUnknown` or `ConfigProvider.fromEnv({ env: {...} })` in tests for deterministic, hermetic config:
+Always use `ConfigProvider.fromUnknown` or `ConfigProvider.fromEnvRecord({...})` in tests for deterministic, hermetic config:
 
 ```ts
 import { Config, ConfigProvider, Effect } from 'effect';

@@ -1,4 +1,7 @@
+import { expect, it } from "vitest"
 import { testPattern } from "./helpers/pattern-test-harness.ts"
+
+import { requirePattern } from "./helpers/patterns.ts"
 
 testPattern({
   name: "prefer-schema-class",
@@ -23,4 +26,8 @@ testPattern({
     // Different call: TaggedStruct is distinct
     'Schema.TaggedStruct("tag", { id: Schema.String })'
   ]
+})
+
+it("keeps context-dependent Schema.Struct review informational", async () => {
+  expect((await requirePattern("prefer-schema-class")).level).toBe("info")
 })

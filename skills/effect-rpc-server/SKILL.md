@@ -387,7 +387,7 @@ A middleware is a `Context.Service` whose value is a function wrapping handler e
 ```ts
 class CurrentUser extends Context.Service<CurrentUser, User>()('CurrentUser') {}
 
-class Unauthorized extends Schema.ErrorClass<Unauthorized>('Unauthorized')({
+class Unauthorized extends Schema.Error<Unauthorized>('Unauthorized')({
 	_tag: Schema.tag('Unauthorized')
 }) {}
 

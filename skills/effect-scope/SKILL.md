@@ -486,7 +486,8 @@ Semantics (verified in `ScopedRef.ts` and its tests):
 
 - Constructing requires `Scope.Scope`: when the *outer* scope closes, the currently-held value's scope is closed too.
 - `set` is **synchronized** (internal semaphore — one replacement at a time) and **uninterruptible**.
-- `set` closes the **old scope first**, then acquires. If acquisition fails, the new scope is closed with the failure, the error propagates, and the ref still holds the old — now already-released — value. Treat a failed `set` as "ref is stale; retry or tear down."
+- `set` acquires the replacement first. If acquisition fails, its new scope is closed, the error propagates, and the current value remains alive and unchanged.
+- After successful acquisition, `set` closes the old scope before installing the replacement. If the old finalizer defects, the replacement scope is also closed and the reference is not switched, preventing the newly acquired resource from leaking.
 - `ScopedRef.set` is dual: `ref.pipe(ScopedRef.set(acquire))` also works.
 
 For keyed collections of scoped resources, see `LayerMap` (`ai-docs/src/01_effect/04_resources/30_layer-map.ts`); for capacity-managed pools, see `Pool` (`packages/effect/src/Pool.ts` — `Pool.make` returns a scoped pool whose `Pool.get(pool)` is itself scoped per item). `ScopedCache` is covered by the `effect-cache` skill.

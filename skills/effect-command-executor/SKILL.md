@@ -103,7 +103,7 @@ const cmd = ChildProcess.make('node', ['script.js'], {
 	// Environment variables
 	env: { NODE_ENV: 'production', API_KEY: 'xyz' },
 
-	// Merge with process.env (default: undefined)
+	// Merge with process.env (default: false)
 	extendEnv: true,
 
 	// Run inside a shell (generally disadvised)
@@ -128,6 +128,10 @@ const cmd = ChildProcess.make('node', ['script.js'], {
 	}
 });
 ```
+
+`extendEnv` defaults to `false`. If `env` is supplied without `extendEnv: true`, it replaces the inherited child environment rather than merging with it.
+
+The `fd3`/`fd4` names above configure child-process stdio channels. They are unrelated to the `FileSystem.File.Descriptor` type removed in beta.103; process handles still expose `getInputFd(number)` and `getOutputFd(number)` for configured additional descriptors.
 
 ### Combinators
 
@@ -384,7 +388,7 @@ import {
 } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 
-class DevToolsError extends Schema.TaggedErrorClass<DevToolsError>()(
+class DevToolsError extends Schema.TaggedError<DevToolsError>()(
 	'DevToolsError',
 	{
 		cause: Schema.Defect()
@@ -538,7 +542,7 @@ const chunks = yield* Stream.runCollect(handle.stdout);
 ### DO: Use `Effect.mapError` to wrap `PlatformError` in domain errors
 
 ```typescript
-class MyError extends Schema.TaggedErrorClass<MyError>()('MyError', {
+class MyError extends Schema.TaggedError<MyError>()('MyError', {
 	cause: Schema.Defect()
 }) {}
 

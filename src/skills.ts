@@ -1,5 +1,4 @@
 import { Skill } from "@opencode-ai/plugin"
-import { Schema } from "effect"
 import { readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 
@@ -17,11 +16,11 @@ export const loadSkills = async (skillsDirectory: string): Promise<ReadonlyArray
       const description = typeof frontmatter.description === "string"
         ? frontmatter.description
         : undefined
-      return Schema.decodeUnknownSync(Skill.Info)({
-        id: entry.name,
-        name: displayName,
+      return Skill.Info.make({
+        id: Skill.ID.make(entry.name),
+        name: Skill.Name.make(displayName),
         description,
-        location,
+        location: Skill.Info.fields.location.make(location),
         content: extractBody(markdown)
       })
     })

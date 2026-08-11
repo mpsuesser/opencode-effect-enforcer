@@ -78,7 +78,7 @@ export class User extends Schema.Class<User>('User')({
 	name: Schema.String
 }) {}
 
-export class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()('UserNotFound', {
+export class UserNotFound extends Schema.TaggedError<UserNotFound>()('UserNotFound', {
 	id: Schema.String
 }) {}
 
@@ -260,11 +260,11 @@ On top of that, clients add transport errors (`RpcClientError`) and any middlewa
 Use schema error classes so errors are tagged, yieldable, and serializable:
 
 ```ts
-export class RateLimited extends Schema.TaggedErrorClass<RateLimited>()('RateLimited', {
+export class RateLimited extends Schema.TaggedError<RateLimited>()('RateLimited', {
 	retryAfterMillis: Schema.Number
 }) {}
 
-export class OrderError extends Schema.TaggedErrorClass<OrderError>()('OrderError', {
+export class OrderError extends Schema.TaggedError<OrderError>()('OrderError', {
 	reason: Schema.Literals(['empty-cart', 'payment-failed'])
 }) {}
 
@@ -305,7 +305,7 @@ import { RpcMiddleware } from 'effect/unstable/rpc';
 
 export class CurrentUser extends Context.Service<CurrentUser, User>()('CurrentUser') {}
 
-export class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()('Unauthorized', {}) {}
+export class Unauthorized extends Schema.TaggedError<Unauthorized>()('Unauthorized', {}) {}
 
 export class AuthMiddleware extends RpcMiddleware.Service<AuthMiddleware, {
 	provides: CurrentUser; // services injected into wrapped handlers
@@ -515,11 +515,11 @@ export class User extends Schema.Class<User>('User')({
 }) {}
 
 // --- errors ---
-export class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()('UserNotFound', {
+export class UserNotFound extends Schema.TaggedError<UserNotFound>()('UserNotFound', {
 	id: Schema.String
 }) {}
 
-export class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()('Unauthorized', {}) {}
+export class Unauthorized extends Schema.TaggedError<Unauthorized>()('Unauthorized', {}) {}
 
 // --- middleware contract ---
 export class CurrentUser extends Context.Service<CurrentUser, User>()('CurrentUser') {}
@@ -619,5 +619,5 @@ it('GetUser exits round-trip', () => {
 11. **Mutating in place.** `annotate`, `prefix`, `middleware`, `setSuccess`, etc. all return new `Rpc`/`RpcGroup` values; discarding the return value is a no-op.
 12. **Renaming or re-prefixing rpcs after deployment.** `_tag` is the wire identity; old clients will send tags the server no longer knows. Treat tag changes like breaking schema changes.
 13. **Passing a union to `Schema.Union` variadically.** v4 takes an array: `Schema.Union([OrderError, RateLimited])`, not `Schema.Union(OrderError, RateLimited)`.
-14. **Declaring errors as plain `Schema.Struct`s.** Use `Schema.TaggedErrorClass` (or `Schema.ErrorClass` with a `Schema.tag` field) so errors are yieldable, `catchTag`-able, and carry a stable `_tag` on the wire.
+14. **Declaring errors as plain `Schema.Struct`s.** Use `Schema.TaggedError` (or `Schema.Error` with a `Schema.tag` field) so errors are yieldable, `catchTag`-able, and carry a stable `_tag` on the wire. The former `Schema.TaggedErrorClass` / `Schema.ErrorClass` names were removed in beta.104.
 15. **Expecting stack traces in remote defects.** The default `Schema.Defect()` strips stacks; opt in per rpc with `defect: Schema.Defect({ includeStack: true })`.

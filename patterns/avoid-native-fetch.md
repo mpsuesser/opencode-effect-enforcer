@@ -24,27 +24,26 @@ bad :: String -> Promise Response
 bad url = fetch(url)                         -- untyped rejection, no retry/timeout
 bad url = fetch(url, { method: "POST" })     -- scattered options
 
-good :: String -> Effect Response HttpError HttpClient
+good :: String -> Effect User HttpError HttpClient
 good url = pipe(
-  HttpClientRequest.get(url),
-  HttpClient.execute,
-  Effect.flatMap(HttpClientResponse.json)
+  HttpClient.get(url),
+  Effect.flatMap(HttpClientResponse.schemaBodyJson(User))
 )
 ```
 
 ```haskell
 -- Composable request building
-request :: HttpClientRequest
+request :: Effect HttpClientRequest HttpBodyError
 request = pipe(
   HttpClientRequest.post("/api/users"),
-  HttpClientRequest.bodyJson({ name: "Alice" }),
-  HttpClientRequest.setHeader("Authorization", "Bearer ..."),
+  HttpClientRequest.bodyJson({ name: "Alice" })
 )
 
 -- With retry, timeout, tracing
 resilient :: Effect Response HttpError (HttpClient | Scope)
 resilient = pipe(
-  HttpClient.execute(request),
+  request,
+  Effect.flatMap(HttpClient.execute),
   Effect.retry(Schedule.recurs(3)),
   Effect.timeout(Duration.seconds(10))
 )

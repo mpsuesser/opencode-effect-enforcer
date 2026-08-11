@@ -171,14 +171,14 @@ type Success = Tool.Success<typeof GetWeather>;
 import * as Tool from 'effect/unstable/ai/Tool';
 import { Schema } from 'effect';
 
-class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()(
+class UserNotFound extends Schema.TaggedError<UserNotFound>()(
 	'UserNotFound',
 	{
 		userId: Schema.String
 	}
 ) {}
 
-class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()(
+class DatabaseError extends Schema.TaggedError<DatabaseError>()(
 	'DatabaseError',
 	{
 		message: Schema.String
@@ -305,7 +305,7 @@ declare const fetchWeatherData: (location: string) => Effect.Effect<{
 **Key Pattern: toLayer**
 
 - Object mapping tool names to handler functions
-- Handler signature: `(params, context) => Effect<Success, Failure, Requirements>`; use `context.preliminary(...)` for progress updates
+- Handler signature: `(params, context) => Effect<Success, Failure, Requirements>`; `context.toolCallId` exposes the provider call ID when available, and `context.preliminary(...)` emits progress updates
 - Returns `Layer<Handlers>`
 
 ### Alternative: Handlers as Context
@@ -638,6 +638,15 @@ const DeleteFile = Tool.make('DeleteFile', {
 	needsApproval: true
 });
 
+// Replace an existing tool's static or dynamic approval policy.
+const DeleteFileWithoutApproval = DeleteFile.setNeedsApproval(false);
+
+const DeleteOutsideWorkspace = DeleteFile.setNeedsApproval(
+	({ path }, { toolCallId, messages }) =>
+		path.startsWith('/tmp/') ||
+		(toolCallId.length > 0 && messages.length === 0)
+);
+
 const approvalResponse = Prompt.toolApprovalResponsePart({
 	approvalId: 'approval_123',
 	approved: false,
@@ -646,6 +655,8 @@ const approvalResponse = Prompt.toolApprovalResponsePart({
 ```
 
 Approved calls execute on the next model call; denied calls are converted to failed tool results with `{ type: 'execution-denied', reason }`.
+
+`setNeedsApproval` returns a cloned tool with the replacement policy. A dynamic policy receives decoded parameters plus `{ toolCallId, messages }` and may return either `boolean` or `Effect<boolean>`.
 
 ### Executing Tool Handlers
 
@@ -687,6 +698,9 @@ Handlers can emit progress before the final result with `context.preliminary(...
 const toolkitLayer = LongRunningToolkit.toLayer({
 	LongTask: (params, context) =>
 		Effect.gen(function* () {
+			yield* Effect.logDebug('handling tool call').pipe(
+				Effect.annotateLogs({ toolCallId: context.toolCallId })
+			);
 			yield* context.preliminary({ status: 'started' });
 			const result = yield* runLongTask(params);
 			return { status: 'done', result };
@@ -696,7 +710,8 @@ const toolkitLayer = LongRunningToolkit.toLayer({
 
 **Key Pattern: toolkit.handle**
 
-- Returns `Effect<Stream<HandlerResult<Tool>>>`
+- `toolkit.handle(name, params, toolCallId?)` returns `Effect<Stream<HandlerResult<Tool>>>`
+- The optional call ID is forwarded to the handler as `context.toolCallId`
 - `preliminary: true`: progress update; do not persist as final history
 - `preliminary: false`: final result to send/persist
 - `isFailure`: Whether handler failed
@@ -809,7 +824,7 @@ import * as Tool from 'effect/unstable/ai/Tool';
 import * as Toolkit from 'effect/unstable/ai/Toolkit';
 import { Effect, Schema, Layer, Stream } from 'effect';
 
-class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()(
+class UserNotFound extends Schema.TaggedError<UserNotFound>()(
 	'UserNotFound',
 	{
 		userId: Schema.String
@@ -1075,10 +1090,12 @@ const toolkitLayer = toolkit.toLayer({
 8. **toolkit.handle** - Execute tools and consume a Stream of preliminary/final results
 9. **HandlerResult** - Access typed result, encoded JSON, failure flag, and preliminary flag
 10. **needsApproval** - Produces approval requests until caller supplies approval responses
-11. **failureMode** - Control error vs return failure strategy
-12. **dependencies** - Declare service requirements
-13. **Namespace imports** - Always `import * as Tool`
-14. **Prompt.makePart** - Create tool-call, tool-result, and approval parts with params
+11. **setNeedsApproval** - Clone a tool with a replacement static or effectful approval policy
+12. **toolCallId** - Pass the call ID through `toolkit.handle` and read it from handler context
+13. **failureMode** - Control error vs return failure strategy
+14. **dependencies** - Declare service requirements
+15. **Namespace imports** - Always `import * as Tool`
+16. **Prompt.makePart** - Create tool-call, tool-result, and approval parts with params
 
 Your tool implementations should be type-safe, validated, and provide excellent developer experience with full schema support.
 

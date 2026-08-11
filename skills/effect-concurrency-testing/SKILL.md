@@ -390,7 +390,7 @@ import { it } from '@effect/vitest';
 import { Effect, Exit, Schema } from 'effect';
 import { Stream } from 'effect';
 
-class StreamError extends Schema.TaggedErrorClass<StreamError>()(
+class StreamError extends Schema.TaggedError<StreamError>()(
 	'StreamError',
 	{
 		message: Schema.String
