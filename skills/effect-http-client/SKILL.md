@@ -9,7 +9,7 @@ In v4 there is no `@effect/platform` package — the HTTP client lives in the `e
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.cache/effect-v4/`. Read it directly when in doubt — these modules are `unstable` and change between betas.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules are `unstable` and change between betas.
 
 Key files:
 
@@ -36,6 +36,17 @@ HttpClientRequest ──► client.execute ──► Effect<HttpClientResponse, 
 ```
 
 An `HttpClient.With<E, R>` is a pair of functions — `preprocess` (request → request, effectful) and `postprocess` (request effect → response effect) — plus `execute` and per-method helpers (`get`, `post`, `put`, `patch`, `del`, `head`, `options`). The default service type is `HttpClient = HttpClient.With<HttpClientError, never>`. Every combinator (`mapRequest`, `filterStatusOk`, `retryTransient`, ...) returns a **new client value**; clients are immutable and cheap to derive, so build one configured client per upstream API and share it.
+
+### Application Boundary Policy
+
+- Runtime application and provider integrations use `HttpClient`; do not call raw `fetch` from business or provider code.
+- A raw `fetch` call is permitted only in an explicitly named low-level platform adapter that owns transport interop and documents why an Effect transport cannot be used. Lift it with `Effect.tryPromise`, pass the supplied `AbortSignal` to fetch, and do not let `Request`, `Response`, rejected promises, or untyped payloads escape that adapter.
+- Give each upstream adapter a named service and named effects that own request construction, authentication, execution, status classification, schema decoding, and error mapping.
+- Read credentials with `Config.redacted` and attach them in a configured client transform; never pass raw secret strings through business workflows.
+- Classify status before decoding a success schema. Non-2xx error bodies often have a different shape and must not be decoded as successful payloads.
+- Decode external response data with `HttpClientResponse.schemaBodyJson`, `schemaJson`, or another `Schema` decoder. A successful JSON parse is not validation.
+- Preserve bounded diagnostic evidence such as provider request IDs, status, error codes, and retry metadata. Redact credentials, authorization headers, query secrets, private payload fields, and full bodies before logging or storing evidence.
+- Run provider/network calls outside database transactions. Acquire remote results first, then open the shortest transaction needed to persist them; never hold a database transaction open across latency, retries, or rate-limit waits.
 
 ```ts
 import { Effect, Layer, Redacted, Ref, Schedule, Schema, Stream } from 'effect';
@@ -76,20 +87,51 @@ NodeHttpClient.layerFetch; // re-export of FetchHttpClient.layer
 
 `@effect/platform-bun`'s `BunHttpClient` simply re-exports `FetchHttpClient`.
 
+Keep the dependency graph visible in adapter modules. Export a raw `layer` that still requires `HttpClient.HttpClient`, then optionally export `defaultLayer` for runtime convenience:
+
+```ts
+export class Todos extends Context.Service<Todos, {
+	readonly getTodo: (id: number) => Effect.Effect<string>;
+}>()('app/Todos') {
+	static readonly layer: Layer.Layer<Todos, never, HttpClient.HttpClient> =
+		Layer.effect(
+			Todos,
+			Effect.gen(function* () {
+				yield* HttpClient.HttpClient;
+				return Todos.of({ getTodo: (id) => Effect.succeed(`todo-${id}`) });
+			})
+		);
+
+	static readonly defaultLayer: Layer.Layer<Todos> = Todos.layer.pipe(
+		Layer.provide(FetchHttpClient.layer)
+	);
+}
+```
+
+Tests and application composition can provide a mock or a different transport to `layer`; only callers intentionally choosing the bundled transport use `defaultLayer`. Do not hide the transport requirement inside the raw layer.
+
 ### Using the client
 
 Either grab the service and call its methods, or use the module-level accessors (which require `HttpClient.HttpClient` in `R`):
 
 ```ts
+class Todo extends Schema.Class<Todo>('Todo')({
+	id: Schema.Number,
+	title: Schema.String
+}) {}
+
 const program = Effect.gen(function* () {
 	const client = yield* HttpClient.HttpClient;
-	const response = yield* client.get('https://api.example.com/todos/1');
-	return yield* response.json;
+	return yield* client.get('https://api.example.com/todos/1').pipe(
+		Effect.flatMap(HttpClientResponse.filterStatusOk),
+		Effect.flatMap(HttpClientResponse.schemaBodyJson(Todo))
+	);
 }).pipe(Effect.provide(FetchHttpClient.layer));
 
 // Accessor form — same thing, R = HttpClient.HttpClient
 const quick = HttpClient.get('https://api.example.com/todos/1').pipe(
-	Effect.flatMap((response) => response.json)
+	Effect.flatMap(HttpClientResponse.filterStatusOk),
+	Effect.flatMap(HttpClientResponse.schemaBodyJson(Todo))
 );
 ```
 
@@ -236,9 +278,14 @@ HttpClientRequest.post('/todos').pipe(HttpClientRequest.bodyJsonUnsafe({ title: 
 
 // Schema-encoded JSON — factory takes the schema, returns a dual combinator.
 // Encoding failures surface as HttpBodyError ({ _tag: 'SchemaError', issue }).
-const Todo = Schema.Struct({ title: Schema.String, completed: Schema.Boolean });
+class Todo extends Schema.Class<Todo>('Todo')({
+	title: Schema.String,
+	completed: Schema.Boolean
+}) {}
 const withBody = HttpClientRequest.post('/todos').pipe(
-	HttpClientRequest.schemaBodyJson(Todo)({ title: 'buy milk', completed: false })
+	HttpClientRequest.schemaBodyJson(Todo)(
+		new Todo({ title: 'buy milk', completed: false })
+	)
 ); // Effect<HttpClientRequest, HttpBodyError, EncodingServices>
 
 // application/x-www-form-urlencoded
@@ -272,6 +319,7 @@ To execute a request built with an effectful body combinator, `flatMap` into `cl
 const created = HttpClientRequest.post('/todos').pipe(
 	HttpClientRequest.schemaBodyJson(Todo)(todo),
 	Effect.flatMap(client.execute),
+	Effect.flatMap(HttpClientResponse.filterStatusOk),
 	Effect.flatMap(HttpClientResponse.schemaBodyJson(Todo))
 );
 ```
@@ -303,25 +351,41 @@ const program = Effect.gen(function* () {
 
 ### Schema-validated bodies
 
+Status classification comes first. Configure `HttpClient.filterStatusOk`, apply `HttpClientResponse.filterStatusOk`, or use `matchStatus` before selecting the success-body schema.
+
 ```ts
-const Todo = Schema.Struct({
+class Todo extends Schema.Class<Todo>('Todo')({
 	userId: Schema.Number,
 	id: Schema.Number,
 	title: Schema.String,
 	completed: Schema.Boolean
-});
+}) {}
+
+class ResponseHeaders extends Schema.Class<ResponseHeaders>('ResponseHeaders')({
+	'x-request-id': Schema.String
+}) {}
+
+class TodoResponse extends Schema.Class<TodoResponse>('TodoResponse')({
+	status: Schema.Literal(200),
+	body: Todo
+}) {}
+
+class NoContentResponse extends Schema.Class<NoContentResponse>('NoContentResponse')({
+	status: Schema.Literal(204)
+}) {}
 
 // Factory: pass the schema once, reuse the decoder.
 // Effect<Todo, HttpClientError | Schema.SchemaError, DecodingServices>
 const todo = client.get('/todos/1').pipe(
+	Effect.flatMap(HttpClientResponse.filterStatusOk),
 	Effect.flatMap(HttpClientResponse.schemaBodyJson(Todo))
 );
 
 // Other decoders:
 HttpClientResponse.schemaBodyUrlParams(MyFormSchema); // urlencoded body
-HttpClientResponse.schemaHeaders(Schema.Struct({ 'x-request-id': Schema.String }));
-HttpClientResponse.schemaJson(Schema.Struct({ status: Schema.Literal(200), body: Todo })); // { status, headers, body }
-HttpClientResponse.schemaNoBody(Schema.Struct({ status: Schema.Literal(204) })); // { status, headers } — no body read
+HttpClientResponse.schemaHeaders(ResponseHeaders);
+HttpClientResponse.schemaJson(TodoResponse); // { status, headers, body }
+HttpClientResponse.schemaNoBody(NoContentResponse); // { status, headers } — no body read
 ```
 
 ### Pattern matching on status
@@ -465,11 +529,17 @@ Order matters and reads inside-out: combinators wrap the existing `postprocess`,
 
 ### `HttpClient.retry`
 
+Retries are an operation policy, not a harmless client default. Retry only when the operation is proven idempotent: safe reads, an idempotent method with provider guarantees, or a write protected by a provider-supported idempotency key. Never put automatic retry on a shared client that also executes ordinary POST/PATCH operations.
+
 Same option shape as `Effect.retry` — a `Schedule` or an options bag (`times`, `schedule`, `while`, `until`):
 
 ```ts
-client.pipe(HttpClient.retry(Schedule.exponential('100 millis')));
-client.pipe(HttpClient.retry({ times: 3 }));
+idempotentClient.pipe(
+	HttpClient.retry(
+		Schedule.exponential('100 millis').pipe(Schedule.upTo({ times: 3 }))
+	)
+);
+idempotentClient.pipe(HttpClient.retry({ times: 3 }));
 ```
 
 ### `HttpClient.retryTransient`
@@ -480,7 +550,7 @@ Purpose-built for HTTP. Transient = response status in {408, 429, 500, 502, 503,
 client.pipe(
 	HttpClient.retryTransient({
 		retryOn: 'errors-and-responses', // default; or 'errors-only' | 'response-only'
-		schedule: Schedule.exponential(100), // optional
+		schedule: Schedule.exponential('100 millis'), // optional
 		times: 3, // optional cap
 		while: (error) => isAlsoTransient(error) // optional extra error predicate
 	})
@@ -489,10 +559,30 @@ client.pipe(
 // Schedule-only shorthand (equivalent to retryOn: 'errors-and-responses').
 // Data-first only — the data-last bare-schedule overload fails to infer E;
 // inside .pipe use the options bag with `schedule` instead.
-const retried = HttpClient.retryTransient(client, Schedule.spaced('1 second'));
+const retried = HttpClient.retryTransient(
+	idempotentClient,
+	Schedule.spaced('1 second').pipe(Schedule.upTo({ times: 3 }))
+);
 ```
 
 `retryOn: 'errors-and-responses'` retries transient **successful responses** (e.g. a raw 503 with no `filterStatusOk`) as well as transient errors. `'errors-only'` ignores transient response statuses unless something (like `filterStatusOk`) has converted them to errors first. The `while` predicate is ignored in `'response-only'` mode.
+
+Bound every retry policy and keep exhaustion visible. After the retry combinator, preserve the terminal typed error and emit one redacted log/metric/span annotation with operation name, attempts, status/provider code when available, and provider request ID. Do not recover exhaustion to an empty/default success or log secrets/full response bodies.
+
+```ts
+const idempotentReads = client.pipe(
+	HttpClient.filterStatusOk,
+	HttpClient.retryTransient({
+		schedule: Schedule.exponential('100 millis'),
+		times: 3
+	}),
+	HttpClient.tapError((error) =>
+		Effect.logError('provider request exhausted retries').pipe(
+			Effect.annotateLogs({ operation: 'Todos.getTodo', errorTag: error._tag })
+		)
+	)
+);
+```
 
 ### Timeouts
 
@@ -512,10 +602,12 @@ The undici transport neutralizes undici's own timeouts (`headersTimeout` one hou
 
 Client-side rate limiting backed by the `RateLimiter` service from `effect/unstable/persistence`. It delays requests past the limit, **automatically retries 429s** (responses or `StatusCodeError`s) back through the limiter honoring `retry-after`, and by default updates its limit/window from `ratelimit-*` / `x-ratelimit-*` response headers.
 
+Because `withRateLimiter` retries 429 responses independently of the HTTP method, apply it with `times > 0` only to a client restricted to proven-idempotent operations. For a mixed or non-idempotent client, set `times: 0` and handle the returned 429 as a visible typed failure.
+
 ```ts
 import { RateLimiter } from 'effect/unstable/persistence';
 
-const limited = Effect.gen(function* () {
+const limitedReads = Effect.gen(function* () {
 	const limiter = yield* RateLimiter.RateLimiter;
 	return (yield* HttpClient.HttpClient).pipe(
 		HttpClient.withRateLimiter({
@@ -679,6 +771,7 @@ const TestHttpLayer = Layer.succeed(HttpClient.HttpClient, mockClient);
 it.effect('decodes todos', () =>
 	Effect.gen(function* () {
 		const todo = yield* HttpClient.get('https://any/todos/1').pipe(
+			Effect.flatMap(HttpClientResponse.filterStatusOk),
 			Effect.flatMap(HttpClientResponse.schemaBodyJson(Todo))
 		);
 		expect(todo.id).toBe(1);
@@ -732,7 +825,7 @@ export class Todos extends Context.Service<Todos, {
 	getTodo(id: number): Effect.Effect<Todo, TodosError>;
 	createTodo(todo: Omit<Todo, 'id'>): Effect.Effect<Todo, TodosError>;
 }>()('app/Todos') {
-	static readonly layer = Layer.effect(
+	static readonly layer: Layer.Layer<Todos, never, HttpClient.HttpClient> = Layer.effect(
 		Todos,
 		Effect.gen(function* () {
 			const client = (yield* HttpClient.HttpClient).pipe(
@@ -740,12 +833,22 @@ export class Todos extends Context.Service<Todos, {
 					HttpClientRequest.prependUrl('https://jsonplaceholder.typicode.com'),
 					HttpClientRequest.acceptJson
 				)),
-				HttpClient.filterStatusOk,
-				HttpClient.retryTransient({ schedule: Schedule.exponential(100), times: 3 })
+				HttpClient.filterStatusOk
+			);
+			const idempotentReads = client.pipe(
+				HttpClient.retryTransient({
+					schedule: Schedule.exponential('100 millis'),
+					times: 3
+				}),
+				HttpClient.tapError((error) =>
+					Effect.logError('Todos request exhausted retries').pipe(
+						Effect.annotateLogs({ operation: 'Todos.getTodo', errorTag: error._tag })
+					)
+				)
 			);
 
 			const getTodo = Effect.fn('Todos.getTodo')(function* (id: number) {
-				return yield* client.get(`/todos/${id}`).pipe(
+				return yield* idempotentReads.get(`/todos/${id}`).pipe(
 					Effect.flatMap(HttpClientResponse.schemaBodyJson(Todo)),
 					Effect.mapError((cause) => new TodosError({ cause }))
 				);
@@ -762,20 +865,35 @@ export class Todos extends Context.Service<Todos, {
 
 			return Todos.of({ getTodo, createTodo });
 		})
-	).pipe(Layer.provide(FetchHttpClient.layer));
+	);
+
+	static readonly defaultLayer: Layer.Layer<Todos> = Todos.layer.pipe(
+		Layer.provide(FetchHttpClient.layer)
+	);
 }
 ```
+
+The shared base client performs status filtering but does not retry. Only `idempotentReads` retries; `createTodo` executes its POST once unless the provider contract is later strengthened with an idempotency key.
 
 ### Schema-encoded request, schema-decoded response
 
 ```ts
-const CreateUser = Schema.Struct({ name: Schema.String, email: Schema.String });
-const User = Schema.Struct({ id: Schema.Number, name: Schema.String, email: Schema.String });
+class CreateUser extends Schema.Class<CreateUser>('CreateUser')({
+	name: Schema.String,
+	email: Schema.String
+}) {}
+
+class User extends Schema.Class<User>('User')({
+	id: Schema.Number,
+	name: Schema.String,
+	email: Schema.String
+}) {}
 
 const createUser = (input: typeof CreateUser.Type) =>
 	HttpClientRequest.post('/users').pipe(
 		HttpClientRequest.schemaBodyJson(CreateUser)(input),
 		Effect.flatMap(client.execute),
+		Effect.flatMap(HttpClientResponse.filterStatusOk),
 		Effect.flatMap(HttpClientResponse.schemaBodyJson(User))
 	);
 // Effect<User, HttpBodyError | HttpClientError | SchemaError> — R is never with a
@@ -808,10 +926,10 @@ const findUser = (id: string) =>
 
 (`orElse` manufactures the standard `StatusCodeError` so the error channel stays `HttpClientError`.)
 
-### Rate-limited, traced, resilient third-party client
+### Rate-limited, traced, resilient idempotent third-party client
 
 ```ts
-const makeGithub = Effect.gen(function* () {
+const makeGithubReads = Effect.gen(function* () {
 	const limiter = yield* RateLimiter.RateLimiter;
 	return (yield* HttpClient.HttpClient).pipe(
 		HttpClient.mapRequest(flow(
@@ -820,9 +938,20 @@ const makeGithub = Effect.gen(function* () {
 			HttpClientRequest.setHeader('x-github-api-version', '2022-11-28')
 		)),
 		HttpClient.filterStatusOk,
-		HttpClient.withRateLimiter({ limiter, key: 'github', limit: 5000, window: '1 hour' }),
+		HttpClient.withRateLimiter({
+			limiter,
+			key: 'github-reads',
+			limit: 5000,
+			window: '1 hour',
+			times: 3
+		}),
 		HttpClient.retryTransient({ schedule: Schedule.exponential('250 millis'), times: 3 }),
-		HttpClient.transformResponse(Effect.timeout('30 seconds'))
+		HttpClient.transformResponse(Effect.timeout('30 seconds')),
+		HttpClient.tapError((error) =>
+			Effect.logError('GitHub read exhausted retries').pipe(
+				Effect.annotateLogs({ operation: 'Github.read', errorTag: error._tag })
+			)
+		)
 	);
 });
 ```
@@ -844,3 +973,6 @@ const makeGithub = Effect.gen(function* () {
 13. **Looking for a `timeout` option on the client or transports** — there is none, and the undici transport neutralizes undici's own timeouts on purpose (`headersTimeout` one hour, `bodyTimeout` off). Use `Effect.timeout` per request or `HttpClient.transformResponse(Effect.timeout(...))` client-wide. The resulting `TimeoutError` counts as transient for `retryTransient`.
 14. **`urlParams` as a pre-built query string** — pass structured input (`{ page: 1, tags: ['a', 'b'] }`); values are coerced, `undefined` entries dropped, arrays repeated, nested records bracketed. Don't hand-encode into the URL.
 15. **Assuming an empty body fails `response.json`** — an empty body decodes to `null`, not an error; `response.stream` on a bodiless response fails with reason `EmptyBodyError`.
+16. **Raw `fetch` in application/provider code** — use `HttpClient`. Raw fetch belongs only in a named low-level transport adapter with a documented necessity, interruption wiring, typed errors, status-first handling, and schema decoding.
+17. **Retrying a mixed client** — client combinators affect every method. Split idempotent operations onto a retrying client; leave non-idempotent POST/PATCH calls unretried unless protected by a provider-supported idempotency guarantee.
+18. **Hiding retry exhaustion** — bound attempts, preserve the final typed failure, and record redacted evidence once after retries are exhausted.

@@ -21,7 +21,7 @@ processEnv :: String -> IO (Maybe String)    -- side effect, untyped, untestable
 -- Instead
 Config.string :: String -> Config String     -- typed, composable, testable
 Config.withDefault :: a -> Config a -> Config a
-Config.secret :: String -> Config Redacted   -- for sensitive values
+Config.redacted :: String -> Config Redacted -- for sensitive values
 ```
 
 ```haskell

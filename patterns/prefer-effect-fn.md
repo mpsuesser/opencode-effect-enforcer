@@ -22,7 +22,7 @@ rule:
     inside:
         any:
             - pattern: Layer.effect($$$)
-            - pattern: Layer.scoped($$$)
+            - pattern: Layer.effectContext($$$)
             - pattern: Layer.succeed($$$)
         stopBy: end
     not:

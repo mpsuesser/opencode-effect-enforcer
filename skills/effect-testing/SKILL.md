@@ -9,7 +9,7 @@ This skill provides comprehensive guidance for testing Effect-based applications
 
 ## Effect Source Reference
 
-The Effect v4 source is available at `~/.cache/effect-v4/`.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
 Reference this for:
@@ -76,7 +76,9 @@ describe('Cents', () => {
 
 ### it.effect - Default Test Environment
 
-Provides `TestContext` including `TestClock`, `TestRandom`, etc.
+Use `it.effect` by default. It scopes the test and installs Effect's `TestClock` and `TestConsole` services. Other services are not automatically test implementations and must be provided explicitly.
+
+The callback argument is Vitest's `TestContext` (task metadata, cancellation signal, fixtures), not Effect's service context. Access Effect test services by yielding them, for example with `TestClock.adjust`.
 
 ```typescript
 import { it, expect } from '@effect/vitest';
@@ -85,16 +87,16 @@ import { Effect } from 'effect';
 declare const someEffect: Effect.Effect<number>;
 declare const expected: number;
 
-it.effect('test name', () =>
+it.effect('test name', (context) =>
 	Effect.gen(function* () {
-		// Test implementation with TestContext available
+		// context is Vitest's TestContext; TestClock is in the Effect context.
 		const result = yield* someEffect;
 		expect(result).toBe(expected);
 	})
 );
 ```
 
-### it.live - Live Environment (DEFAULT for most tests)
+### it.live - Explicit Live Environment
 
 Uses real services (real clock, real random, etc.).
 
@@ -110,7 +112,7 @@ it.live('test with real time', () =>
 );
 ```
 
-**IMPORTANT: `it.live` should be the default for all tests that touch services, databases, HTTP, filesystems, or any real I/O.** `TestClock` intercepts time-dependent operations and causes hangs and non-determinism in integration tests. Reserve `it.effect` (with `TestClock`) only for tests that explicitly need to simulate time advancement.
+Use `it.live` only when real time or live runtime services are behavior under test. It scopes the test without installing `TestClock` or `TestConsole`. Real databases, HTTP clients, and filesystems still require their explicit layers; `it.live` does not provide them.
 
 ### Resource Management in Tests
 
@@ -222,6 +224,60 @@ const TestUserService = Layer.mock(UserService)({
 ```
 
 `Layer.mock(Service)({...})` is shorthand for `Layer.succeed(Service, Service.of({...}))` — use whichever reads more clearly in context.
+
+### First-Class Controllable Test Services
+
+For reusable stateful fakes, define file-local `TestInterface extends Interface`, a separate `TestService` tag, and a `testLayer` that provides one implementation under both tags. Production code depends only on `Service`; tests yield `TestService` to inspect calls and trigger failures or lifecycle transitions. The owning leaf self-exports its canonical identity at the bottom; sibling modules import that identity from the leaf, while folder/package barrels only relay it. This intentional self-reference requires toolchain and runtime support, so preserve an established project convention when it differs.
+
+```typescript
+// notifier.ts
+import { Context, Effect, Layer, Option, Ref } from 'effect';
+import * as Arr from 'effect/Array';
+
+export interface Interface {
+	readonly send: (message: Message) => Effect.Effect<void, SendError>;
+}
+
+export class Service extends Context.Service<Service, Interface>()(
+	'@app/Notifier'
+) {}
+
+export interface TestInterface extends Interface {
+	readonly sentMessages: () => Effect.Effect<ReadonlyArray<Message>>;
+	readonly failNextSend: (error: SendError) => Effect.Effect<void>;
+}
+
+export class TestService extends Context.Service<TestService, TestInterface>()(
+	'@app/Notifier/Test'
+) {}
+
+export const testLayer = Layer.effectContext(
+	Effect.gen(function* () {
+		const sent = yield* Ref.make<ReadonlyArray<Message>>([]);
+		const nextFailure = yield* Ref.make<Option.Option<SendError>>(
+			Option.none()
+		);
+		const service = TestService.of({
+			send: Effect.fn('Notifier.Test.send')(function* (message) {
+				const failure = yield* Ref.getAndSet(nextFailure, Option.none());
+				if (Option.isSome(failure)) return yield* Effect.fail(failure.value);
+				yield* Ref.update(sent, Arr.append(message));
+			}),
+			sentMessages: () => Ref.get(sent),
+			failNextSend: (error) => Ref.set(nextFailure, Option.some(error))
+		});
+
+		return Context.empty().pipe(
+			Context.add(Service, service),
+			Context.add(TestService, service)
+		);
+	})
+);
+
+export * as Notifier from './notifier.js';
+```
+
+Use `Layer.succeed` for complete static fakes. Reserve `Layer.mock` for tiny local partial mocks where omitted methods should fail loudly.
 
 ### Using layer Helper
 
@@ -756,7 +812,7 @@ it.effect('logs visible', () =>
 	}).pipe(Effect.provide(Logger.pretty))
 );
 
-// Or use it.live
+// Use it.live only when the live console itself is under test.
 it.live('logs visible', () =>
 	Effect.gen(function* () {
 		yield* Effect.log('This will appear');
@@ -1088,8 +1144,8 @@ describe('MyService', () => {
 Key differences from `@effect/vitest`:
 
 - Use `Effect.runPromise` manually — bun:test expects `Promise<void>` from async tests
-- Layer composition uses `Layer.provideMerge` so services remain visible through the stack
-- `it.live` is the default for integration tests; `it.effect` only for time-simulation tests
+- Layer composition uses `Layer.provideMerge` here because the harness intentionally exposes both application and test services; do not use it blindly
+- Keep `effect` as the default; use `live` only when real time or live runtime services are under test
 
 **`TestClock` without an ambient `Scope` (beta.70):** earlier betas required a surrounding `Scope` for `TestClock.adjust` to advance time. As of beta.70, `TestClock.layer()` works when provided directly to a program run with `Effect.runPromise` (no ambient `Scope`) — which is exactly what the harness above relies on. `testEffect(...).effect(...)` merges `TestClock.layer()` into the layer stack and runs with `Effect.runPromise`, and `TestClock.adjust` still drives time correctly.
 
@@ -1098,7 +1154,7 @@ Key differences from `@effect/vitest`:
 Before completing a testing task, verify:
 
 - [ ] Correct framework chosen (@effect/vitest vs vitest vs bun:test harness)
-- [ ] Test variant appropriate — `it.live` is the default; `it.effect` only for time-simulation
+- [ ] Test variant appropriate — `it.effect` by default; `it.live` only for explicitly live runtime behavior
 - [ ] Services provided via layers when needed
 - [ ] HTTP-speaking services tested with HTTP mock server, not service fakes
 - [ ] TestClock used only for tests that explicitly need time simulation

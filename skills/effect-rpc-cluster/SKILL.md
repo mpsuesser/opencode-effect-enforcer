@@ -9,7 +9,7 @@ These modules live under `effect/unstable/*`. There are no `@effect/rpc` or `@ef
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.cache/effect-v4/`. Read it directly when in doubt — the shape of these modules changes more often than the website docs.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — the shape of these modules changes more often than the website docs.
 
 Key files:
 
@@ -507,14 +507,13 @@ const ServerLayer = RpcServer.layerHttp({
 For when you want to mount the RPC handler as a single `HttpServerResponse` Effect on a router you control (Hono adapter, custom routes, etc.) rather than registering a route on `HttpRouter`. Returns `Effect<Effect<HttpServerResponse, never, Scope | HttpServerRequest>, ...>`:
 
 ```ts
-const HttpAppLayer = Layer.scoped(
-	'/api/rpc',
-	RpcServer.toHttpEffect(UsersGroup).pipe(
-		Effect.provide(UsersLive),
-		Effect.provide(RpcSerialization.layerNdjson)
-	)
+const makeHttpApp = RpcServer.toHttpEffect(UsersGroup).pipe(
+	Effect.provide(UsersLive),
+	Effect.provide(RpcSerialization.layerNdjson)
 );
 ```
+
+Run `makeHttpApp` in the scope that owns the router or framework adapter, then mount the returned request/response effect there.
 
 ### Protocol layers (server side)
 

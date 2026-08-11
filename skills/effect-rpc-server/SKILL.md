@@ -9,7 +9,7 @@ Everything ships from the `effect` package under `effect/unstable/rpc` — there
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.cache/effect-v4/`. Read it directly when in doubt — these modules change between betas.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules change between betas.
 
 Key files:
 

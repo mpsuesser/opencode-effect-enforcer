@@ -9,7 +9,7 @@ This skill covers the **contract layer**: the definitions that client and server
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.cache/effect-v4/`. Read it directly when in doubt — these modules are under `unstable` and move between betas.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules are under `unstable` and move between betas.
 
 Key files:
 

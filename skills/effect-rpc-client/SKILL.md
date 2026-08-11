@@ -9,7 +9,7 @@ This skill covers the client side only: building clients, transports, serializat
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.cache/effect-v4/`. Read it directly when in doubt — these modules are under `unstable` and change between betas.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules are under `unstable` and change between betas.
 
 Key files:
 
@@ -401,7 +401,9 @@ const getUser = (id: string) =>
 		Effect.retry({
 			// transport-only retry with backoff
 			while: (e) => e._tag === 'RpcClientError' && e.reason._tag !== 'RpcClientDefect',
-			schedule: Schedule.exponential('200 millis').pipe(Schedule.take(3))
+			schedule: Schedule.exponential('200 millis').pipe(
+				Schedule.upTo({ times: 3 })
+			)
 		})
 	);
 ```
@@ -420,7 +422,7 @@ Semantics to remember:
 The socket protocol owns a long-lived connection loop:
 
 - **Keepalive** — the client sends `Ping` every 5 seconds; a missing `Pong` by the next tick fails the connection with a `SocketOpenError` (kind `'Timeout'`) and triggers reconnect.
-- **Reconnect policy** — the loop retries with `Schedule.min([Schedule.exponential(500, 1.5), Schedule.spaced(5000)])`, capped at 5s between attempts, forever, by default. Customize the schedule via `makeProtocolSocket({ retryPolicy })` + `Layer.effect(RpcClient.Protocol)(...)`; both constructors accept `retryTransientErrors` and `onTransientError`.
+- **Reconnect policy** — the loop retries with `Schedule.min([Schedule.exponential("500 millis", 1.5), Schedule.spaced("5 seconds")])`, capped at 5s between attempts, forever, by default. Customize the schedule via `makeProtocolSocket({ retryPolicy })` + `Layer.effect(RpcClient.Protocol)(...)`; both constructors accept `retryTransientErrors` and `onTransientError`.
 - **Failure broadcast** — on a connection error, all in-flight requests fail with `RpcClientError`, and subsequent `send`s fail fast with the same error until the socket reopens.
 - **`retryTransientErrors: true`** — `SocketOpenError` failures (failure to connect, and ping timeouts, which are classified as open errors) are not broadcast: pending requests stay pending across reconnect attempts instead of failing. Read/write/close errors on an established connection still fail in-flight requests.
 - **`onTransientError`** — called for every retried `SocketOpenError` (including ping timeouts) while `retryTransientErrors` is enabled. Its infallible, service-free effect is for logging/metrics; defects in the hook are logged and ignored.
@@ -610,7 +612,9 @@ const firstFive = client.StreamUsers({ id: '1' }).pipe(
 	Stream.runCollect,
 	Effect.retry({
 		while: (e) => e._tag === 'RpcClientError',
-		schedule: Schedule.exponential('250 millis').pipe(Schedule.take(5))
+		schedule: Schedule.exponential('250 millis').pipe(
+			Schedule.upTo({ times: 5 })
+		)
 	})
 );
 ```

@@ -7,7 +7,7 @@ You are an Effect TypeScript expert specializing in request batching, deduplicat
 
 ## Effect Source Reference
 
-The Effect v4 source is available at `~/.cache/effect-v4/`.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
 Reference this for:
@@ -22,6 +22,18 @@ Reference this for:
 Naive data fetching executes one query per item. Fetching 100 users by ID produces 100 separate queries. Effect's batching system solves this automatically: individual `Effect.request` calls made concurrently within a batch window are collected and resolved together in a single batch.
 
 The key insight: calling code writes single-item lookups, but the runtime collects them and hands the resolver an array. No manual batching logic leaks into business code.
+
+## Select by Backend Capability
+
+Use `RequestResolver` batching only when the backend can answer many distinct keys in one operation, such as SQL `IN (...)`, a DataLoader-style endpoint, or a batch GET API. The resolver should collapse a batch into fewer wire/database calls.
+
+If the backend exposes only per-item endpoints, a resolver that loops over entries is not backend batching. Prefer `Effect.forEach(items, lookup, { concurrency: n })`, optionally with `Cache` for repeated-key memoization and in-flight deduplication. Use `RequestResolver.batchN` to respect a real batch endpoint's maximum request size, and `makeGrouped` when entries must be routed to different backend targets.
+
+Selection guide:
+
+- Repeated same key, concurrently or over time: `Cache`.
+- Many distinct keys with a real batch endpoint: `Effect.request` + `RequestResolver`.
+- Many distinct keys with per-item endpoints only: bounded `Effect.forEach`, optionally through `Cache`.
 
 ## Request Definition
 
@@ -296,8 +308,8 @@ const userCache =
 		})
 	);
 
-// Use as a Cache
-const user = yield* userCache.get(new GetUserById({ id: 1 }));
+// Cache operations are module functions in beta.107
+const user = yield* Cache.get(userCache, new GetUserById({ id: 1 }));
 ```
 
 ## Observability
@@ -596,3 +608,7 @@ yield* Effect.forEach([1, 2, 3], getUserById);
 // GOOD - concurrent execution triggers batching
 yield* Effect.forEach([1, 2, 3], getUserById, { concurrency: 'unbounded' });
 ```
+
+### WRONG: Calling per-item endpoints from a "batched" resolver
+
+This still makes N backend calls. Use bounded `Effect.forEach` directly and add `Cache` when repeated-key deduplication is useful. Introduce a resolver only after selecting a backend endpoint that truly accepts multiple keys.

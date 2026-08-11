@@ -9,7 +9,7 @@ Effect Atom is a reactive state management library for Effect that seamlessly in
 
 ## Effect Source Reference
 
-The Effect v4 source is available at `~/.cache/effect-v4/`.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
 Reference this for:

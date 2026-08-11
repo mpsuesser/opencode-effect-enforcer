@@ -4,7 +4,7 @@ testPattern({
   name: "prefer-effect-fn",
   shouldMatch: [
     `export const layer = Layer.effect(Service, Effect.gen(function* () { const open = () => Effect.gen(function* () { return 1 }); return Service.of({ open }) }))`,
-    `export const layer = Layer.scoped(Service, Effect.gen(function* () { const open = () => Effect.gen(function* () { return 1 }); return Service.of({ open }) }))`,
+    `export const layer = Layer.effectContext(Effect.gen(function* () { const open = () => Effect.gen(function* () { return 1 }); return Context.make(Service, Service.of({ open })) }))`,
     `export const layer = Layer.succeed(Service, Service.of({ open: () => Effect.gen(function* () { return 1 }) }))`,
     `export const layer = Layer.effect(Service, Effect.gen(function* () { return Service.of({ open() { return Effect.gen(function* () { return 1 }) } }) }))`,
     `export const layer = Layer.effect(Service, Effect.gen(function* () { return Service.of({ open: function() { return Effect.gen(function* () { return 1 }) } }) }))`

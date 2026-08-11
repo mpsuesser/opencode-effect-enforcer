@@ -9,7 +9,7 @@ Expert guidance for composing, transforming, and validating data with Effect Sch
 
 ## Effect Source Reference
 
-The Effect v4 source is available at `~/.cache/effect-v4/`.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
 Reference this for:
@@ -561,12 +561,28 @@ export const beGreaterThan =
 
 ## Decoding and Encoding
 
+### Constructor vs Boundary Decoder
+
+Keep decoded shapes schema-first with `Schema.Class`. Choose construction and decoding APIs by input trust and failure semantics:
+
+| API | Use Case | Failure |
+| --- | --- | --- |
+| `schema.make` | Construct from typed constructor input; trusted data or abort-on-invalid paths | Throws on failed type-side checks |
+| `schema.makeEffect` | Construct from typed constructor input inside Effect | `Effect` failure with `SchemaIssue.Issue` |
+| `Schema.decodeUnknownEffect(schema)` | Default for unknown boundary input | `Effect` failure with `SchemaError` |
+| `Schema.decodeUnknownSync(schema)` | Scripts, tests, or startup paths where throwing is acceptable | Throws `SchemaError` |
+| `Schema.decodeUnknownOption(schema)` | Only when mismatch details are intentionally discarded | `Option.none()` for schema mismatches |
+| `Schema.decodeUnknownResult(schema)` | Pure code needing explicit success or failure without Effect | `Result` failure with `SchemaError` |
+
+`make` and `makeEffect` apply constructor defaults and type-side checks. They are constructors, not substitutes for decoding unknown external input.
+
 ### Decoding APIs
 
 | API                    | Return Type                          | Use Case                        |
 | ---------------------- | ------------------------------------ | ------------------------------- |
 | `decodeUnknownSync`    | `Type` (throws on error)             | Sync decoding, immediate error  |
 | `decodeUnknownOption`  | `Option<Type>`                       | Sync decoding, no error details |
+| `decodeUnknownResult`  | `Result<Type, SchemaError>`           | Pure, explicit success/failure  |
 | `decodeUnknownExit`    | `Exit<Type, SchemaError>`            | Sync decoding, error handling   |
 | `decodeUnknownPromise` | `Promise<Type>`                      | Async decoding                  |
 | `decodeUnknownEffect`  | `Effect<Type, SchemaError, Context>` | Full Effect-based decoding      |
@@ -620,6 +636,8 @@ const Person = Schema.Struct({
 ```
 
 ### Optional Fields
+
+Optionality describes the encoded contract, not constructor convenience. Use `optionalKey` only when the key may be absent, `optional` only when explicit `undefined` is accepted, and nullish schemas only when those values are valid encoded inputs.
 
 ```typescript
 import { Schema } from 'effect';
@@ -701,6 +719,12 @@ const DogWithBreed3 = Schema.Struct({
 });
 ```
 
+### Semantic Contract Reuse
+
+- Reuse `.fields`, `Schema.fieldsAssign(...)`, and `.mapFields(...)` only when the resulting contracts are genuinely related. Keep external and domain shapes as named `Schema.Class` models rather than building one oversized inheritance-by-schema object.
+- Apply `Schema.encodeKeys({ decodedName: 'encoded_name' })` after assembling the full shape when wire or storage key names are the only difference. Keep an explicit boundary mapping when behavior, joins, validation, or domain translation differs.
+- Use `Schema.extendTo(fields, derive)` sparingly for structural projections with decoded-only derived fields. Derived fields are removed during encoding; do not use it to hide a distinct domain contract or replace a schema class.
+
 ## Advanced Composition Patterns
 
 ### Combining Arrays and Transformations
@@ -768,6 +792,8 @@ const schema = Schema.Struct({
 `Schema.withDecodingDefaultKey` / `Schema.withDecodingDefault` take defaults on the **Encoded** side. For `Schema.FiniteFromString`, that means a string default such as `'1'`.
 
 `Schema.withDecodingDefaultTypeKey` / `Schema.withDecodingDefaultType` take defaults on the decoded **Type** side, such as `1`. Default effects may require services and may fail with `Schema.SchemaError`.
+
+Keep fields required in the normalized decoded model when a default guarantees their value. Apply the default during construction or decoding; do not make domain values optional merely to make construction easier.
 
 ```typescript
 import { Effect, Schema } from 'effect';

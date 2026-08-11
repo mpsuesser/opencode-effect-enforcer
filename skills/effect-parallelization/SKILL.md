@@ -7,7 +7,7 @@ You are an Effect TypeScript expert specializing in declarative concurrency — 
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.cache/effect-v4/`. Read it directly when in doubt — Effect v4 differs substantially from v3 and from most training data.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — Effect v4 differs substantially from v3 and from most training data.
 
 Key files:
 

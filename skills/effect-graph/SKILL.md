@@ -7,7 +7,7 @@ You are an Effect TypeScript expert specializing in the `Graph` module — build
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.cache/effect-v4/`. Read it directly when in doubt — the module is self-contained in a single file.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — the module is self-contained in a single file.
 
 Key files:
 

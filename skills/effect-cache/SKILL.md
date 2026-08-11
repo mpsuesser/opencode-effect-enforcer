@@ -7,7 +7,7 @@ You are an Effect TypeScript expert specializing in in-memory caching with `Cach
 
 ## Effect Source Reference
 
-The Effect v4 source is available at `~/.cache/effect-v4/`.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
 Reference this for:
@@ -53,6 +53,12 @@ Choosing the right tool:
 | Batch + deduplicate request-shaped fetches | see the effect-batching skill (`RequestResolver.withCache` / `asCache`) |
 | Pool of N interchangeable resources checked out per use | `effect/Pool` (not keyed caching) |
 | Scope/finalizer fundamentals | see the effect-scope skill |
+
+### Ownership rule
+
+Cache construction allocates mutable state. Build a cache once in the `Layer` or scope that owns its policy and dependencies, then expose cached operations through the service. A cache constructed per request or per method call has no useful reuse.
+
+Acquire expensive SDK/database clients once in that same owning layer, not inside the cache lookup. A cache miss should perform one backend operation, not rebuild authentication or a scoped client. Use `ScopedCache` only when each **cached entry** is itself a resource with entry-bound cleanup; it is not a substitute for owning one shared client in a layer.
 
 ---
 
@@ -561,3 +567,4 @@ it.effect('expires entries after the TTL', () =>
 13. **`Cache.keys`/`values`/`entries` return lazy `Iterable`s** — iteration performs the expiry purge; materialize with `Array.from` before iterating twice. (`ScopedCache` returns plain arrays.)
 14. **`Effect.cached*` are double-wrapped** — `cached`/`cachedWithTTL` return `Effect<Effect<A, E, R>>`; `cachedInvalidateWithTTL` returns `Effect<[Effect<A, E, R>, Effect<void>]>`. `yield*` once to allocate the memo, then reuse the inner effect; re-running the outer effect creates a fresh, empty cache.
 15. **`getOption` can still fail** — it awaits pending lookups and replays cached errors (`Effect<Option<A>, E>`). If you want a never-failing peek at resolved successes, use `getSuccess`.
+16. **Cache and client ownership are too narrow** — constructing either inside a handler or lookup repeats allocation and defeats reuse. Own both in the service layer; let lookups call the already-acquired client.

@@ -7,7 +7,7 @@ You are an Effect TypeScript expert specializing in pull-based streaming with `S
 
 ## Effect Source Reference
 
-The Effect v4 source is available at `~/.cache/effect-v4/`.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
 Reference this for:
@@ -20,6 +20,8 @@ Reference this for:
 ## Core Model
 
 A `Stream<A, E, R>` is a program that can emit many `A` values, fail with `E`, and require `R`. Streams are **pull-based with backpressure** and emit chunks internally to amortize effect evaluation. They support monadic composition and error handling similar to `Effect`, adapted for multiple values.
+
+Use a stream when values are naturally many-valued and ordered over time. For one effect repeated only for its side effects, prefer `Effect.repeat` with `Schedule`; see the effect-scheduling skill.
 
 ```ts
 import { Effect, Schedule, Schema, Sink, Stream } from 'effect';
@@ -35,6 +37,17 @@ import { NodeStream } from '@effect/platform-node';
 ---
 
 ## 1. Creating Streams
+
+Source chooser:
+
+- Values/tests: `Stream.make` or `Stream.fromIterable`.
+- Callback boundary consumed by one worker: private `Queue` + `Stream.fromQueue`.
+- Broadcast events: private `PubSub` + `Stream.fromPubSub`.
+- Current value plus changes: `SubscriptionRef`.
+- Schedule outputs/ticks: `Stream.fromSchedule`.
+- Paginated pull API: `Stream.paginate`.
+- Effect that first reads services/config: `Stream.unwrap`.
+- Async iterable/platform source: `Stream.fromAsyncIterable` when no native Effect source exists.
 
 ### From values and iterables
 
@@ -180,6 +193,8 @@ const fromChan = Stream.fromChannel(myChannel);
 
 ## 2. Transforming Streams
 
+Choose `map` for pure work, `mapEffect` for effectful work, and bounded `mapEffect(..., { concurrency })` for parallel work. Add `unordered: true` only when output order is irrelevant. Use `flatMap` for zero/many outputs, `filter`/`filterEffect` for selection, and `mapAccum`/`mapAccumEffect` for stateful transforms.
+
 ### Pure transforms
 
 ```ts
@@ -287,6 +302,10 @@ stream.pipe(Stream.zipWithPreviousAndNext); // [Option<A>, A, Option<A>]
 ## 3. Consuming Streams
 
 All `run*` methods return `Effect` values — the stream is only pulled when the effect is executed.
+
+Use `runForEach` for side-effecting consumers, `runDrain` when values are irrelevant, and `runFold` for bounded aggregation. Reserve `runCollect` for tests and known-finite, memory-bounded streams; never collect an unbounded production event stream. In tests, prefer `take(n)` + `runCollect`.
+
+For stream tests, use `fromIterable` for finite fixtures, `empty` for no events, and a test-owned `Queue` plus `fromQueue` when the test must drive events interactively. Coordinate with `Deferred`, `Queue`, `Latch`, or `TestClock`, never real sleeps.
 
 ```ts
 // Collect all elements into an array
@@ -482,6 +501,10 @@ stream.pipe(Stream.orElseSucceed((error) => defaultValue));
 
 ## 6. Concurrency & Merging
 
+### Buffer policy
+
+Prefer natural backpressure. Add `Stream.buffer` only to deliberately decouple producer and consumer: `"suspend"` backpressures when full, `"dropping"` drops new values, and `"sliding"` drops old values to retain the latest. Avoid `capacity: "unbounded"` unless growth is bounded elsewhere and documented.
+
 ### merge
 
 Interleave elements from two streams concurrently in arrival order.
@@ -593,6 +616,12 @@ const shared = yield* stream.pipe(Stream.share({ capacity: 16 }));
 ---
 
 ## 7. Resource Safety
+
+### Long-lived service consumers
+
+Expose `Stream` values from service interfaces while keeping producer `Queue`, `PubSub`, and mutable state private. Own long-lived consumers in a layer and ordinarily run them with `stream.pipe(Stream.runForEach(handle), Effect.forkScoped)` so layer shutdown interrupts the consumer.
+
+`forkScoped` provides lifetime supervision, not failure recovery or restart supervision. A failed child fiber does not automatically fail its parent or restart itself. If consumer failure must stop the application, restart with policy, or be reported, explicitly join/monitor the fiber or install a supervisor at the owning runtime boundary. Preserve interruption as shutdown; do not blanket-catch causes and turn interruption into a retry loop.
 
 ### scoped
 
@@ -723,3 +752,5 @@ const monitored = Schedule.exponential('100 millis').pipe(
 3. **Not specifying `onError` for `fromAsyncIterable` / `fromReadableStream`** — these require an error mapper
 4. **Assuming `retry` resumes** — `Stream.retry` restarts the entire stream from the beginning on each retry
 5. **Ignoring `haltStrategy` on `merge`** — default is `"both"` (wait for both to end); use `"either"` to stop as soon as one ends
+6. **Assuming `forkScoped` supervises failures** — it scopes lifetime only. Explicitly monitor/restart/report long-lived consumers according to the owning service policy.
+7. **Collecting open streams** — use `runForEach`/`runDrain` in production and `take(n)` + `runCollect` for finite tests.

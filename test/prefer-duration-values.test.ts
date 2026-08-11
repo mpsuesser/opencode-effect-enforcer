@@ -14,6 +14,9 @@ testPattern({
     "Effect.timeoutOrElse(program, { duration: 5000, orElse: () => fallback })",
     "program.pipe(Effect.timeoutOrElse({ duration: 5000, orElse: () => fallback }))",
     "Schedule.duration(1000)",
+    "Schedule.during(1000)",
+    "Schedule.exponential(1000)",
+    "Schedule.fibonacci(1000)",
     "Schedule.fixed(1000)",
     "Schedule.spaced(1000)",
     "Schedule.windowed(1000)"
@@ -29,6 +32,8 @@ testPattern({
     "Effect.timeoutOrElse(program, { duration: Duration.seconds(5), orElse: () => fallback })",
     "program.pipe(Effect.timeoutOrElse({ duration: Duration.seconds(5), orElse: () => fallback }))",
     "Schedule.spaced(Duration.millis(250))",
+    "Schedule.exponential(Duration.millis(100))",
+    "Schedule.fibonacci(Duration.seconds(1))",
     "Duration.millis(1000)",
     "const timeoutMs = 1000",
     "const millis = 1000",

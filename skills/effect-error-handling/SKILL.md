@@ -7,7 +7,7 @@ You are an Effect TypeScript expert specializing in typed error handling, recove
 
 ## Effect Source Reference
 
-The Effect v4 source is available at `~/.cache/effect-v4/`.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
 Reference this for:
@@ -1044,6 +1044,14 @@ The `instanceof` guard prevents double-wrapping when an upstream operation alrea
 
 ## Error Recovery Patterns
 
+Retry timing and recurrence design belong in the dedicated effect-scheduling skill. This skill determines which failures are typed and recoverable; scheduling determines whether, when, and how often an idempotent operation is retried.
+
+### Translate at Service Boundaries
+
+Translate infrastructure errors into the service's public error vocabulary at the boundary that owns the abstraction, using `mapError`, `catchTag`, or `catchTags`. Preserve useful context in the translated error and avoid repeatedly wrapping an error already in the target vocabulary.
+
+Typed error combinators preserve defects and interruption. Keep that property: do not use blanket `catchCause`, `ignoreCause`, or cause-to-domain-error conversion in ordinary services, because they can turn cancellation into a recoverable failure. Cause-level recovery belongs only at an explicit supervision/runtime boundary; detect and re-propagate interruption rather than logging it as an operational error and continuing.
+
 ### Fallback with orElse
 
 ```typescript
@@ -1077,6 +1085,8 @@ const program = primaryService.pipe(Effect.orElse(() => secondaryService));
 
 ### Retry with Schedule
 
+For policy selection, bounds, backoff, jitter, rate-limit delays, polling, and idempotency requirements, see the effect-scheduling skill.
+
 ```typescript
 import * as Effect from 'effect/Effect';
 import * as Schedule from 'effect/Schedule';
@@ -1100,7 +1110,9 @@ const unreliableOperation: Effect.Effect<Data, TransientError> = Effect.fail(
 // Retry with exponential backoff
 const program = unreliableOperation.pipe(
 	Effect.retry(
-		Schedule.exponential('100 millis').pipe(Schedule.take(5)) // Max 5 retries
+		Schedule.exponential('100 millis').pipe(
+			Schedule.upTo({ times: 5 })
+		) // Max 5 retries
 	)
 );
 ```

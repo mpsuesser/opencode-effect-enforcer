@@ -13,7 +13,7 @@ disable plugins itself.
 
 ## What It Does
 
-- Registers all 53 bundled `effect-*` skills with OpenCode's native skill
+- Registers all 54 bundled `effect-*` skills with OpenCode's native skill
   catalog.
 - Injects the four bundled Effect-first guidance documents into model system
   context.
@@ -66,7 +66,7 @@ removing the package entry by adding a later selector:
 
 ```text
 src/        OpenCode V2 adapter and portable pattern engine
-skills/     53 source skills, including supporting assets
+skills/     54 source skills, including supporting assets
 guidance/   4 source guidance documents
 patterns/   46 source pattern definitions
 test/       copied per-pattern cases plus cross-cutting matcher tests

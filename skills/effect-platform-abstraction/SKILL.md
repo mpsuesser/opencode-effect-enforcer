@@ -7,7 +7,7 @@ description: Use Effect platform abstractions for cross-platform file I/O, proce
 
 ## Effect Source Reference
 
-The Effect v4 source is available at `~/.cache/effect-v4/`.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
 Reference this for:
@@ -499,7 +499,7 @@ const cryptoProgram = Effect.gen(function* () {
 
 ### HttpClient - HTTP Requests
 
-The `HttpClient` service provides type-safe HTTP operations.
+The `HttpClient` service provides type-safe HTTP operations. Runtime application and provider code must use it rather than raw `fetch`. Raw fetch is reserved for an explicitly named low-level platform adapter whose documentation justifies why an Effect transport cannot be used; that adapter must own interruption, status classification, schema decoding, and typed error mapping.
 
 **Anti-Pattern - Direct fetch/axios:**
 
@@ -523,20 +523,25 @@ const result = await axios.get('https://api.example.com/data');
 **Correct Pattern - HttpClient Service:**
 
 ```typescript
-import { HttpClient, HttpClientRequest } from 'effect/unstable/http';
-import { Effect } from 'effect';
+import { HttpClient, HttpClientResponse } from 'effect/unstable/http';
+import { Effect, Schema } from 'effect';
 
 // ✅ CORRECT - Integrated with Effect type system
+class ProviderData extends Schema.Class<ProviderData>('ProviderData')({
+	value: Schema.String
+}) {}
+
 const fetchData = Effect.gen(function* () {
 	const client = yield* HttpClient.HttpClient;
 
-	// Simple GET request
-	const response = yield* client.get('https://api.example.com/data');
-	const data = yield* response.json;
-
-	return data;
+	return yield* client.get('https://api.example.com/data').pipe(
+		Effect.flatMap(HttpClientResponse.filterStatusOk),
+		Effect.flatMap(HttpClientResponse.schemaBodyJson(ProviderData))
+	);
 });
 ```
+
+Name the adapter service and its effects after the upstream operation. The adapter owns request/auth construction, executes outside database transactions, classifies status before decoding, validates unknown bodies with `Schema`, and maps failures into typed domain errors. Preserve bounded evidence such as status, provider error code, request ID, and retry metadata, but redact credentials, private fields, query secrets, and full response bodies.
 
 **Advanced HTTP Operations:**
 
@@ -548,11 +553,11 @@ import {
 } from 'effect/unstable/http';
 import { Effect, Schema, Schedule } from 'effect';
 
-const User = Schema.Struct({
+class User extends Schema.Class<User>('User')({
 	id: Schema.Number,
 	name: Schema.String,
 	email: Schema.String
-});
+}) {}
 
 const httpExamples = Effect.gen(function* () {
 	const client = yield* HttpClient.HttpClient;
@@ -579,10 +584,11 @@ const httpExamples = Effect.gen(function* () {
 	).pipe(HttpClientRequest.setHeader('Authorization', 'Bearer token'));
 	const withAuth = client.execute(withAuthRequest);
 
-	// Parse response with Schema
+	// Classify status, then parse the successful response with Schema
 	const users = yield* client
 		.get('https://api.example.com/users')
 		.pipe(
+			Effect.flatMap(HttpClientResponse.filterStatusOk),
 			Effect.flatMap(
 				HttpClientResponse.schemaBodyJson(Schema.Array(User))
 			)
@@ -590,6 +596,7 @@ const httpExamples = Effect.gen(function* () {
 
 	// Error handling — all HttpClient errors are "HttpClientError" with a reason field
 	const safeRequest = client.get('https://api.example.com/data').pipe(
+		Effect.flatMap(HttpClientResponse.filterStatusOk),
 		Effect.catchTag('HttpClientError', (error) => {
 			switch (error.reason._tag) {
 				case 'TransportError':
@@ -606,17 +613,27 @@ const httpExamples = Effect.gen(function* () {
 		})
 	);
 
-	// Retries with backoff
+	// Retries with backoff: GET is idempotent and attempts are bounded.
 	const withRetries = client.get('https://api.example.com/data').pipe(
+		Effect.flatMap(HttpClientResponse.filterStatusOk),
 		Effect.retry({
 			times: 3,
 			schedule: Schedule.exponential('100 millis')
-		})
+		}),
+		Effect.tapError((error) =>
+			Effect.logError('Provider read exhausted retries').pipe(
+				Effect.annotateLogs({ operation: 'Provider.getData', errorTag: error._tag })
+			)
+		)
 	);
 
 	return users;
 });
 ```
+
+Never install retry automatically on a shared client that also sends non-idempotent POST/PATCH requests. Retry only operations proven idempotent by method/provider contract or protected by a provider-supported idempotency key. Keep exhaustion observable: retain the final typed error and log/measure only redacted status, provider code, request ID, operation, and attempt evidence.
+
+`HttpClient.withRateLimiter` can automatically retry 429 responses. Use positive `times` only on a client restricted to proven-idempotent operations; set `times: 0` for mixed/non-idempotent clients so the 429 remains visible.
 
 ### KeyValueStore - Key-Value Storage
 
@@ -684,11 +701,11 @@ const cacheData = Effect.gen(function* () {
 import { KeyValueStore } from 'effect/unstable/persistence';
 import { Effect, Schema } from 'effect';
 
-const User = Schema.Struct({
+class User extends Schema.Class<User>('User')({
 	id: Schema.Number,
 	name: Schema.String,
 	email: Schema.String
-});
+}) {}
 
 const typedStore = Effect.gen(function* () {
 	const store = yield* KeyValueStore.KeyValueStore;
@@ -697,11 +714,11 @@ const typedStore = Effect.gen(function* () {
 	const userStore = KeyValueStore.toSchemaStore(store, User);
 
 	// Type-safe operations
-	yield* userStore.set('user:123', {
+	yield* userStore.set('user:123', new User({
 		id: 123,
 		name: 'John Doe',
 		email: 'john@example.com'
-	});
+	}));
 
 	const user = yield* userStore.get('user:123');
 	// user: Option.Option<{ id: number, name: string, email: string }>
@@ -794,7 +811,7 @@ Socket services live in `effect/unstable/socket`. Use `Socket.Socket` for scoped
 
 To use platform services, provide the appropriate platform layer.
 
-`NodeServices.layer` and `BunServices.layer` provide core process services such as `FileSystem`, `Path`, `ChildProcessSpawner`, `Stdio`/`Terminal`, and `Crypto.Crypto`. They do **not** provide specialized integrations such as HTTP clients/servers, sockets, workers, or Redis; provide those with service-specific platform layers. For HTTP clients, provide an HTTP-specific layer such as `FetchHttpClient.layer`, Node's `NodeHttpClient.{layerFetch, layerUndici, layerNodeHttp}`, `BunHttpClient.layer`, or Browser's `BrowserHttpClient.{layerFetch, layerXMLHttpRequest}`. For HTTP servers, use server layers such as `NodeHttpServer.layer(...)`, `BunHttpServer.layer(...)`, or their `layerHttpServices` variants where appropriate.
+`NodeServices.layer` and `BunServices.layer` provide core process services such as `FileSystem`, `Path`, `ChildProcessSpawner`, `Stdio`/`Terminal`, and `Crypto.Crypto`. They do **not** provide specialized integrations such as HTTP clients/servers, sockets, workers, or Redis; provide those with service-specific platform layers. For HTTP clients, provide an HTTP-specific layer such as `FetchHttpClient.layer`, Node's `NodeHttpClient.{layerFetch, layerUndici, layerNodeHttp}`, `BunHttpClient.layer`, or Browser's `BrowserHttpClient.{layerFetch, layerXMLHttpRequest}`. A named provider adapter should export a raw `layer` that requires `HttpClient.HttpClient`, plus an optional `defaultLayer = layer.pipe(Layer.provide(...transport...))`; this keeps the transport dependency graph explicit while offering runtime convenience. For HTTP servers, use server layers such as `NodeHttpServer.layer(...)`, `BunHttpServer.layer(...)`, or their `layerHttpServices` variants where appropriate.
 
 **Node.js:**
 
@@ -832,11 +849,13 @@ import { BunServices, BunRuntime } from '@effect/platform-bun';
 import { Console, Effect, FileSystem, Path, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 
-const Config = Schema.Struct({
+class FileProcessorConfig extends Schema.Class<FileProcessorConfig>(
+	'FileProcessorConfig'
+)({
 	inputDir: Schema.String,
 	outputDir: Schema.String,
 	compress: Schema.Boolean
-});
+}) {}
 
 const processFiles = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
@@ -845,7 +864,9 @@ const processFiles = Effect.gen(function* () {
 
 	// Load configuration
 	const configData = yield* fs.readFileString('config.json');
-	const config = yield* Schema.decode(Config)(JSON.parse(configData));
+	const config = yield* Schema.decodeUnknownEffect(
+		Schema.fromJsonString(FileProcessorConfig)
+	)(configData);
 
 	// Ensure output directory exists
 	yield* fs.makeDirectory(config.outputDir, { recursive: true });
@@ -932,6 +953,12 @@ Before completing code that uses platform operations:
 - [ ] Console output uses `Console.log` or `Effect.log` (not `console.log`)
 - [ ] CLI arguments parsed with `effect/unstable/cli` (not `process.argv`)
 - [ ] HTTP requests use `HttpClient.HttpClient` (not `fetch`/`axios`)
+- [ ] Any raw `fetch` is isolated in a named low-level platform adapter with documented justification
+- [ ] HTTP status is classified before success-body schema decoding
+- [ ] Provider evidence is bounded and redacted; retry exhaustion remains a typed, observable failure
+- [ ] Provider/network calls execute outside database transactions
+- [ ] Automatic retries apply only to operations proven idempotent
+- [ ] Adapter `layer` keeps `HttpClient.HttpClient` visible; optional `defaultLayer` owns transport wiring
 - [ ] Cryptographic operations use `Crypto.Crypto` (not direct platform crypto APIs)
 - [ ] Platform services accessed through Effect type system
 - [ ] Appropriate platform/service layer provided (HTTP, sockets, workers, Redis, and other specialized integrations need service-specific layers, not just `NodeServices.layer` / `BunServices.layer`)
@@ -1037,8 +1064,12 @@ const program = Effect.gen(function* () {
 ### From fetch to HttpClient
 
 ```typescript
-import { Effect } from 'effect';
-import { HttpClient, HttpClientRequest } from 'effect/unstable/http';
+import { Effect, Schema } from 'effect';
+import {
+	HttpClient,
+	HttpClientRequest,
+	HttpClientResponse
+} from 'effect/unstable/http';
 
 // Before (fetch)
 declare const fetch: (
@@ -1058,20 +1089,28 @@ const response = await fetch('https://api.example.com/data', {
 const data = await response.json();
 
 // After (Effect HttpClient)
+class CreateData extends Schema.Class<CreateData>('CreateData')({
+	key: Schema.String
+}) {}
+
+class CreatedData extends Schema.Class<CreatedData>('CreatedData')({
+	id: Schema.String,
+	key: Schema.String
+}) {}
+
 const program = Effect.gen(function* () {
 	const client = yield* HttpClient.HttpClient;
 
-	const response = yield* HttpClientRequest.post(
-		'https://api.example.com/data'
-	).pipe(
-		HttpClientRequest.bodyJsonUnsafe({ key: 'value' }),
-		client.execute
+	return yield* HttpClientRequest.post('https://api.example.com/data').pipe(
+		HttpClientRequest.schemaBodyJson(CreateData)(new CreateData({ key: 'value' })),
+		Effect.flatMap(client.execute),
+		Effect.flatMap(HttpClientResponse.filterStatusOk),
+		Effect.flatMap(HttpClientResponse.schemaBodyJson(CreatedData))
 	);
-	const data = yield* response.json;
-
-	return data;
 });
 ```
+
+This POST is intentionally not retried. Add retry only if the provider offers a documented idempotency guarantee and the request supplies the required idempotency key.
 
 ### From child_process to ChildProcess
 

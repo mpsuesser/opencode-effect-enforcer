@@ -9,7 +9,7 @@ Create layers that construct services while managing their dependencies cleanly.
 
 ## Effect Source Reference
 
-The Effect v4 source is available at `~/.cache/effect-v4/`.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
 Reference this for:
@@ -30,6 +30,19 @@ import { Layer } from 'effect';
 //          │                └─ Errors during construction
 //          └─ What this layer produces
 ```
+
+## Choose the Constructor by Output
+
+```typescript
+Layer.succeed(Service, implementation); // already built
+Layer.sync(Service, () => implementation); // lazy synchronous construction
+Layer.effect(Service, acquisition); // effectful single-service acquisition
+Layer.effectContext(acquisition); // effectful Context with multiple services
+Layer.effectDiscard(initialization); // acquisition that provides no service
+Layer.unwrap(effectProducingLayer); // config or discovery chooses a layer
+```
+
+Default production services with dependencies or resources to `Layer.effect`. Use `Layer.effectContext` when one acquisition intentionally provides multiple tags, especially when the same controllable test implementation backs both a production service and a test-control service.
 
 ## Pattern: Simple Layer (No Dependencies)
 
@@ -110,7 +123,7 @@ export const LoggerLive = Layer.effect(
 
 ## Pattern: Layer with Resource Management
 
-Use `Layer.effect` for all layers, including those with resources that need cleanup. In Effect v4, `Layer.effect` automatically handles `Scope` lifecycle — `Layer.scoped` is no longer needed.
+Use `Layer.effect` for effectfully acquired services, including resources that need cleanup. In Effect v4, `Layer.effect` automatically handles `Scope` lifecycle — `Layer.scoped` is no longer needed.
 
 Resources are acquired and released using `Effect.acquireRelease` or `Effect.addFinalizer` inside the `Layer.effect` constructor:
 
@@ -172,11 +185,35 @@ export const DatabaseLive = Layer.effect(
 );
 ```
 
+Layer construction must complete. If acquisition starts a listener, stream, subscription, worker, or forever loop, fork it into the layer scope rather than running it inline:
+
+```typescript
+export const WorkerLive = Layer.effectDiscard(
+	Effect.gen(function* () {
+		const events = yield* Events.Service;
+		yield* events.stream.pipe(
+			Stream.runForEach(handleEvent),
+			Effect.forkScoped
+		);
+	})
+);
+```
+
+Use `Effect.forkScoped`, `FiberSet`, or `FiberMap` so closing the layer scope interrupts the background work. `forkScoped` alone is appropriate only for best-effort work that reports its own failures; monitor or supervise failure-significant consumers so their failures remain observable. Never block layer acquisition on a long-lived loop.
+
 ## Composing Layers: Merge vs Provide
+
+Start from the service graph, not from whichever combinator makes the types compile:
+
+- `Layer.merge` / `Layer.mergeAll` expose independent outputs; they do not satisfy dependencies between the merged layers.
+- `Layer.provide` satisfies and hides an implementation dependency.
+- `Layer.provideMerge` satisfies a dependency and deliberately keeps that dependency in the output.
+- Name and reuse shared dependency layer values when acquisition must be shared.
+- Do not blindly merge every layer or use `provideMerge` as a make-it-compile tool; both can expose authority and lifecycle services that should remain private.
 
 ### Merge (Parallel Composition)
 
-Combine independent layers:
+Merge layers when both outputs should remain exposed. This does not wire one output into another layer's requirements:
 
 ```typescript
 import { Context, Layer } from 'effect';
@@ -475,9 +512,9 @@ export const DatabaseLive = Layer.effect(
 );
 ```
 
-## Composing Layers: ProvideMerge (for test stacks)
+## Composing Layers: Deliberate ProvideMerge
 
-`Layer.provideMerge` satisfies dependencies AND passes them through to the output. This is critical for test layer stacks where multiple downstream layers need access to the same upstream services.
+`Layer.provideMerge` satisfies dependencies AND passes them through to the output. Use it only when downstream consumers intentionally need both outputs, including carefully designed test stacks.
 
 ### Provide vs ProvideMerge
 
@@ -499,7 +536,7 @@ const dbWithConfig = DatabaseLayer.pipe(Layer.provideMerge(ConfigLayer));
 
 ### When to use ProvideMerge
 
-Use `Layer.provideMerge` when building test layer stacks where multiple layers share the same dependencies:
+Use `Layer.provideMerge` when downstream test layers intentionally need the upstream services as outputs as well as dependencies:
 
 ```typescript
 import { Layer } from 'effect';
@@ -515,7 +552,7 @@ const services = Layer.mergeAll(UserServiceLayer, OrderServiceLayer).pipe(
 );
 ```
 
-Without `Layer.provideMerge`, you would need to manually merge every intermediate layer to keep services visible to downstream consumers.
+If downstream code does not need the dependency, use `Layer.provide` and keep it hidden. Do not preserve every intermediate service by default.
 
 ## Pattern: SynchronizedRef + Deferred State Machine
 
@@ -595,7 +632,8 @@ Use this pattern when:
 - [ ] Resource cleanup using `acquireRelease` or `addFinalizer` if needed
 - [ ] Layer can be tested with mock dependencies
 - [ ] No dependency leakage into service interface
-- [ ] Appropriate use of merge vs provide vs provideMerge
+- [ ] Merge/provide/provideMerge follows the intended exposed service graph, not only type errors
+- [ ] Long-lived acquisition completes and forks background work into the layer scope
 - [ ] `defaultLayer` only present when `layer` has unsatisfied requirements
 - [ ] `defaultLayer` composes directly unless deferred evaluation is truly required
 - [ ] Error handling for construction failures

@@ -29,6 +29,15 @@ Use three layers:
     - Compose layers and run effects.
     - Keep platform concerns (process, filesystem, env, network) outside core domain logic.
 
+At boundaries:
+
+- Keep transport handlers thin: decode input, read context, call application services, and map typed outcomes to transport responses.
+- Put business rules in domain functions or services, not HTTP handlers or framework callbacks.
+- Wrap HTTP clients, SDKs, CLIs, and other integrations in named adapter effects that own translation into domain values and errors.
+- Decode persisted rows when they are not already trusted, refined domain values.
+- Keep network and provider calls outside authoritative database transactions.
+- Recover or retry only where the boundary has a truthful response. Retry only proven-idempotent operations, and keep exhausted failures visible unless a real fallback exists.
+
 ## Laws and Conventions
 
 ### EF-1: Errors are data, not side effects
@@ -189,12 +198,14 @@ const summarizeAttempts = (attempts: ReadonlyArray<number>) =>
 - For boolean-driven branching, prefer `Bool.match` from `effect/Boolean` over ad-hoc `if/else`.
 - This keeps control flow expression-oriented and consistent with Effect matching style.
 
-### EF-8: Services use `Context.Service` + `Layer`
+### EF-8: Services use explicit tags + `Layer`
 
 - Service identity comes from a unique string key.
+- Honor a current Effect service-tag style already standardized by the project; otherwise default to `Context.Service`.
 - Service constructors are explicit and layered.
 - Dependency wiring happens in Layer composition, not hidden global state.
 - Service identity must use a descriptive, unique string key.
+- When no module convention exists, prefer file-local `Interface`, `Service`, `layer`, and `defaultLayer` exports plus an ES-module namespace projection such as `export * as Billing from "./billing.js"`.
 - If an effectful helper hides dependencies, configuration, policy, or lifecycle state, promote it into its own service instead of leaving it as a static module helper.
 - If a service starts owning busy/idle state, in-flight runner maps, cancellation handles, or registry/orchestration behavior, extract that coordinator concern into its own service.
 - Do not `yield*` a `Ref`, `Deferred`, `Fiber`, or `Latch` directly — this was removed in v4. Use explicit method calls: `Ref.get(ref)`, `Deferred.await(deferred)`, `Fiber.join(fiber)`, `Latch.await(latch)`.
@@ -210,6 +221,9 @@ export class MyService extends Context.Service<
 		readonly ping: () => string;
 	}
 >()('MyService') {}
+
+// At the owning module boundary:
+export * as MyServiceModule from './my-service.js';
 ```
 
 ### EF-9: Time/randomness should be effectful
@@ -222,6 +236,7 @@ export class MyService extends Context.Service<
 - Do not use native `fetch` in runtime source.
 - Compose requests/responses with `HttpClientRequest`, `HttpClientResponse`, `Headers`, `UrlParams`, `HttpMethod`, and `HttpBody`.
 - Provide runtime client layers explicitly (`BunHttpClient.layer` from `@effect/platform-bun` for Bun runtimes).
+- Native `fetch` is reserved for explicit low-level platform implementations that cannot use Effect HTTP. Isolate it in an adapter, lift it with `Effect.tryPromise`, propagate the supplied `AbortSignal`, classify status before decoding, and decode unknown bodies with `Schema`.
 
 ### EF-10: Tests stay effect-native
 
@@ -502,10 +517,10 @@ Example:
 ```ts
 import { Effect } from 'effect';
 
-const fetchText = (url: string) =>
+const readSdkValue = (client: ExternalSdk) =>
 	Effect.tryPromise({
-		try: () => fetch(url).then((response) => response.text()),
-		catch: (cause) => new HttpRequestError({ url, message: String(cause) })
+		try: (signal) => client.read({ signal }),
+		catch: (cause) => new SdkError({ operation: 'ExternalSdk.read', cause })
 	});
 ```
 
@@ -531,6 +546,8 @@ const withConnection = <A, E, R>(
 - Encode retries with `Effect.retry` and `Schedule`.
 - Avoid manual retry loops and ad-hoc mutable counters.
 - Keep retry policy close to the failing effect.
+- Retry only proven-idempotent operations at the narrowest boundary that can classify the failure.
+- Let exhausted failures remain visible unless the boundary has a truthful fallback.
 - Reference: [retry](packages/effect/src/Effect.ts:3978) (via effect_ref_read).
 
 Example:
@@ -1225,3 +1242,5 @@ Use this before submitting code:
 43. Runtime sorting uses `Arr.sort` with explicit `Order`, not native `Array.prototype.sort`.
 44. Boolean branching prefers `Bool.match` over ad-hoc `if/else` when branching on booleans.
 45. HTTP request/response composition uses Effect HTTP modules (`HttpClientRequest`, `HttpClientResponse`, `Headers`, `UrlParams`, `HttpMethod`, `HttpBody`).
+46. Retried operations have proven idempotency, and exhausted failures remain visible unless a truthful fallback exists.
+47. Provider/network calls do not run inside authoritative database transactions.

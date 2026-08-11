@@ -9,7 +9,7 @@ detector: ast
 pattern: fetch($$$ARGS)
 level: warning
 suggestSkills:
-    - effect-http-api
+    - effect-http-client
 ---
 
 # Use Effect HTTP Modules Instead of Native `fetch`
@@ -55,5 +55,7 @@ main = program.pipe(
 ```
 
 Native `fetch` produces untyped Promise rejections. Use `HttpClientRequest`, `HttpClientResponse`, and `HttpClient` from Effect for typed errors, composable request building, and testability via layer substitution.
+
+Exception: an explicit low-level platform implementation that cannot use Effect HTTP. Keep it isolated, lift it with `Effect.tryPromise`, propagate the supplied `AbortSignal`, classify status before decoding, and decode unknown bodies with `Schema`.
 
 References: EF-9b, Checklist #42 in effect-first-development.md

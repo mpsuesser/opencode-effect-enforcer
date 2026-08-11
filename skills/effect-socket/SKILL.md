@@ -9,7 +9,7 @@ These modules live under `effect/unstable/socket` — there is no `@effect/platf
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.cache/effect-v4/`. Read it directly when in doubt — these unstable modules change between betas.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these unstable modules change between betas.
 
 Key files:
 
@@ -520,7 +520,10 @@ const feed = Effect.gen(function*() {
 		Effect.tapError((error) => Effect.logWarning('socket disconnected', error)),
 		Effect.retry(
 			// RpcClient's defaultRetryPolicy: exponential from 500ms, capped at 5s
-			Schedule.min([Schedule.exponential(500, 1.5), Schedule.spaced(5000)])
+			Schedule.min([
+				Schedule.exponential('500 millis', 1.5),
+				Schedule.spaced('5 seconds')
+			])
 		)
 	);
 }).pipe(Effect.provide(NodeSocket.layerWebSocket('wss://example.com/feed')));
@@ -611,7 +614,12 @@ const makeClient = Effect.gen(function*() {
 			})
 		),
 		Stream.runForEach((response) => Effect.log('response', response)),
-		Effect.retry(Schedule.min([Schedule.exponential(500, 1.5), Schedule.spaced(5000)])),
+		Effect.retry(
+			Schedule.min([
+				Schedule.exponential('500 millis', 1.5),
+				Schedule.spaced('5 seconds')
+			])
+		),
 		Effect.forkScoped
 	);
 

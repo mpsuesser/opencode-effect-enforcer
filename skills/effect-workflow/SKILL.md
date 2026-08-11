@@ -7,7 +7,7 @@ You are an Effect TypeScript expert specializing in durable workflow execution u
 
 ## Effect Source Reference
 
-The Effect v4 source is available at `~/.cache/effect-v4/`.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
 Key source files:
@@ -607,7 +607,7 @@ The `Encoded` interface works with raw/encoded values (JSON-safe), while the `Wo
 
 ### Suspended Retry Schedule
 
-When a workflow suspends (waiting for an activity or deferred), the engine retries with `Schedule.min([Schedule.exponential(200, 1.5), Schedule.spaced(30000)])`: exponential backoff from 200ms, capped at 30s. (`Schedule.andThen` / `andThenResult` were renamed to `Schedule.concat` / `concatResult`, and the old `Schedule.either` cap pattern is now `Schedule.min`.) Override per-workflow:
+When a workflow suspends (waiting for an activity or deferred), the engine retries with `Schedule.min([Schedule.exponential("200 millis", 1.5), Schedule.spaced("30 seconds")])`: exponential backoff from 200ms, capped at 30s. (`Schedule.andThen` / `andThenResult` were renamed to `Schedule.concat` / `concatResult`, and the old `Schedule.either` cap pattern is now `Schedule.min`.) Override per-workflow:
 
 ```ts
 const MyWorkflow = Workflow.make({

@@ -13,6 +13,9 @@ rule:
         - kind: while_statement
         - kind: do_statement
 level: warning
+suggestSkills:
+    - effect-parallelization
+    - effect-scheduling
 ---
 
 # Use Functional Transformations
@@ -63,8 +66,11 @@ good numbers =
 
 goodEffect :: [Item] → Effect ()
 goodEffect items = Effect.forEach items processItem { concurrency: 4 }
+
+goodRecurring :: Effect ()
+goodRecurring = step & Effect.repeat (Schedule.spaced (Duration.seconds 1))
 ```
 
-Imperative loops — `for`, `for ... in`, `for ... of`, `while`, `do ... while` — encourage mutation and break composition. Use `Arr.map` / `Arr.filter` / `Arr.filterMap` / `Arr.reduce` for pure transformations, and `Effect.forEach` for effectful iteration (with explicit `concurrency`).
+Imperative loops — `for`, `for ... in`, `for ... of`, `while`, `do ... while` — encourage mutation and break composition. Use `Arr.map` / `Arr.filter` / `Arr.filterMap` / `Arr.reduce` for pure transformations, `Effect.forEach` for effectful iteration (with explicit `concurrency`), and `Effect.repeat` plus `Schedule` for recurring effects.
 
 Note: in tree-sitter TypeScript, `for ... of` and `for ... in` share the same AST kind (`for_in_statement`), so listing `for_in_statement` covers both.

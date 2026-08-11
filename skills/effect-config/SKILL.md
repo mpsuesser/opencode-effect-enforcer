@@ -7,7 +7,7 @@ You are an Effect TypeScript expert specializing in typed configuration loading,
 
 ## Effect Source Reference
 
-The Effect v4 source is available at `~/.cache/effect-v4/`.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
 Reference these files for Config/ConfigProvider details:
@@ -374,6 +374,28 @@ const program = Effect.gen(function* () {
 
 Effect.runSync(Effect.provide(program, TestLayer)); // 8080
 ```
+
+## Config-Backed Layer Constructors
+
+Library-style services should usually expose a concrete `layer(options)` for direct use and tests, plus `layerConfig(config)` when callers need runtime configuration. Type the latter with `Config.Wrap<Options>` and decode it once with `Config.unwrap`.
+
+`Config.Wrap<Options>` accepts either one `Config<Options>` or a recursively wrapped object whose leaves are `Config` values. It does not accept raw concrete option values.
+
+```ts
+export const layer = (options: ClientOptions) =>
+	Layer.effect(Client.Service, makeClient(options));
+
+export const layerConfig = (config: Config.Wrap<ClientOptions>) =>
+	Layer.effect(
+		Client.Service,
+		Config.unwrap(config).pipe(
+			Effect.flatMap(makeClient),
+			Effect.map(Client.Service.of)
+		)
+	);
+```
+
+Use `layer(options)` when options are already decoded. Use `layerConfig(...)` only at a configuration boundary; do not repeatedly read configuration inside business operations.
 
 ### `ConfigProvider.layerAdd` — Add Without Replacing
 

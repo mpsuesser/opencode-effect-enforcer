@@ -18,6 +18,9 @@ rule:
         - pattern: 'Effect.timeoutOrElse($EFFECT, { duration: $DURATION, $$$REST })'
         - pattern: 'Effect.timeoutOrElse({ duration: $DURATION, $$$REST })'
         - pattern: 'Schedule.duration($DURATION)'
+        - pattern: 'Schedule.during($DURATION)'
+        - pattern: 'Schedule.exponential($DURATION)'
+        - pattern: 'Schedule.fibonacci($DURATION)'
         - pattern: 'Schedule.fixed($DURATION)'
         - pattern: 'Schedule.spaced($DURATION)'
         - pattern: 'Schedule.windowed($DURATION)'
@@ -26,6 +29,7 @@ constraints:
         kind: number
 level: warning
 suggestSkills:
+    - effect-scheduling
     - effect-testing
 ---
 

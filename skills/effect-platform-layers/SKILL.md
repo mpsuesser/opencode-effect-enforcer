@@ -47,6 +47,31 @@ export const defaultLayer = layer.pipe(
 
 The important boundary is that downstream callers still depend on the abstract service, not on Node/Bun modules.
 
+For HTTP provider adapters, the abstract dependency is `HttpClient.HttpClient`. Keep it visible on the adapter's raw layer and name the adapter after the upstream it owns:
+
+```typescript
+import { Context, Effect, Layer } from 'effect';
+import { FetchHttpClient, HttpClient } from 'effect/unstable/http';
+
+export class ProviderGateway extends Context.Service<ProviderGateway, {
+	readonly health: Effect.Effect<void>;
+}>()('app/ProviderGateway') {}
+
+const makeProviderGateway = Effect.gen(function* () {
+	yield* HttpClient.HttpClient;
+	return ProviderGateway.of({ health: Effect.void });
+});
+
+export const layer: Layer.Layer<ProviderGateway, never, HttpClient.HttpClient> =
+	Layer.effect(ProviderGateway, makeProviderGateway);
+
+export const defaultLayer: Layer.Layer<ProviderGateway> = layer.pipe(
+	Layer.provide(FetchHttpClient.layer)
+);
+```
+
+Use `layer` when the application or test owns transport selection. Use `defaultLayer` only when this runtime-facing adapter intentionally owns the default transport. Do not provide the transport inside `layer`, because that erases the dependency graph and prevents straightforward substitution.
+
 ## Platform Import Patterns
 
 ### Node.js
@@ -85,6 +110,8 @@ Each platform context (`NodeServices.layer`, `BunServices.layer`) provides these
 | **ChildProcessSpawner** | `ChildProcessSpawner.ChildProcessSpawner` | Spawn and manage child processes                    | `effect/unstable/process` |
 
 `Crypto.Crypto` is included in the Node/Bun aggregate layers; browser applications can provide `BrowserCrypto.layer` when they need the crypto service. These aggregate layers are core service bundles: they do **not** provide specialized integrations such as HTTP clients/servers, sockets, workers, or Redis. For sockets, import `Socket.Socket` / `SocketServer.SocketServer` from `effect/unstable/socket` and provide socket-specific layers such as `NodeSocket.layerWebSocket(...)`, `NodeSocket.layerNet(...)`, `BunSocket.layerWebSocket(...)`, `BrowserSocket.layerWebSocket(...)`, or Node/Bun socket-server layers as appropriate.
+
+Runtime application/provider HTTP belongs behind Effect `HttpClient`, not raw `fetch`. Only a named low-level platform transport adapter may use fetch directly, with a documented justification and full ownership of interruption, status-before-decode, schema decoding, and typed errors. Provider adapters also own redacted diagnostic evidence and retry exhaustion; provider calls run outside database transactions, and retries apply only to proven-idempotent operations. In particular, do not decorate a shared client with automatic retry when it can execute ordinary non-idempotent POST/PATCH requests.
 
 `Migrator.fromFileSystem` now requires both `FileSystem.FileSystem` and `Path.Path`. `NodeServices.layer` and `BunServices.layer` already satisfy both. If a migration runtime provides only an individual file-system layer, add the matching host path layer too; on Windows, core `Path.layer` is not a substitute for a platform-aware path implementation because it uses POSIX semantics.
 
@@ -456,3 +483,7 @@ export const myService = program.pipe(
 3. **Platform layer last**: Provide custom services first, platform context last
 4. **Mock in tests**: Use `Layer.succeed` with mock implementations, never import platform-specific modules in tests
 5. **Entry point decides platform**: Only `main.ts` (or equivalent entry) should import platform-specific modules
+6. **Keep HTTP transport requirements visible**: Provider adapter `layer` requires `HttpClient.HttpClient`; an optional `defaultLayer` may provide the chosen transport
+7. **Make adapters own the boundary**: Named adapters classify status before schema decoding, map typed failures, retain redacted evidence, and expose retry exhaustion
+8. **Do not retry by accident**: Restrict retrying/rate-limited clients to proven-idempotent operations; non-idempotent calls need an explicit provider guarantee or idempotency key
+9. **Do not hold transactions across providers**: Complete network calls before opening the database transaction used to persist their result

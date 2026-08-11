@@ -18,7 +18,7 @@ constraints:
         regex: '^["''](?:node:)?https?["'']$'
 level: warning
 suggestSkills:
-    - effect-http-api
+    - effect-http-client
     - effect-platform-abstraction
 ---
 

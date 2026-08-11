@@ -9,7 +9,7 @@ This skill covers the imperative HTTP server primitives. For the declarative, sc
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.cache/effect-v4/`. Read it directly when in doubt — these modules are unstable and change between betas.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules are unstable and change between betas.
 
 Key files:
 
