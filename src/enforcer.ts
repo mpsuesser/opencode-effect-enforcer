@@ -44,12 +44,17 @@ const inputPaths = (tool: string, input: unknown): ReadonlyArray<string> => {
 /** Register prospective snapshots and post-write Effect pattern feedback hooks. */
 export const registerPatternEnforcement = async (
   context: Plugin.Context,
-  patterns: ReadonlyArray<Pattern.Value>
+  patterns: ReadonlyArray<Pattern.Value>,
+  isEnabled: (agent: unknown) => boolean = () => true
 ): Promise<void> => {
   const pending = new Map<string, PendingWrite>()
 
   await context.tool.hook("execute.before", async (event) => {
     try {
+      if (!isEnabled(event.agent)) {
+        pending.delete(event.id)
+        return
+      }
       const paths = inputPaths(event.tool, event.input)
       if (paths.length === 0) return
       const session = await context.session.get({ sessionID: event.sessionID })
@@ -67,7 +72,7 @@ export const registerPatternEnforcement = async (
   await context.tool.hook("execute.after", async (event) => {
     const write = pending.get(event.id)
     pending.delete(event.id)
-    if (event.status !== "completed" || write === undefined) return
+    if (!isEnabled(event.agent) || event.status !== "completed" || write === undefined) return
 
     try {
       const feedback = (await Promise.all(write.files.map(async (file) => {

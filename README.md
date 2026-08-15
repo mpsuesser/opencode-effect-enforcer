@@ -53,6 +53,45 @@ Verify that OpenCode loaded it:
 opencode2 api get /api/plugin
 ```
 
+### Disable For An Agent
+
+Set `opencode-effect-enforcer: false` in the agent's `request.body`. The plugin
+consumes this setting before requests are built, so it is not sent to the model
+provider. For a Markdown agent:
+
+```md
+---
+description: Handles non-code research
+mode: subagent
+request:
+  body:
+    opencode-effect-enforcer: false
+---
+
+Research the requested topic without modifying code.
+```
+
+The equivalent `opencode.jsonc` agent is:
+
+```jsonc
+{
+  "agents": {
+    "researcher": {
+      "description": "Handles non-code research",
+      "mode": "subagent",
+      "request": {
+        "body": {
+          "opencode-effect-enforcer": false,
+        },
+      },
+    },
+  },
+}
+```
+
+For an opted-out agent, the plugin does not inject Effect guidance, advertise
+or allow its `effect-*` skills, or run post-write pattern enforcement.
+
 The exported plugin ID is `opencode.effect-enforcer`. Disable it without
 removing the package entry by adding a later selector:
 

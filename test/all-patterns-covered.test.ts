@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 import { patterns } from "./helpers/patterns.ts"
 
 const INFRASTRUCTURE_TESTS = new Set([
+  "agent-policy.test.ts",
   "all-patterns-covered.test.ts",
   "comment-string-false-positives.test.ts",
   "pattern-enforcement.test.ts",
