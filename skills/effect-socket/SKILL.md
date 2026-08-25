@@ -273,6 +273,8 @@ const unix = yield* NodeSocket.makeNet({ path: '/tmp/app.sock' });
 
 `makeNet` returns `Effect<Socket>` — infallible, because connection happens per `run`. Connect failures surface from the run loop as `SocketOpenError`.
 
+An explicitly supplied zero timeout is not treated as absence. `openTimeout: 0` or `openTimeout: Duration.zero` makes `NodeSocket.makeNet` / `fromDuplex` time out immediately with `SocketOpenError` kind `"Timeout"`. Omit `openTimeout` to allow an unbounded connect wait.
+
 ```ts
 // As a layer
 NodeSocket.layerNet({ port: 9000 }); // Layer<Socket, SocketError>
@@ -696,6 +698,6 @@ const tradeFeed = Effect.gen(function*() {
 9. **Decoding TCP bytes per-frame with `runString`/`toChannelString`** — these `TextDecoder.decode` each chunk independently, corrupting multi-byte UTF-8 characters split across packets. For byte streams use `Socket.toChannel` + `Stream.decodeText` (streaming decode), and `Ndjson.duplexSchema` rather than `duplexSchemaString`. String variants are fine for WebSocket text frames, which arrive whole.
 10. **Treating a `Socket` as a live connection** — it's a recipe. Each `run` opens a fresh transport; the connection closes when the run ends. Never run two run loops concurrently on one `Socket` value (unenforced — each opens its own transport and writes silently target the last-opened one). Reconnecting = `Effect.retry` on the run loop, not on the constructor.
 11. **Forgetting the `WebSocketConstructor` layer** — `Socket.makeWebSocket`/`layerWebSocket`/`makeWebSocketChannel` require it. Provide `Socket.layerWebSocketConstructorGlobal` (browser), `NodeSocket.layerWebSocketConstructor` (Node), or `BunSocket.layerWebSocketConstructor` — or use the platform `layerWebSocket` convenience which bundles it.
-12. **Relying on `openTimeout` for TCP without setting it** — `makeNet`/`fromDuplex` have *no* default open timeout (only WebSockets default to 10s). Pass `openTimeout` or a hung connect waits forever.
+12. **Relying on `openTimeout` for TCP without setting it** — `makeNet`/`fromDuplex` have *no* default open timeout (only WebSockets default to 10s). Pass `openTimeout` or a hung connect waits forever. Zero and `Duration.zero` are real immediate timeouts, not aliases for "disabled."
 13. **Writing a `Socket.CloseEvent` to a TCP socket expecting a graceful close** — *any* CloseEvent destroys the connection (discarding queued writes) and fails the *local* run: `SocketCloseError` code 1000 for code 1000, `SocketReadError` for codes above 1000. The peer sees an ordinary EOF or ECONNRESET — close codes never cross the wire on raw TCP. Releasing the writer scope (`socket.end()`, half-close FIN) is the only graceful close.
 14. **Reading `server.address` before the server exists** — the address is captured when `NodeSocketServer.make` completes (after `listen`). With `{ port: 0 }`, read the real port from `server.address as SocketServer.TcpAddress`; there is no separate "address ready" event to await.

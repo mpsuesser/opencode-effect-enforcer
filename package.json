@@ -42,7 +42,7 @@
     "@ast-grep/napi": "^0.42.3",
     "@opencode-ai/plugin": "0.0.0-next-17148",
     "diff": "^9.0.0",
-    "effect": "4.0.0-beta.107",
+    "effect": "4.0.0-rc.111",
     "picomatch": "^4.0.3",
     "yaml": "^2.8.1"
   },

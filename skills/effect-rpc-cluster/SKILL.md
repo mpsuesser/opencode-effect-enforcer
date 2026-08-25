@@ -443,7 +443,7 @@ const result =
 		Effect.flatMap((handler) =>
 			handler({ id: 'u1' }, {
 				client: new Rpc.ServerClient(0),
-				requestId: RequestId(1n),
+				requestId: RequestId(1),
 				headers: Headers.empty,
 				rpc: GetUser
 			})
@@ -494,7 +494,8 @@ const ServerLayer = RpcServer.layerHttp({
 	path: '/api/rpc',
 	protocol: 'http', // or 'websocket' (default)
 	disableFatalDefects: true,
-	concurrency: 'unbounded'
+	concurrency: 'unbounded',
+	streamBufferSize: 16 // framed HTTP response queue; default 16
 }).pipe(
 	Layer.provide(UsersLive),
 	Layer.provide(RpcSerialization.layerNdjson),
@@ -521,24 +522,35 @@ Pick one and `Layer.provide` it to `RpcServer.layer`/`layerHttp`:
 
 | Layer | Requires | Notes |
 |---|---|---|
-| `RpcServer.layerProtocolHttp({ path })` | `RpcSerialization`, `HttpRouter` | request/response, **no streaming acks** (`supportsAck: false`), no transferables, no span propagation |
+| `RpcServer.layerProtocolHttp({ path, streamBufferSize? })` | `RpcSerialization`, `HttpRouter` | request/response, **no streaming acks** (`supportsAck: false`), no transferables, no span propagation |
 | `RpcServer.layerProtocolWebsocket({ path })` | `RpcSerialization`, `HttpRouter` | full duplex, supports acks, supports span propagation |
 | `RpcServer.layerProtocolSocketServer` | `RpcSerialization`, `SocketServer` | raw TCP socket server |
 | `RpcServer.layerProtocolStdio` | `RpcSerialization`, `Stdio` | process stdin/stdout — for CLI subprocess RPC |
 | `RpcServer.layerProtocolWorkerRunner` | `WorkerRunner.WorkerRunnerPlatform` | run inside a web/node worker; supports `RpcWorker.InitialMessage` |
 
-Each layer also has a `make*` Effect counterpart (`makeProtocolHttp`, `makeProtocolWebsocket`, etc.) when you need to compose it inline. There are also `makeProtocolWithHttpEffect` / `makeProtocolWithHttpEffectWebsocket` for "give me both the protocol and the http handler Effect" use cases.
+Each layer also has a `make*` Effect counterpart (`makeProtocolHttp`, `makeProtocolWebsocket`, etc.) when you need to compose it inline. There are also `makeProtocolWithHttpEffect({ streamBufferSize? })` / `makeProtocolWithHttpEffectWebsocket` for "give me both the protocol and the http handler Effect" use cases. `makeProtocolWithHttpEffect` is a function, so call it as `yield* RpcServer.makeProtocolWithHttpEffect()` when using defaults.
+
+Framed HTTP response queues are bounded to `16` messages by default. Configure `streamBufferSize` on `layerHttp`, `layerProtocolHttp`, `makeProtocolHttp`, `makeProtocolWithHttpEffect`, or `toHttpEffect`; pass `'unbounded'` only when unbounded buffering is intentional.
 
 ### `RpcServer.Protocol` service
 
 The `Protocol` service exposes runtime capabilities tests and middleware can inspect:
 
 ```ts
-const { supportsAck, supportsTransferables, supportsSpanPropagation, clientIds, initialMessage } =
+const {
+	supportsAck,
+	supportsTransferables,
+	supportsSpanPropagation,
+	supportsNotifications,
+	clientIds,
+	initialMessage
+} =
 	yield* RpcServer.Protocol;
 ```
 
-E2E tests use this to skip backpressure assertions on transports that don't support acks.
+E2E tests use this to skip backpressure assertions on transports that don't support acks. `supportsNotifications` is true for sockets, stdio, workers, and framed HTTP; unframed buffered HTTP drops server notifications.
+
+`RpcMessage.FromServerEncoded` now includes `RequestEncoded` for server-originated requests and notifications. Notifications set `isNotification: true`; JSON-RPC then omits the id. Custom server protocols must declare `supportsNotifications`.
 
 ## RPC clients
 
@@ -590,7 +602,7 @@ client.Subscribe({ topic: 't' }, {
 	headers?: Headers.Input,
 	context?: Context<never>,
 	asQueue?: true,             // returns Effect<Queue.Dequeue<A, E | Cause.Done>>
-	streamBufferSize?: 16       // default 16
+	streamBufferSize?: number   // default 16
 });
 ```
 
@@ -1069,6 +1081,8 @@ Use `discard: true` for fire-and-forget commands (skip the reply round-trip):
 yield* counter.Increment({ amount: 1 }, { discard: true });
 ```
 
+A discarded non-persisted message completes after successful delivery to the entity mailbox; it no longer waits for an entity reply. Persisted discard still relies on durable storage acceptance. Delivery, persistence, assignment, and mailbox failures remain visible where the cluster client contract declares them.
+
 ### `Entity.makeTestClient(entity, layer)`
 
 In-process entity testing without a real cluster. Returns `(entityId) => Effect<RpcClient<...>>`:
@@ -1254,6 +1268,8 @@ When the bundles aren't quite right, assemble from the primitives:
 - `assignedShardGroups: ['default']` — the subset of those groups this runner is allowed to own
 - `entityMaxIdleTime: 1 minute`
 - `entityMailboxCapacity: 4096`
+- `maxResidentEntities: 10_000` — runner-wide cap across all entity types
+- `unprocessedMessageBatchSize: 1024` — maximum storage rows claimed per poll
 - `entityTerminationTimeout: 15 seconds` — k8s-friendly
 - `preemptiveShutdown: true` — drain on entity shutdown
 - `runnerShardWeight: 1` — relative shard allocation
@@ -1272,6 +1288,21 @@ const Config = ShardingConfig.layer({
 Under `layerFromEnv` (which constant-cases env keys) these read from `AVAILABLE_SHARD_GROUPS` and `SHARD_GROUPS` — note the assigned-groups env key is `SHARD_GROUPS`, not `ASSIGNED_SHARD_GROUPS`.
 
 `ShardingConfig.config` is the `Config<ShardingConfig['Service']>` you can compose with other configs in `layerFromEnv`.
+
+### Residency And Bounded Storage Reads
+
+`maxResidentEntities` limits the total entities resident on one runner, not the mailbox size of an individual entity. At the cap:
+
+- Messages already addressed to resident entities continue to make progress.
+- Volatile sends to a new entity address fail with `MailboxFull`.
+- Persisted sends still succeed; their messages remain in storage until passivation frees a residency slot.
+- Set `maxResidentEntities: 'unbounded'` only programmatically to restore the old unbounded behavior. Environment configuration accepts positive integers only.
+
+The storage poller reads at most `unprocessedMessageBatchSize` messages per batch. Custom `MessageStorage` implementations must support `unprocessedMessages(shardIds, { limit?, addresses? })`; only returned messages may be claimed. The decoded service retains `resetAddress` and adds batched `resetAddresses`, while the low-level `MessageStorage.Encoded` contract uses `resetAddresses` instead of the former `resetAddress` operation.
+
+The memory driver now uses the same ten-minute claim window as SQL. `resetAddress`/`resetAddresses` or `resetShards` makes claimed messages immediately eligible again, which prevents bounded reads from repeatedly selecting in-flight rows while still allowing explicit recovery.
+
+For custom SQL composition, `SqlMessageStorage.makeEncoded({ prefix? })` returns the low-level `MessageStorage.Encoded` driver directly. `SqlMessageStorage.make`, `layer`, and `layerWith` remain the decoded service constructors.
 
 ## Bridges — exposing entities and workflows as RPC/HTTP
 
@@ -1369,6 +1400,8 @@ const OrderWorkflow = Workflow.make({ /* ... */ })
 ```
 
 `ClusterWorkflowEngine` reads that annotation when computing the workflow entity's address, so the workflow's entity messages, durable clock wake-ups, and registered durable-deferred completions all route through the owning workflow's shard group. Any non-`default` group must appear in `ShardingConfig.availableShardGroups` cluster-wide and in `assignedShardGroups` on the runners meant to host it (e.g. `['default', 'workflow']`), or those messages have nowhere to land.
+
+Workflow execution entities and the durable-clock entity use a fixed `10 seconds` idle timeout. Completed and suspended workflows therefore release runner residency slots quickly; their durable state is reconstructed from storage when the next resume, deferred completion, or clock message arrives. Do not use `Entity.keepAlive` to pin these internal workflow entities.
 
 See the `effect-workflow` skill for the full `Workflow` / `Activity` / `DurableClock` / `DurableDeferred` / `DurableQueue` API surface.
 
@@ -1567,6 +1600,8 @@ const usersByName = Effect.gen(function*() {
 11. **Mounting an HTTP API directly on top of an `Entity` instead of using `EntityProxy`.** Reinvents the proxy/discard/error mapping the proxy gives you for free.
 12. **Reading `Date.now()` inside an entity or workflow handler.** Use `Clock` (and inside workflows, `DateTime.now` works because the engine wraps activities). For durable timers, use `DurableClock.sleep`.
 13. **`yield* fiber` / `yield* deferred` / `yield* ref`.** Removed in v4. Use `Fiber.join`, `Deferred.await`, `Ref.get` explicitly.
+14. **Treating `maxResidentEntities` like mailbox capacity.** It is a runner-wide resident-entity cap. Persisted messages wait in storage at the cap; volatile sends to new addresses fail with `MailboxFull`.
+15. **Implementing the old encoded storage driver.** `MessageStorage.Encoded` now requires bounded/address-filtered `unprocessedMessages` and batched `resetAddresses`.
 
 ## Rules
 
@@ -1583,5 +1618,6 @@ const usersByName = Effect.gen(function*() {
 - Use `EntityProxy.toRpcGroup` / `toHttpApiGroup` and `WorkflowProxy.toRpcGroup` / `toHttpApiGroup` to expose cluster protocols externally — never hand-roll the dispatch.
 - Use `RpcTest.makeClient` for handler tests and `Entity.makeTestClient` for entity tests; reach for `TestRunner.layer` for full-cluster integration tests.
 - For production cluster, use `NodeClusterSocket.layer` / `NodeClusterHttp.layer` (or the Bun equivalents) unless you specifically need to assemble layers manually.
+- Size `maxResidentEntities` and `unprocessedMessageBatchSize` deliberately for the runner's memory and storage throughput.
 - Match transport ↔ serialization: HTTP → `layerJson`; sockets/websocket/streaming → `layerNdjson` or `layerMsgPack`.
 - Pattern-match on `client.GetUser(...).pipe(Effect.catchTag('UserNotFound', ...), Effect.catchFilter(...))` for typed recovery; reserve broad `Effect.catchAll` for the runtime boundary.

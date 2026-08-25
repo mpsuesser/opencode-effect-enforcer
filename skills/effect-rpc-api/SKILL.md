@@ -438,15 +438,16 @@ You rarely touch `RpcMessage` directly, but the envelope explains several contra
 
 | Direction | Decoded messages | Purpose |
 |---|---|---|
-| client → server | `Request`, `Ack`, `Interrupt`, `Eof` (+ encoded-only `Ping`) | call, stream backpressure ack, cancellation, end-of-input, keepalive |
-| server → client | `ResponseChunk`, `ResponseExit`, `ResponseDefect`, `ClientEnd` (+ encoded-only `Pong`, `ClientProtocolError`) | stream elements, terminal exit, connection-level defect, lifecycle |
+| client → server | decoded `Request`, `Ack`, `Interrupt`, `Eof`; encoded `RequestEncoded`, `AckEncoded`, `InterruptEncoded`, `Ping`, `Eof` | call, stream backpressure ack, cancellation, end-of-input, keepalive |
+| server → client | decoded `ResponseChunk`, `ResponseExit`, `ResponseDefect`, `ClientEnd`; encoded `ResponseChunkEncoded`, `ResponseExitEncoded`, `ResponseDefectEncoded`, `Pong`, `ClientProtocolError`, `RequestEncoded` | stream elements, terminal exit, defects, lifecycle, and server-originated requests/notifications |
 
 Key facts:
 
-- A `RequestEncoded` carries `{ _tag: 'Request', id: string, tag: string, payload: unknown, headers: Array<[string, string]>, traceId?, spanId?, sampled? }`. The rpc's `_tag` **is the wire identity** — renaming or re-prefixing an rpc is a breaking protocol change for deployed clients.
-- `RequestId` is a branded `bigint`; construct with `RequestId(1n)` or `RequestId('1')` (from `effect/unstable/rpc/RpcMessage`). You need it when invoking handlers manually in tests via `accessHandler`.
+- A `RequestEncoded` carries `{ _tag: 'Request', id: string | number, tag: string, payload: unknown, headers: Array<[string, string]>, isNotification?, traceId?, spanId?, sampled? }`. The rpc's `_tag` **is the wire identity** — renaming or re-prefixing an rpc is a breaking protocol change for deployed clients.
+- `RequestId` is a branded `string | number`; construct it with `RequestId(1)` or `RequestId('1')` (from `effect/unstable/rpc/RpcMessage`). You need it when invoking handlers manually in tests via `accessHandler`. `bigint` is not accepted.
 - Terminal results travel as `ExitEncoded` — `Success` with a value, or `Failure` with a cause array of `Fail` (your error union, encoded), `Die` (via `defectSchema`), and `Interrupt` entries. This is exactly what `Rpc.exitSchema` encodes/decodes.
 - Stream elements travel as batched `Chunk` messages, acknowledged by `Ack` on ack-capable protocols (sockets, workers); the HTTP protocol declares `supportsAck: false`. Incremental delivery requires a serialization with framing (e.g. ndjson) — with non-framed json over HTTP the chunks are buffered and returned in one final batch (see serialization notes in the `effect-rpc-cluster` skill).
+- Servers represent server-originated calls and notifications with `RequestEncoded` in `FromServerEncoded`. Set `isNotification: true` for a notification; JSON-RPC serialization then omits `id`. Buffered, unframed JSON-RPC HTTP cannot deliver notifications and drops them, while framed HTTP, sockets, stdio, and workers support them.
 
 ---
 

@@ -51,6 +51,9 @@ Effect.forEach(elements, (a, index) => Effect<B, E, R>, options?: {
 	concurrency?: Concurrency;
 	discard?: boolean;
 });
+
+// Standalone data-last form
+Effect.forEach((a, index) => Effect<B, E, R>, options?)(elements);
 ```
 
 Imports used throughout this skill (all from the stable `effect` barrel):
@@ -160,6 +163,10 @@ const enriched = yield* Effect.forEach(
 	{ concurrency: 8 }
 );
 // Array<EnrichedOrder> — in input order
+
+// Standalone data-last usage is supported; the callback determines A.
+const fetchUsers = Effect.forEach(fetchUser, { concurrency: 8 });
+const users = yield* fetchUsers(userIds);
 
 // Side effects only
 yield* Effect.forEach(events, publishEvent, {

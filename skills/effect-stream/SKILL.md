@@ -179,6 +179,15 @@ const nodeStream = NodeStream.fromReadable({
 });
 ```
 
+For bounded collection of a Node readable, use `NodeStream.toString`, `NodeStream.toArrayBuffer`, or `NodeStream.toUint8Array` with `maxBytes`. The limit is inclusive: `maxBytes: 0` permits an empty stream but fails through `onError` as soon as any byte is received, and the consumer destroys the readable on interruption or failure.
+
+```ts
+const text = NodeStream.toString(() => readable, {
+	maxBytes: 0,
+	onError: (cause) => new NodeErr({ cause })
+});
+```
+
 ### Advanced constructors
 
 ```ts

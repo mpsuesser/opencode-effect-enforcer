@@ -52,6 +52,7 @@ import {
 	HttpServerRequest,
 	HttpServerRespondable,
 	HttpServerResponse,
+	HttpStatus,
 	HttpStaticServer,
 	Multipart
 } from 'effect/unstable/http';
@@ -209,7 +210,7 @@ From `HttpServerRequest` (no route context needed):
 ```ts
 // JSON body
 const body = yield* HttpServerRequest.schemaBodyJson(CreateTodo);
-// Effect<A, HttpServerError | SchemaError, HttpServerRequest | RD>
+// Effect<A, HttpServerError | Schema.SchemaError, HttpServerRequest | RD>
 
 // application/x-www-form-urlencoded body
 const form = yield* HttpServerRequest.schemaBodyUrlParams(Schema.Struct({
@@ -239,6 +240,14 @@ const meta = yield* HttpRouter.schemaNoBody(MySchema);
 
 // Whole-request decode WITH parsed JSON body added as `body`
 const all = yield* HttpRouter.schemaJson(MySchema);
+```
+
+`HttpServerRequest.schemaBodyJson`, `schemaBodyFormJson`, and `HttpRouter.schemaJson` accept schema parse options plus `{ reviver }`. The reviver is passed to `JSON.parse`; the supplied schema then validates the revived value.
+
+```ts
+const body = yield* HttpServerRequest.schemaBodyJson(CreateTodo, {
+	reviver: (key, value) => key === 'title' ? 'revived title' : value
+});
 ```
 
 Search params are parsed by the router and provided as the `HttpServerRequest.ParsedSearchParams` service (repeated keys become arrays). Outside the router, `HttpMiddleware.searchParamsParser` provides it — but it parses `new URL(request.originalUrl)`, which must be absolute. That holds for web-handler adapters (`HttpServerRequest.fromWeb`); on the Node adapter `originalUrl` is path-only and the middleware defects (500). On a raw Node app parse yourself: `HttpServerRequest.searchParamsFromURL(new URL(request.url, 'http://localhost'))`.
@@ -295,7 +304,7 @@ handler.pipe(
 );
 ```
 
-The beta.106/107 parser stops consuming input as soon as a part-count, part-size, or field-size limit is exceeded. Active file-part streams are terminated with the multipart failure when a limit is exceeded or the body ends unexpectedly, so consumers fail promptly instead of hanging. Keep consuming or supervising every exposed file stream so that failure is observed.
+The Effect v4 parser stops consuming input as soon as a part-count, part-size, or field-size limit is exceeded. Active file-part streams are terminated with the multipart failure when a limit is exceeded or the body ends unexpectedly, so consumers fail promptly instead of hanging. Keep consuming or supervising every exposed file stream so that failure is observed.
 
 ---
 
@@ -305,11 +314,14 @@ All constructors take an options object with `{ status?, statusText?, headers?, 
 
 ```ts
 HttpServerResponse.text('hi'); // 200, text/plain
-HttpServerResponse.text('hi', { status: 201, headers: { 'x-request-id': 'abc' } });
+HttpServerResponse.text('hi', {
+	status: HttpStatus.fromLiteral('Created'),
+	headers: { 'x-request-id': 'abc' }
+});
 HttpServerResponse.empty(); // 204 — note the default is NOT 200
-HttpServerResponse.empty({ status: 404 });
+HttpServerResponse.empty({ status: HttpStatus.fromLiteral('NotFound') });
 HttpServerResponse.redirect('/login'); // 302 + location header
-HttpServerResponse.redirect(url, { status: 301 });
+HttpServerResponse.redirect(url, { status: HttpStatus.fromLiteral('MovedPermanently') });
 HttpServerResponse.uint8Array(bytes, { contentType: 'application/octet-stream' });
 HttpServerResponse.urlParams({ a: '1' }); // application/x-www-form-urlencoded
 HttpServerResponse.formData(formData); // multipart response
@@ -813,7 +825,7 @@ const TodoRoutes = HttpRouter.use(Effect.fnUntraced(function* (router_) {
 	}));
 
 	yield* router.add('POST', '/', Effect.gen(function* () {
-		const { title } = yield* HttpServerRequest.schemaBodyJson(CreateTodo); // SchemaError → 400
+		const { title } = yield* HttpServerRequest.schemaBodyJson(CreateTodo); // Schema.SchemaError → 400
 		const todos = yield* Todos;
 		const todo = yield* todos.create(title);
 		return yield* todoResponse(todo, { status: 201 });
@@ -899,7 +911,7 @@ describe('health', () => {
 8. **Calling `request.multipart` without `FileSystem`/`Path`** — it persists parts to temp files and requires `Scope | FileSystem | Path`. The Node/Bun server layers provide them; `HttpServer.layerServices` only has a **noop** FileSystem (fine for routing tests, broken for real uploads and `HttpServerResponse.file`).
 9. **Using `HttpRouter.params`/`schemaParams`/`schemaPathParams` outside a matched route** — they need `RouteContext`, which only the router provides. In plain `HttpEffect` handlers read `request.url` yourself; `HttpMiddleware.searchParamsParser` provides `ParsedSearchParams` but only where `originalUrl` is absolute (web-handler adapters) — on Node use `HttpServerRequest.searchParamsFromURL(new URL(request.url, 'http://localhost'))`.
 10. **Forgetting cookie setters are effectful** — `setCookie`/`setCookies`/`expireCookie` return `Effect<_, CookiesError>`; the synchronous variants are `setCookieUnsafe`/`setCookiesUnsafe`/`expireCookieUnsafe` (and they throw on invalid input).
-11. **Hand-rolling 404/500 mapping for schema and missing-value errors** — `SchemaError` already becomes `400` and `NoSuchElementError` becomes `404` at the boundary; implement `HttpServerRespondable.symbol` on domain errors instead of try/catch pyramids.
+11. **Hand-rolling 404/500 mapping for schema and missing-value errors** — `Schema.SchemaError` already becomes `400` and `NoSuchElementError` becomes `404` at the boundary; implement `HttpServerRespondable.symbol` on domain errors instead of try/catch pyramids.
 12. **Assuming handlers run to completion** — routes are interruptible; a client disconnect interrupts the fiber (`499`). Pass `{ uninterruptible: true }` to `HttpRouter.add` for side effects that must finish, and remember a plain server-shutdown interrupt maps to `503`.
 13. **Route paths without a leading `/`** — `PathInput` is `` `/${string}` `` or `'*'`; `'users/:id'` is a type error. Wildcards are a trailing `/*` (which also matches the bare prefix); `'*'` as the whole path matches everything.
 14. **Expecting `request.url` to keep the mount prefix** — prefixed routes (`router.prefixed`, `addAll({ prefix })`, `HttpStaticServer.layer({ prefix })`) strip the prefix from `request.url`; use `request.originalUrl` for the full path.

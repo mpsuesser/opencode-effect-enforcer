@@ -79,7 +79,7 @@ Reference this for:
 
 ### Schema Error Renames
 
-| Old API (DO NOT USE)              | beta.107 API (USE THIS)        |
+| Old API (DO NOT USE)              | Effect v4 API (USE THIS)       |
 | --------------------------------- | ------------------------------ |
 | `Schema.TaggedErrorClass`         | `Schema.TaggedError`           |
 | `Schema.ErrorClass`               | `Schema.Error`                 |
@@ -921,15 +921,18 @@ Cause.annotate(cause, annotations); // attach metadata
 
 ### Cause.Done - Graceful Completion Signal (v4)
 
-`Cause.Done` is a special error class used as a graceful completion signal for queues and streams. It is not a failure — it signals orderly shutdown:
+`Cause.Done<A>` is a graceful completion value used by queues, pulls, and streams. It travels through the typed error channel, but consumers interpret it as successful end-of-input rather than an operational failure; its `value` can carry a final leftover payload.
 
 ```typescript
 import { Cause } from 'effect';
 
-Cause.Done(); // create a Done signal
-Cause.done(); // shorthand for Effect.fail(Cause.Done())
+Cause.Done(); // create a Done<void> signal
+Cause.Done('leftover'); // create Done<string> with a final payload
+Cause.done('leftover'); // Effect<never, Cause.Done<string>>
 Cause.isDone(value); // type guard
 ```
+
+A `Fail` reason carrying `Done` can be combined with a real failure, for example when stream completion and resource finalization both settle unsuccessfully. Pull/stream completion handlers remove the `Done` signal but preserve any other merged failure reasons; do not treat the presence of `Done` as permission to discard the whole cause.
 
 ## Exhaustive Error Handling with Match
 

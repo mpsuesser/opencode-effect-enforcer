@@ -7,7 +7,7 @@ You are an Effect TypeScript expert specializing in `Schedule`, retry, repeat, p
 
 ## Source Of Truth
 
-Verify APIs against `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/packages/effect/src/Schedule.ts` and `Effect.ts` (beta.107). In this version `Schedule.concat` is current, `Schedule.tapInput` is absent, and `Schedule.tap` receives full metadata.
+Verify APIs against `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/packages/effect/src/Schedule.ts` and `Effect.ts`. In Effect v4, `Schedule.concat` is current, `Schedule.tapInput` is absent, and `Schedule.tap` receives full metadata.
 
 ## Semantics
 
@@ -27,6 +27,7 @@ Verify APIs against `~/.local/share/opencode/repos/github.com/Effect-TS/effect@m
 - Desynchronize callers: pipe through `Schedule.jittered`.
 - Bound an existing delay schedule: `Schedule.upTo({ times, duration })`.
 - Run one schedule after another: `Schedule.concat(first, second)`; use `concatResult` when phase identity matters.
+- Stop from full metadata: `Schedule.while(predicate)`; a type-guard predicate narrows both schedule input and output.
 - Observe decisions: `Schedule.tap(({ attempt, input, output, duration, elapsed }) => ...)`.
 
 ```ts
@@ -50,6 +51,20 @@ const result = request.pipe(
 ```
 
 `retryOrElse` receives the final typed error and the schedule's terminal output. A fallback must be truthful; otherwise let the final failure remain visible.
+
+`Schedule.while` supports refinement predicates in both data-first and data-last forms. The resulting schedule carries the narrowed `metadata.input` and `metadata.output` types:
+
+```ts
+declare const mixed: Schedule.Schedule<number | string, Date | boolean>;
+
+const numericDates = mixed.pipe(
+	Schedule.while(
+		(metadata): metadata is Schedule.Metadata<number, Date> =>
+			typeof metadata.output === 'number' && metadata.input instanceof Date
+	)
+);
+// Schedule.Schedule<number, Date>
+```
 
 ## Polling And Item Failure Policy
 
@@ -105,4 +120,5 @@ Apply this to typed rate-limit/transient failures only. Do not retry authenticat
 - Interruption remains cancellation.
 - Exhaustion is observable or has a truthful fallback.
 - Rate-limit metadata influences delay through `modifyDelay`.
+- Refinement predicates passed to `Schedule.while` preserve their narrowed input and output types.
 - No removed `Schedule.tapInput` or old sequential-composition name is used.

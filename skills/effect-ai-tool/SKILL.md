@@ -124,6 +124,7 @@ const GetUserTool = Tool.make('GetUser', {
 });
 
 type Params = Tool.Parameters<typeof GetUserTool>;
+type ParamsEncoded = Tool.ParametersEncoded<typeof GetUserTool>;
 type Success = Tool.Success<typeof GetUserTool>;
 ```
 
@@ -306,6 +307,7 @@ declare const fetchWeatherData: (location: string) => Effect.Effect<{
 
 - Object mapping tool names to handler functions
 - Handler signature: `(params, context) => Effect<Success, Failure, Requirements>`; `context.toolCallId` exposes the provider call ID when available, and `context.preliminary(...)` emits progress updates
+- Handler parameters are decoded `Tool.Parameters<T>` values
 - Returns `Layer<Handlers>`
 
 ### Alternative: Handlers as Context
@@ -710,13 +712,35 @@ const toolkitLayer = LongRunningToolkit.toLayer({
 
 **Key Pattern: toolkit.handle**
 
-- `toolkit.handle(name, params, toolCallId?)` returns `Effect<Stream<HandlerResult<Tool>>>`
+- `toolkit.handle(name, params, toolCallId?)` accepts `Tool.ParametersEncoded<Tool>` and returns `Effect<Stream<HandlerResult<Tool>>>`
+- `handle` decodes the encoded input with the tool's parameter schema before invoking the handler; the handler still receives `Tool.Parameters<Tool>`
 - The optional call ID is forwarded to the handler as `context.toolCallId`
 - `preliminary: true`: progress update; do not persist as final history
 - `preliminary: false`: final result to send/persist
 - `isFailure`: Whether handler failed
 - `result`: Typed success or failure value
 - `encodedResult`: JSON-serializable for LLM
+
+The encoded/decoded distinction matters for transforming schemas:
+
+```typescript
+const Repeat = Tool.make('Repeat', {
+	parameters: Schema.Struct({ times: Schema.NumberFromString }),
+	success: Schema.Number
+});
+
+const RepeatToolkit = Toolkit.make(Repeat);
+const RepeatLive = RepeatToolkit.toLayer({
+	Repeat: ({ times }) => Effect.succeed(times + 1) // times is number
+});
+
+const program = Effect.gen(function* () {
+	const handlers = yield* RepeatToolkit;
+	return yield* handlers.handle('Repeat', { times: '3' }); // encoded input is string
+}).pipe(Effect.provide(RepeatLive));
+```
+
+Passing the decoded `{ times: 3 }` directly to `handle` is now a type error. Use the encoded boundary type and let `handle` perform the schema decode.
 
 ## Advanced Patterns
 
@@ -1088,14 +1112,15 @@ const toolkitLayer = toolkit.toLayer({
 6. **toLayer** - Implement handlers returning Layer
 7. **toHandlers** - Implement handlers returning Context
 8. **toolkit.handle** - Execute tools and consume a Stream of preliminary/final results
-9. **HandlerResult** - Access typed result, encoded JSON, failure flag, and preliminary flag
-10. **needsApproval** - Produces approval requests until caller supplies approval responses
-11. **setNeedsApproval** - Clone a tool with a replacement static or effectful approval policy
-12. **toolCallId** - Pass the call ID through `toolkit.handle` and read it from handler context
-13. **failureMode** - Control error vs return failure strategy
-14. **dependencies** - Declare service requirements
-15. **Namespace imports** - Always `import * as Tool`
-16. **Prompt.makePart** - Create tool-call, tool-result, and approval parts with params
+9. **ParametersEncoded** - Pass encoded schema input to `handle`; handlers receive decoded `Parameters`
+10. **HandlerResult** - Access typed result, encoded JSON, failure flag, and preliminary flag
+11. **needsApproval** - Produces approval requests until caller supplies approval responses
+12. **setNeedsApproval** - Clone a tool with a replacement static or effectful approval policy
+13. **toolCallId** - Pass the call ID through `toolkit.handle` and read it from handler context
+14. **failureMode** - Control error vs return failure strategy
+15. **dependencies** - Declare service requirements
+16. **Namespace imports** - Always `import * as Tool`
+17. **Prompt.makePart** - Create tool-call, tool-result, and approval parts with params
 
 Your tool implementations should be type-safe, validated, and provide excellent developer experience with full schema support.
 

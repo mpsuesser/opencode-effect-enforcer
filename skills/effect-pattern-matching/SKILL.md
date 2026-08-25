@@ -584,7 +584,39 @@ const matcher = match({
 const result2 = matcher(value);
 ```
 
-## Pattern 7: Loadable.match for Async State
+## Pattern 7: Match.fn for Selector-Based Functions
+
+Use `Match.fn(selector)` when a reusable function takes several arguments or should match a projection of its input. The selector chooses the value matched by `when` / `tag` / other cases, while the compiled matcher preserves the selector's original argument list.
+
+Case handlers receive the narrowed selected value first, followed by all original selector arguments:
+
+```typescript
+import { Match } from 'effect';
+
+type Todo = {
+	readonly status: 'Active' | 'Completed';
+	readonly title: string;
+};
+
+const formatTodo = Match.fn((prefix: string, todo: Todo) => todo.status).pipe(
+	Match.when(
+		'Active',
+		(_status, prefix, todo) => `${prefix}: active ${todo.title}`
+	),
+	Match.when(
+		'Completed',
+		(_status, prefix, todo) => `${prefix}: completed ${todo.title}`
+	),
+	Match.exhaustive
+);
+
+formatTodo('Todo', { status: 'Active', title: 'Write tests' });
+// "Todo: active Write tests"
+```
+
+`Match.exhaustive`, `Match.orElse`, `Match.option`, and `Match.result` all compile a `Match.fn` matcher to a function with the selector's original parameters. Prefer `Match.type<I>()` when the matched value itself is the function's only input; use `Match.fn` when matching one argument, a derived property, or another projection while retaining surrounding arguments.
+
+## Pattern 8: Loadable.match for Async State
 
 Use `Loadable.match` for async state pattern matching.
 
@@ -782,6 +814,7 @@ Before completing pattern matching implementation:
 - [ ] Use `Effect.match` instead of `Effect.result` + if checks
 - [ ] Use `Option.match` instead of `Option._tag` checks
 - [ ] Use `Match.typeTags` for Schema union matching
+- [ ] Use `Match.fn` when matching a selector while preserving multiple function arguments
 - [ ] All pattern matches are exhaustive (compiler-checked)
 - [ ] Use `Clock` service instead of `Date.now()` in matches
 - [ ] Use `Random` service instead of `Math.random()` in matches

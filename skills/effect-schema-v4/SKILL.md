@@ -16,6 +16,7 @@ Reference this for:
 - Migration guide: `migration/schema.md`
 - SchemaTransformation module: `packages/effect/src/SchemaTransformation.ts`
 - SchemaGetter module: `packages/effect/src/SchemaGetter.ts`
+- Schema representation model and reference policy: `packages/effect/src/SchemaRepresentation.ts`
 
 ## 1. Key Renames (find-and-replace safe)
 
@@ -57,6 +58,7 @@ Reference this for:
 | `standardSchemaV1`            | `toStandardSchemaV1`                |                                           |
 | `nonEmptyString`              | `isNonEmpty()`                      | Now used with `.check()`                  |
 | `disableValidation`           | `disableChecks`                     | In `MakeOptions` for Class constructors   |
+| standalone `SchemaError` module | `Schema.SchemaError`              | The root `SchemaError` namespace export was removed in rc.108; use `Schema.isSchemaError` to narrow |
 
 ### Parser/Codec Function Renames
 
@@ -370,7 +372,7 @@ const User = Schema.Struct({
 const fallback = SchemaGetter.withDefault(Effect.succeed('viewer'));
 ```
 
-### Later Beta Updates
+### Later v4 Updates
 
 - `Schema.makeEffect(input, options?)` on schemas and schema-backed classes returns an `Effect` that fails directly with `SchemaIssue.Issue`, not `Schema.SchemaError`.
 - `Schema.resolveInto` was renamed to `Schema.resolveAnnotations`.
@@ -390,6 +392,7 @@ const fallback = SchemaGetter.withDefault(Effect.succeed('viewer'));
     - `Schema.StringFromBase64Url`
     - `Schema.StringFromHex`
     - `Schema.StringFromUriComponent`
+    - `Schema.JsonObject`
 
 ```ts
 import { Effect, Schema } from 'effect';
@@ -420,6 +423,67 @@ const parsed = Schema.String.makeEffect('alice');
 const makeNameArbitrary = Schema.toArbitrary(Schema.NonEmptyString);
 const nameArbitrary = makeNameArbitrary(FastCheck);
 ```
+
+### Graph Schemas
+
+`Schema.Graph(kind, node, edge)` models immutable Effect graphs. Its canonical JSON codec encodes the active indexed snapshot, preserving sparse active node and edge indexes, isolated nodes, parallel edges, self-loops, and stored edge orientation:
+
+```ts
+import { Graph, Schema } from 'effect';
+
+const DirectedGraphJson = Schema.toCodecJson(
+	Schema.Graph('directed', Schema.String, Schema.Number)
+);
+
+const graph = Graph.fromSnapshot({
+	type: 'directed',
+	nodes: [
+		{ index: 2, data: 'A' },
+		{ index: 5, data: 'B' }
+	],
+	edges: [{ index: 3, source: 2, target: 5, data: 1 }]
+});
+
+const snapshot = Schema.encodeSync(DirectedGraphJson)(graph);
+const restored = Schema.decodeUnknownSync(DirectedGraphJson)(snapshot);
+```
+
+Encoding rejects mutable graphs and graphs of the wrong kind. Decoding requires strictly increasing non-negative safe-integer indexes and valid edge endpoints. Removed-ID allocator history is not encoded; future allocation resumes after the greatest active index. Do not use `graph.toJSON()` for persistence because it is only an inspection summary.
+
+### JSON Object Schema
+
+Use `Schema.JsonObject` for a readonly string-keyed record containing JSON-compatible values. It is the canonical equivalent of `Schema.Record(Schema.String, Schema.Json)` and rejects arrays and primitive JSON values; use `Schema.Json` when any JSON value is allowed.
+
+```ts
+Schema.decodeUnknownOption(Schema.JsonObject)({ key: [1, true, null] });
+Schema.decodeUnknownOption(Schema.JsonObject)([1, 2, 3]); // Option.none()
+```
+
+### Representation Reference Policy
+
+`Schema.toRepresentation`, `SchemaRepresentation.toRepresentation`, and `SchemaRepresentation.toRepresentations` accept `{ referencePolicy }`. The callback runs once per encoded-side AST candidate after occurrences have been counted:
+
+```ts
+import { Schema, SchemaRepresentation } from 'effect';
+
+const Item = Schema.Struct({ name: Schema.String });
+
+const document = SchemaRepresentation.toRepresentations(
+	[Item.ast, Item.ast],
+	{
+		referencePolicy: ({ ast, identifier, occurrences }) =>
+			identifier ?? (occurrences > 1 ? `${ast._tag}_` : undefined)
+	}
+);
+```
+
+The input is `{ ast, occurrences, identifier }`; return a name to extract that candidate into `references`, or `undefined` to keep it inline. By default only candidates with resolved identifiers become references. Candidate identity is AST identity, not structural equality; recursive candidates always receive a reference, with a synthetic name when needed, and colliding requested names receive numeric suffixes.
+
+`Schema.toJsonSchemaDocument(schema, options)` applies the policy after deriving the canonical JSON codec, so the callback observes canonical JSON-encoded ASTs. A policy passed to the lower-level `SchemaRepresentation.toJsonSchemaDocument(document)` cannot reallocate references already fixed in that document; pass it while creating the `Document` / `MultiDocument` instead.
+
+### SchemaError Location
+
+The standalone `SchemaError` root module was removed. Parser adapters such as `Schema.decodeUnknownEffect` fail with `Schema.SchemaError`, which contains the structured `issue`; narrow unknown failures with `Schema.isSchemaError`. By contrast, schema/class `makeEffect` and constructor defaults fail directly with `SchemaIssue.Issue`.
 
 ## 8. New Modules
 

@@ -217,8 +217,35 @@ yield*
 		Stream.takeUntil((evt) => evt instanceof InstanceDisposed),
 		Stream.runForEach(handleEvent),
 		Effect.forkScoped
-	);
+);
 ```
+
+## Redis Pub/Sub
+
+For cross-process pub/sub, use the portable `Redis.Redis` service rather than modeling Redis as an in-memory `PubSub`. `redis.subscribe(channel)` is scoped and returns a dequeue whose values contain both `channel` and `message`.
+
+```typescript
+import { Effect, Stream } from 'effect';
+import { Redis } from 'effect/unstable/persistence';
+
+declare const handleRedisMessage: (
+	channel: string,
+	message: string
+) => Effect.Effect<void>;
+
+const consumeRedisEvents = Effect.gen(function* () {
+	const redis = yield* Redis.Redis;
+	const subscription = yield* redis.subscribe('domain-events');
+
+	yield* Stream.fromQueue(subscription).pipe(
+		Stream.runForEach(({ channel, message }) =>
+			handleRedisMessage(channel, message)
+		)
+	);
+}).pipe(Effect.scoped);
+```
+
+The subscription uses a dedicated client and is released when the enclosing scope closes. Node and Deno reconnect and re-subscribe after connection interruptions; messages published during recovery can be lost. Bun disables subscriber auto-reconnect: a dropped connection fails the dequeue with `RedisError`, and the caller must create a new scoped subscription. In every runtime, queue failure is observable by `Queue` and `Stream.fromQueue` consumers.
 
 ## Testing PubSub Services
 

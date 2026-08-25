@@ -27,7 +27,8 @@ import * as Graph from 'effect/Graph';
 The pieces:
 
 - `Graph.NodeIndex` / `Graph.EdgeIndex` — plain `number` identifiers. They are allocated sequentially from `0` and **never reused after removal**; they are stable IDs, not array offsets.
-- `Graph.Edge<E>` — a `Data.Class` with `{ source: NodeIndex; target: NodeIndex; data: E }`.
+- `Graph.Edge<E>` — a readonly structural interface with `{ source: NodeIndex; target: NodeIndex; data: E }`; edge reads return fresh plain records rather than exposing internal storage.
+- `Graph.Snapshot<N, E, T>` — the active indexed wire shape `{ type, nodes, edges }`, with `IndexedNode` / `IndexedEdge` entries sorted by strictly increasing non-negative safe-integer indexes.
 - `Graph.DirectedGraph<N, E>` / `Graph.UndirectedGraph<N, E>` — aliases for `Graph<N, E, 'directed' | 'undirected'>`; `MutableDirectedGraph` / `MutableUndirectedGraph` are the mutable counterparts.
 - `Graph.GraphError` — a `Data.TaggedError('GraphError')<{ message: string }>`. The Graph API is fully **synchronous**: nothing returns `Effect`. Invalid operations **throw** `GraphError`; lookups return `Option`.
 - `Graph.Walker<T, N>` — the lazy iterator wrapper returned by all traversal and listing APIs.
@@ -36,7 +37,7 @@ Call conventions:
 
 - **Read APIs are dual** (data-first or pipeable data-last): `Graph.neighbors(graph, 0)` or `graph.pipe(Graph.neighbors(0))`.
 - **Write APIs are data-first only** and take the `MutableGraph` as the first argument: `Graph.addNode(mutable, data)`.
-- Graphs implement `Equal`, `Hash`, `Pipeable`, `Inspectable`, and are iterable over `[NodeIndex, N]` node entries.
+- Graphs implement `Equal`, `Hash`, `Pipeable`, `Inspectable`, and are iterable over `[NodeIndex, N]` node entries. `Graph.isGraph` recognizes both immutable and mutable graphs; inspect `.mutable` and `.type` when that distinction matters.
 
 ## 1. Creating Graphs
 
@@ -69,6 +70,25 @@ Notes:
 - Self-loops (`addEdge(m, a, a, data)`) and parallel edges between the same pair are allowed.
 - For directed graphs, `source -> target` direction matters everywhere (traversal, topo, neighbors). For undirected graphs, the stored `source`/`target` are arbitrary endpoints; all queries and algorithms treat the edge symmetrically.
 
+Use `Graph.make(kind)` when the graph kind is selected dynamically. Use snapshots when active identifiers must survive a boundary:
+
+```ts
+const restored = Graph.fromSnapshot({
+	type: 'directed',
+	nodes: [
+		{ index: 2, data: 'A' },
+		{ index: 5, data: 'B' }
+	],
+	edges: [{ index: 3, source: 2, target: 5, data: 1 }]
+});
+
+Graph.toSnapshot(restored); // newly allocated records; payload values are not cloned
+```
+
+`fromSnapshot` validates ordering, safe-integer indexes, and edge endpoints and throws `GraphError` on invalid input. Snapshots preserve active indexes and stored undirected edge orientation, but not removed-ID allocator history; future IDs continue after the highest active index. `graph.toJSON()` is only an inspection summary, not the snapshot wire format.
+
+At a decoded boundary, use `Schema.toCodecJson(Schema.Graph(kind, nodeSchema, edgeSchema))` to validate and transform between the immutable graph and this snapshot representation.
+
 ## 2. Mutation: Scoped Writes
 
 All writes go through a mutation scope. Prefer `Graph.mutate` (dual), which copies the graph, applies your function, and returns a new immutable graph:
@@ -81,7 +101,7 @@ const bigger = Graph.mutate(dag, (mutable) => {
 // dag is unchanged; bigger is a new Graph
 ```
 
-`beginMutation` / `endMutation` exist for manual control, but discard the `MutableGraph` after `endMutation` — the returned immutable graph shares adjacency state with it, so further writes to the old mutable value would corrupt the snapshot. `mutate` avoids this footgun entirely. Each scope costs an O(V+E) copy, so batch all changes into one `mutate` call instead of chaining many.
+`beginMutation` / `endMutation` exist for manual control, but discard the `MutableGraph` after `endMutation`: finalization is terminal and later public mutations on that handle throw `GraphError`. `mutate` finalizes the handle whether its synchronous callback returns or throws, and rethrows the original callback failure. Each scope copies graph structure (payload objects remain shared), so batch related changes into one `mutate` call.
 
 Write operations (all take the `MutableGraph` first; all return `void` except the two `add*`):
 
@@ -92,9 +112,13 @@ Graph.mutate(dag, (m) => {
 	Graph.updateNode(m, idx, (data) => data.toLowerCase()); // silent no-op if index missing
 	Graph.updateEdge(m, e, (w) => w * 2); // silent no-op if index missing
 	Graph.removeEdge(m, e); // silent no-op if missing
+	Graph.removeEdges(m, [e]); // bulk removal; missing/duplicate indexes ignored
 	Graph.removeNode(m, idx); // removes the node AND all incident edges; no-op if missing
+	Graph.removeNodes(m, [idx]); // bulk node + incident-edge removal
 });
 ```
+
+Mutation is forbidden while graph callbacks such as `mapNodes`, `filterMapEdges`, algorithm cost functions, and walker projections are evaluating against the same mutable graph. Such re-entrant writes throw `GraphError` and preserve graph invariants; querying from callbacks remains allowed.
 
 ## 3. Node & Edge Queries
 
@@ -105,7 +129,7 @@ Graph.nodeCount(dag); // 3
 Graph.edgeCount(dag); // 2
 Graph.hasNode(dag, 0); // true
 Graph.getNode(dag, 0); // Option.some('A')
-Graph.getEdge(dag, 0); // Option.some(Edge { source: 0, target: 1, data: 1 })
+Graph.getEdge(dag, 0); // Option.some({ source: 0, target: 1, data: 1 })
 Graph.hasEdge(dag, 0, 1); // true — (graph, source, target); symmetric for undirected graphs
 
 // Linear search by predicate (O(n) — keep your own Map<key, NodeIndex> for hot paths)
@@ -124,11 +148,19 @@ Graph.neighbors(dag, 0); // [1]
 // Directed-only (THROW GraphError on undirected graphs):
 Graph.successors(dag, 0); // outgoing neighbors: [1]
 Graph.predecessors(dag, 1); // incoming neighbors: [0]
+
+// Edge-aware and degree queries
+Graph.incidentEdges(dag, 1); // [0, 1], each incident edge once
+Graph.outgoingEdges(dag, 1); // [1] — directed only
+Graph.incomingEdges(dag, 1); // [0] — directed only
+Graph.edgesBetween(dag, 0, 1); // [0], retaining parallel edge indexes
+Graph.outDegree(dag, 1); // 1 — directed only
+Graph.inDegree(dag, 1); // 1 — directed only
 ```
 
 - `Graph.neighborsDirected(graph, node, direction)` still exists but is **deprecated** as of 4.0 — use `successors` / `predecessors`.
-- Directed neighbor lists have one entry per edge, so parallel edges yield duplicates; **undirected `neighbors` deduplicates** (a node with two parallel edges to the same peer reports it once; a self-loop reports the node itself once).
-- There is no dedicated degree function — use `Graph.successors(g, n).length` (out-degree) and `Graph.predecessors(g, n).length` (in-degree), or `Graph.neighbors(g, n).length` for undirected.
+- `neighbors`, `successors`, and `predecessors` deduplicate parallel-edge neighbors and include a self-loop's node once. A missing node returns `[]` for these neighbor APIs.
+- Degree APIs count edges, not unique neighbors: `degree` is undirected-only (parallel edges separately, self-loop twice); `outDegree` / `inDegree` are directed-only (self-loop once in each). Kind-specific edge and degree APIs throw `GraphError` when called on the wrong graph kind.
 
 ## 4. Bulk Transformations
 
@@ -157,7 +189,20 @@ const reversed = Graph.mutate(dag, (m) => {
 });
 ```
 
-## 5. Walkers: Lazy Iterators
+The transformation callback must not mutate or finalize the same graph. Bulk removals collect their input iterable before mutating, so `Graph.removeNodes(m, Graph.indices(Graph.nodes(m)))` is safe.
+
+## 5. Set Operations and Derived Graphs
+
+Graph composition APIs are dual and return immutable graphs:
+
+- `compose`, `intersection`, `difference`, and `symmetricDifference` compare nodes and edges with Effect equality, optionally projected by `IdentityOptions.nodeIdentity` / `edgeIdentity`; graph kinds must match and results allocate fresh IDs.
+- `sum` is a disjoint union that never merges equal nodes; `complement` creates absent non-self relationships.
+- `neighborhood(graph, node, { radius, direction })` selects a reachable region and allocates fresh IDs; `inducedSubgraph(graph, indices)` selects exact nodes while preserving active node and retained edge indexes.
+- `minimumSpanningForest` preserves indexes in undirected graphs; `transitiveReduction` preserves indexes in directed acyclic graphs.
+
+Identity-based `compose`, `intersection`, and `symmetricDifference` coalesce parallel edges with the same endpoints and projected edge identity. `difference` preserves every left-side occurrence when that identity is absent from the right graph, but removes all such occurrences when the right graph contains the identity. Use `sum` or index-preserving selection when identifiers must remain distinct.
+
+## 6. Walkers: Lazy Iterators
 
 Every traversal and listing API returns a `Graph.Walker<Index, Data>` — a lazy iterable of `[index, data]` pairs. Aliases: `Graph.NodeWalker<N> = Walker<NodeIndex, N>` and `Graph.EdgeWalker<E> = Walker<EdgeIndex, Edge<E>>`.
 
@@ -181,7 +226,7 @@ for (const [index, data] of walker) {
 Walker semantics:
 
 - **Re-iterable with fresh state** — each `for...of` / `Array.from` restarts the traversal from scratch.
-- **Lazy** — the graph is read during iteration; elements removed since walker creation are skipped.
+- **Lazy** — DFS/BFS/postorder/topological traversals of mutable graphs capture a snapshot when each iteration begins, and later mutations are not observed by that active iterator. Plain `nodes`, `edges`, and `externals` walkers do not snapshot mutable graphs, so mutations can affect remaining iteration.
 
 Listing walkers:
 
@@ -197,9 +242,9 @@ Graph.externals(dag, { direction: 'incoming' }); // sources (+ isolated nodes)
 
 - On **undirected** graphs every incident edge appears in both adjacency directions, so `externals` yields only **isolated nodes** regardless of `direction` — find leaves with `Graph.neighbors(g, n).length === 1` instead.
 
-## 6. Traversals: DFS, BFS, Postorder, Topological
+## 7. Traversals: DFS, BFS, Postorder, Topological
 
-`dfs`, `bfs`, and `dfsPostOrder` take a `SearchConfig`: `{ start?: Array<NodeIndex>; direction?: 'outgoing' | 'incoming' }`. All are dual and return a `NodeWalker<N>`:
+`dfs`, `bfs`, and `dfsPostOrder` take a `SearchConfig`: `{ start?: Array<NodeIndex>; direction?: 'outgoing' | 'incoming' | 'undirected'; radius?: number }`. All are dual and return a `NodeWalker<N>`:
 
 ```ts
 // Preorder DFS from node 0, following outgoing edges (the default direction)
@@ -213,11 +258,18 @@ const levels = Graph.bfs(dag, { start: [0] });
 
 // Postorder: children emitted before parents (useful for bottom-up processing)
 const bottomUp = Graph.dfsPostOrder(dag, { start: [0] });
+
+// Traverse either edge direction up to two hops from the nearest start
+const local = Graph.bfs(dag, {
+	start: [0],
+	direction: 'undirected',
+	radius: 2
+});
 ```
 
 - Omitting `start` (or passing `[]`) yields an **empty iterator** — traversals do not default to all nodes; seed them explicitly (multiple start nodes cover disconnected components).
-- A missing start node **throws `GraphError`** at walker-creation time.
-- `direction` is ignored for undirected graphs — both endpoints are always followed.
+- Start arrays are copied and validated at walker creation; missing starts throw `GraphError`, and each fresh iteration revalidates them against its graph snapshot. Duplicate starts are ignored in supplied priority order.
+- `radius` is shortest edge distance from the nearest start; it must be a non-negative integer or `Infinity`. `direction` is ignored for undirected graphs, whose edges always traverse both ways.
 - Each node is visited at most once; cycles are safe.
 
 Topological sort (`topo`) uses Kahn's algorithm and takes `TopoConfig`: `{ initials?: Array<NodeIndex> }`:
@@ -231,35 +283,48 @@ const prioritized = Graph.topo(dag, { initials: [0] });
 
 `topo` **throws `GraphError`** when called on an undirected graph or a cyclic graph (`'Cannot perform topological sort on cyclic graph'`) — guard with `Graph.isAcyclic` first. An `initials` entry that has incoming edges throws `'Initial node N has incoming edges'` when iteration begins (not at creation).
 
-## 7. Structure Analysis: Cycles, Components, Bipartite
+## 8. Structure Analysis, Connectivity, Matching, and Flow
 
 ```ts
 Graph.isAcyclic(dag); // true — works on directed and undirected graphs
+Graph.findCycle(dag); // Option<CycleResult> with closed node path + edge indexes
 
 // Undirected only (type-restricted):
 Graph.isBipartite(social); // BFS 2-coloring; odd cycles => false
 Graph.connectedComponents(social); // Array<Array<NodeIndex>>, e.g. [[0, 1], [2, 3]]
+Graph.isConnected(social); // undirected only; empty graph is connected
+Graph.isTree(social); // undirected only; empty graph is not a tree
+Graph.bridges(social); // edge indexes whose removal disconnects a component
+Graph.articulationPoints(social); // single-node failure points
+Graph.biconnectedComponents(social); // maximal biconnected node regions
+Graph.maximumBipartiteMatching(social); // [{ left, right, edge }], throws if not bipartite
 
 // Directed only (THROWS GraphError on undirected):
 Graph.stronglyConnectedComponents(dag); // Kosaraju's algorithm; Array<Array<NodeIndex>>
+Graph.weaklyConnectedComponents(dag); // orientation ignored
+Graph.isStronglyConnected(dag);
+Graph.isWeaklyConnected(dag);
 // In a DAG every node is its own SCC: three singleton components; output order is unspecified
 ```
 
 `isAcyclic` is cached: fresh graphs are known-acyclic, the flag is invalidated when a mutation may change the answer (`addEdge` on a known-acyclic graph, removals on a known-cyclic graph) and unconditionally by `reverse`, and a computed result is memoized on the graph value. Repeated calls are cheap.
 
-## 8. Shortest Paths
+`unweightedDistances(graph, source, { direction })` returns hop counts to reachable nodes; `hasPath(graph, source, target, { direction })` is the allocation-light boolean query. Directed `maximumFlow` returns `{ value, flows, cut }`; `minimumCut` returns `{ value, edges, source, target }`. Flow capacities must be finite and non-negative, and source and target must be distinct.
+
+## 9. Paths and Shortest Paths
 
 Point-to-point algorithms return `Option.Option<Graph.PathResult<E>>` where `PathResult` is:
 
 ```ts
 interface PathResult<E> {
 	readonly path: Array<NodeIndex>; // ordered nodes, source first, target last
+	readonly edges: Array<EdgeIndex>; // traversed edge indexes
 	readonly distance: number; // total numeric cost
 	readonly costs: Array<E>; // the EDGE DATA along the path — not numbers, unless E is number
 }
 ```
 
-All of them throw `GraphError` if `source` or `target` does not exist, and return `Option.none()` when the target is unreachable. `source === target` succeeds immediately with `{ path: [source], distance: 0, costs: [] }`. Undirected graphs are traversed symmetrically regardless of stored edge orientation.
+The single-path algorithms below throw `GraphError` if `source` or `target` does not exist, and return `Option.none()` when the target is unreachable. A successful `source === target` result is `{ path: [source], edges: [], distance: 0, costs: [] }`, but validations still run: Dijkstra/A* validate edge costs, A* validates its heuristic, and Bellman-Ford still rejects a relevant negative cycle. Finite path arithmetic that overflows or underflows also throws `GraphError`: Dijkstra and A* reject distance overflow, A* also rejects priority overflow, and Bellman-Ford rejects distance overflow or underflow. Undirected graphs are traversed symmetrically regardless of stored edge orientation.
 
 ```ts
 const weighted = Graph.directed<string, number>((m) => {
@@ -277,7 +342,7 @@ const shortest = Graph.dijkstra(weighted, {
 	target: 2,
 	cost: (edgeData) => edgeData
 });
-// Option.some({ path: [0, 1, 2], distance: 7, costs: [5, 2] })
+// Option.some({ path: [0, 1, 2], edges: [0, 2], distance: 7, costs: [5, 2] })
 
 // A* — adds a heuristic over NODE data (estimate of remaining cost to target)
 const grid = Graph.directed<{ x: number; y: number }, number>((m) => {
@@ -301,25 +366,28 @@ const withNegatives = Graph.bellmanFord(weighted, {
 	target: 2,
 	cost: (edgeData) => edgeData
 });
-// Option.none() if a negative cycle affects the path to target
+// throws GraphError if a reachable negative cycle can affect the target
 
 // Floyd-Warshall — ALL pairs; takes a bare cost FUNCTION, not a config object
 const all = Graph.floydWarshall(weighted, (edgeData) => edgeData);
 all.distances.get(0)?.get(2); // 7 (Infinity when unreachable)
 all.paths.get(0)?.get(2); // [0, 1, 2] (null when unreachable, [i] when i === j)
+all.edges.get(0)?.get(2); // [0, 2] — edge indexes along the path
 all.costs.get(0)?.get(2); // [5, 2] — edge data along the path
 ```
 
 Sharp edges (all verified in tests):
 
 - `dijkstra` and `astar` validate **every edge weight in the graph eagerly** — any negative or `NaN` cost throws `GraphError` immediately, even when the offending edge is not on the path and even when `source === target`.
-- In **undirected** graphs every edge is traversable in both directions, so any reachable negative edge is a negative cycle: `bellmanFord` returns `Option.none()`, `floydWarshall` throws `'Negative cycle detected...'`.
+- In **undirected** graphs every edge is traversable in both directions, so a reachable negative edge forms a negative cycle: `bellmanFord` throws when that cycle can affect the target, and `floydWarshall` throws on any negative cycle.
 - `floydWarshall` throws on any negative cycle in directed graphs too; it runs in O(V^3) — fine for hundreds of nodes, not tens of thousands.
 - With parallel edges, `floydWarshall` uses the minimum weight between a pair.
 
-## 9. Equality, Hashing & Inspection
+`Graph.simplePaths(graph, { source, target, limit? })` lazily enumerates loop-free paths in DFS edge order with hop count as `distance`. `Graph.allShortestPaths(graph, { source, target, cost, limit? })` lazily enumerates every simple minimum-cost path; parallel edges remain distinct. Both return repeatable `PathWalker` values, can be exponentially large, and should normally receive a finite `limit`.
 
-Graphs implement `Equal` and `Hash`. Equality compares kind, then node data and edge data **by index** using `Equal.equals` (works with `Data`/`Schema` classes and plain primitives, including `undefined` data):
+## 10. Equality, Hashing & Inspection
+
+Graphs implement `Equal` and `Hash`. Equality compares kind, then active node and edge data **by index** using `Equal.equals` (works with `Data`/`Schema` classes and plain primitives, including `undefined` data):
 
 ```ts
 import { Equal } from 'effect';
@@ -329,7 +397,7 @@ Equal.equals(graph1, graph2);
 // same edge indices with equal Edge values
 ```
 
-Because comparison is index-keyed, two structurally identical graphs built in a different insertion order (or after different removal histories) are **not** equal. Treat `Equal` as "same construction", not graph isomorphism.
+Removed allocator history is ignored, and undirected edge endpoint orientation is ignored. Comparison is still index-keyed, so isomorphic graphs built with different active indexes are **not** equal; this is active indexed-structure equality, not graph isomorphism.
 
 Inspection:
 
@@ -343,7 +411,7 @@ for (const [index, data] of dag) {
 }
 ```
 
-## 10. Visualization: GraphViz & Mermaid
+## 11. Visualization: GraphViz & Mermaid
 
 Both exporters are dual, work on directed and undirected graphs, and return a `string`. All options are optional — `Graph.toMermaid(dag)` works as-is; labels default to `String(data)`, the GraphViz name to `'G'`, the Mermaid direction to `'TD'`, and shapes to rectangle:
 
@@ -491,11 +559,13 @@ const clusters = Graph.connectedComponents(activeOnly); // undirected graphs
 4. **Consuming a Walker as if it yielded indices** — `dfs`/`bfs`/`topo`/`nodes` walkers yield `[index, data]` tuples. Use `Graph.indices(w)`, `Graph.values(w)`, `Graph.entries(w)`, or `w.visit((i, d) => ...)` to project.
 5. **Expecting traversals to cover the whole graph by default** — omitting `start` yields an empty iterator. Seed every component explicitly (`start: [a, b]`), or use `Graph.nodes` for plain enumeration.
 6. **Using `neighborsDirected`** — deprecated in 4.0. Use `Graph.successors` (outgoing) / `Graph.predecessors` (incoming); all three throw `GraphError` on undirected graphs — use `Graph.neighbors` there.
-7. **Reusing a `MutableGraph` after `endMutation`** — the returned immutable graph shares adjacency state with the mutable one; further writes corrupt the snapshot. Use `Graph.mutate`, which scopes the lifetime for you.
+7. **Reusing a `MutableGraph` after `endMutation`** — finalization is terminal; later public writes throw `GraphError`. Use `Graph.mutate`, which scopes and finalizes the handle for you.
 8. **Assuming a negative weight is fine if it is off the path** — `dijkstra` and `astar` validate every edge weight in the graph up front and throw `GraphError` for any negative/`NaN` cost, even when `source === target`. Use `bellmanFord` for negative weights.
-9. **Negative edges in undirected graphs** — each undirected edge is traversable both ways, so any reachable negative edge forms a negative cycle: `bellmanFord` returns `Option.none()`, `floydWarshall` throws.
+9. **Negative edges in undirected graphs** — each undirected edge is traversable both ways, so a reachable negative edge forms a negative cycle: `bellmanFord` throws when it can affect the target, and `floydWarshall` throws.
 10. **Treating `Equal.equals` as graph isomorphism** — equality is index-keyed. Same structure built in a different order (different indices) compares unequal.
 11. **Reading `PathResult.costs` as numbers** — `costs` holds the original edge data `E` along the path, not the output of your cost function. `distance` is the numeric total.
 12. **Treating `NodeIndex` as an array offset** — indices are stable identifiers; after removals they are sparse and never reused, so `nodeCount` is not `max index + 1`. Iterate via `Graph.nodes`/`Graph.indices` instead of counting up.
-13. **Relying on `updateNode`/`removeNode` to signal missing indices** — `updateNode`, `updateEdge`, `removeNode`, and `removeEdge` are silent no-ops for nonexistent indices; check `hasNode`/`hasEdge` first if absence is a bug.
+13. **Relying on `updateNode`/`removeNode` to signal missing indices** — `updateNode`, `updateEdge`, `removeNode`, and `removeEdge` are silent no-ops for nonexistent indices; use `hasNode` for node indexes and `getEdge` for edge indexes if absence is a bug (`hasEdge` checks a source-target pair, not an edge index).
 14. **Passing `initials` with incoming edges to `topo`** — `initials` must be zero in-degree nodes; others throw `GraphError` when iteration starts. `initials` only prioritizes queue order — every node is still emitted exactly once.
+15. **Using `graph.toJSON()` as persistence** — it only returns `{ _id, nodeCount, edgeCount, type }`. Use `Graph.toSnapshot` / `Graph.fromSnapshot`, or `Schema.Graph` at a decoded boundary.
+16. **Mutating from a graph callback** — transformation callbacks, cost/capacity/heuristic functions, and walker projections may query but must not mutate or finalize the same mutable graph.

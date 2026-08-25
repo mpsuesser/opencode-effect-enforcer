@@ -363,6 +363,22 @@ const ValidUsername = Schema.String.pipe(
 
 Transformations are first-class reusable objects in v4. Apply them with `Schema.decode` (same source/target type) or `Schema.decodeTo` (different types).
 
+### JSON String Transformations
+
+`Schema.fromJsonString(schema, options)` accepts a `JSON.parse` `reviver` for decoding and `replacer` / `space` options for encoding. Because a reviver may produce arbitrary values, the supplied schema remains responsible for validating the revived result.
+
+```typescript
+import { Schema } from 'effect';
+
+const PayloadJson = Schema.fromJsonString(
+	Schema.Struct({ value: Schema.String }),
+	{
+		reviver: (key, value) => key === 'value' ? 'revived' : value,
+		space: 2
+	}
+);
+```
+
 ### String Transformations
 
 ```typescript
@@ -569,10 +585,10 @@ Keep decoded shapes schema-first with `Schema.Class`. Choose construction and de
 | --- | --- | --- |
 | `schema.make` | Construct from typed constructor input; trusted data or abort-on-invalid paths | Throws on failed type-side checks |
 | `schema.makeEffect` | Construct from typed constructor input inside Effect | `Effect` failure with `SchemaIssue.Issue` |
-| `Schema.decodeUnknownEffect(schema)` | Default for unknown boundary input | `Effect` failure with `SchemaError` |
-| `Schema.decodeUnknownSync(schema)` | Scripts, tests, or startup paths where throwing is acceptable | Throws `SchemaError` |
+| `Schema.decodeUnknownEffect(schema)` | Default for unknown boundary input | `Effect` failure with `Schema.SchemaError` |
+| `Schema.decodeUnknownSync(schema)` | Scripts, tests, or startup paths where throwing is acceptable | Throws `Schema.SchemaError` |
 | `Schema.decodeUnknownOption(schema)` | Only when mismatch details are intentionally discarded | `Option.none()` for schema mismatches |
-| `Schema.decodeUnknownResult(schema)` | Pure code needing explicit success or failure without Effect | `Result` failure with `SchemaError` |
+| `Schema.decodeUnknownResult(schema)` | Pure code needing explicit success or failure without Effect | `Result` failure with `Schema.SchemaError` |
 
 `make` and `makeEffect` apply constructor defaults and type-side checks. They are constructors, not substitutes for decoding unknown external input.
 
@@ -582,10 +598,10 @@ Keep decoded shapes schema-first with `Schema.Class`. Choose construction and de
 | ---------------------- | ------------------------------------ | ------------------------------- |
 | `decodeUnknownSync`    | `Type` (throws on error)             | Sync decoding, immediate error  |
 | `decodeUnknownOption`  | `Option<Type>`                       | Sync decoding, no error details |
-| `decodeUnknownResult`  | `Result<Type, SchemaError>`           | Pure, explicit success/failure  |
-| `decodeUnknownExit`    | `Exit<Type, SchemaError>`            | Sync decoding, error handling   |
+| `decodeUnknownResult`  | `Result<Type, Schema.SchemaError>`           | Pure, explicit success/failure  |
+| `decodeUnknownExit`    | `Exit<Type, Schema.SchemaError>`            | Sync decoding, error handling   |
 | `decodeUnknownPromise` | `Promise<Type>`                      | Async decoding                  |
-| `decodeUnknownEffect`  | `Effect<Type, SchemaError, Context>` | Full Effect-based decoding      |
+| `decodeUnknownEffect`  | `Effect<Type, Schema.SchemaError, Context>` | Full Effect-based decoding      |
 
 **Example:**
 
@@ -616,9 +632,9 @@ const asyncResult = Schema.decodeUnknownEffect(Person)({
 | ------------------- | --------------------------------------- | ------------------------------- |
 | `encodeSync`        | `Encoded` (throws on error)             | Sync encoding, immediate error  |
 | `encodeOption`      | `Option<Encoded>`                       | Sync encoding, no error details |
-| `encodeUnknownExit` | `Exit<Encoded, SchemaError>`            | Sync encoding, error handling   |
+| `encodeUnknownExit` | `Exit<Encoded, Schema.SchemaError>`            | Sync encoding, error handling   |
 | `encodePromise`     | `Promise<Encoded>`                      | Async encoding                  |
-| `encodeEffect`      | `Effect<Encoded, SchemaError, Context>` | Full Effect-based encoding      |
+| `encodeEffect`      | `Effect<Encoded, Schema.SchemaError, Context>` | Full Effect-based encoding      |
 
 ## Struct and Object Schemas
 

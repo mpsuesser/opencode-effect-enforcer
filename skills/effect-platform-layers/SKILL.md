@@ -96,6 +96,19 @@ declare const program: Effect.Effect<void, never, never>;
 pipe(program, Effect.provide(BunServices.layer), BunRuntime.runMain);
 ```
 
+### Browser
+
+```typescript
+import { BrowserRuntime } from '@effect/platform-browser';
+import { Effect, pipe } from 'effect';
+
+declare const program: Effect.Effect<void, never, never>;
+
+pipe(program, BrowserRuntime.runMain);
+```
+
+`BrowserRuntime.runMain` keeps the main fiber alive when a `pagehide` event is persisted for the browser back/forward cache. It interrupts the fiber on non-persisted `pagehide`, when the document is actually being discarded. Browser teardown is best-effort, so asynchronous finalizers are not guaranteed to finish before the page disappears.
+
 ## Context Layer Services
 
 Each platform context (`NodeServices.layer`, `BunServices.layer`) provides these services:
@@ -114,6 +127,18 @@ Each platform context (`NodeServices.layer`, `BunServices.layer`) provides these
 Runtime application/provider HTTP belongs behind Effect `HttpClient`, not raw `fetch`. Only a named low-level platform transport adapter may use fetch directly, with a documented justification and full ownership of interruption, status-before-decode, schema decoding, and typed errors. Provider adapters also own redacted diagnostic evidence and retry exhaustion; provider calls run outside database transactions, and retries apply only to proven-idempotent operations. In particular, do not decorate a shared client with automatic retry when it can execute ordinary non-idempotent POST/PATCH requests.
 
 `Migrator.fromFileSystem` now requires both `FileSystem.FileSystem` and `Path.Path`. `NodeServices.layer` and `BunServices.layer` already satisfy both. If a migration runtime provides only an individual file-system layer, add the matching host path layer too; on Windows, core `Path.layer` is not a substitute for a platform-aware path implementation because it uses POSIX semantics.
+
+### Redis Layers
+
+Redis is deliberately outside the aggregate platform layers. `NodeRedis.layer` and `NodeRedis.layerConfig` use `redis` (node-redis), with a supported peer range of `redis >=5.0.0 <7.0.0`, and accept node-redis `RedisClientOptions`. When migrating from `ioredis`:
+
+- Move host, port, TLS, and reconnect settings under `socket`.
+- Rename `db` to `database`.
+- Use node-redis camel-cased commands such as `hLen` and `lRange` on `NodeRedis.NodeRedis.client`.
+- Use `sendCommand` for arbitrary raw commands.
+- Do not force a RESP protocol unless required; protocol selection follows the installed node-redis default.
+
+The Node layer connects while it is built and therefore can fail with `Redis.RedisError`. The initial connection fails fast by default; supplying `socket.reconnectStrategy` opts into caller-defined initial retry behavior. After the client first becomes ready, the built-in strategy uses node-redis exponential backoff and stops on socket timeouts. Scope finalization calls `close()`, which waits for in-flight and blocking commands and can delay layer shutdown.
 
 ### Usage Example
 

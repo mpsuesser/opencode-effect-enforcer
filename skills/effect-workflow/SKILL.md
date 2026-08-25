@@ -297,6 +297,8 @@ const PaymentConfirmation = DurableDeferred.make('payment-confirmation', {
 const confirmation = yield* DurableDeferred.await(PaymentConfirmation);
 ```
 
+The engine registers the awaited deferred before reading it. Completing that deferred while the workflow run is still active preempts a run parked on it, retains the pending result, and replays so the completion is observed. The in-memory engine follows the same behavior as `ClusterWorkflowEngine`; this closes the race where a live completion could otherwise be missed until a later retry.
+
 ### Completing from Outside
 
 External code (e.g., a webhook handler) completes the deferred using a **token**:
@@ -527,6 +529,8 @@ yield*
 	);
 ```
 
+Use `Workflow.addFinalizer` for terminal work that must observe an interrupt deposited through `Workflow.interrupt`. A body-level `Effect.onExit` finalizer cannot observe that deposited workflow interrupt; workflow-scope finalization is deliberately aligned between the in-memory and cluster engines.
+
 ## WorkflowEngine
 
 The `WorkflowEngine` is a service that orchestrates workflow execution. It handles registration, execution, replay, suspension, and resumption.
@@ -576,6 +580,8 @@ const OrderWorkflow = Workflow.make({ /* ... */ })
 ```
 
 `ClusterWorkflowEngine` reads that annotation when computing the workflow entity's address, so the workflow's entity messages, durable clock wake-ups, and registered durable-deferred completions all route through the owning workflow's shard group. If you use any group other than `'default'`, you must include it on the appropriate runners via `ShardingConfig.availableShardGroups` / `assignedShardGroups` (e.g. `['default', 'workflow']`) — otherwise those messages have nowhere to land. See the `effect-rpc-cluster` skill for `ShardingConfig` details.
+
+`ClusterWorkflowEngine` gives workflow execution entities and the durable-clock entity a fixed `10 seconds` idle timeout. Completed and suspended executions release the runner's bounded entity-residency slots quickly; because their state is durable, the next workflow, deferred, or clock message recreates the entity from storage. This is intentional passivation, not loss of a suspended workflow.
 
 ### Custom Engine Implementation
 
@@ -798,5 +804,7 @@ const MainLive = Layer.mergeAll(SendEmailLive, ProcessOrderLive).pipe(
 ```
 
 `ClusterWorkflowEngine.layer` builds an `Entity` per workflow under the hood — durable execution state lives in `MessageStorage`, runner-to-runner routing comes from `Sharding`, and replays are driven by the entity's mailbox. The `Workflow.Execution<Name>` type in the context represents the execution identity within the cluster.
+
+The internal workflow and durable-clock entities passivate after `10 seconds` of inactivity so they do not retain scarce runner residency while completed or suspended. Plan runner capacity with `ShardingConfig.maxResidentEntities`; persisted wake-ups remain in storage until a slot is available.
 
 To expose workflows over RPC or HTTP without writing dispatch glue, use `WorkflowProxy.toRpcGroup` / `WorkflowProxy.toHttpApiGroup` and the matching `WorkflowProxyServer.layerRpcHandlers` / `layerHttpApi`. See the `effect-rpc-cluster` skill for the bridge patterns.

@@ -46,7 +46,7 @@ RpcServer.layer(group, options?)  → consumes all four, runs forever
 	payload: Rpc.Payload<R>,
 	options: {
 		readonly client: Rpc.ServerClient; // client.id: number; client.annotations; client.annotate(key, value)
-		readonly requestId: RpcMessage.RequestId; // branded bigint
+		readonly requestId: RpcMessage.RequestId; // branded string | number
 		readonly headers: Headers; // transport headers merged with per-call headers
 		readonly rpc: R;
 	}
@@ -189,7 +189,7 @@ const user = yield* UserRpcs.accessHandler('GetUser').pipe(
 			{ id: 'u1' },
 			{
 				client: new Rpc.ServerClient(0),
-				requestId: RpcMessage.RequestId(1n),
+				requestId: RpcMessage.RequestId(1),
 				headers: Headers.empty
 			}
 		)
@@ -239,7 +239,8 @@ const ServerLayer = RpcServer.layerHttp({
 	group: UserRpcs,
 	path: '/rpc',
 	protocol: 'http', // or 'websocket' (the default!)
-	disableFatalDefects: true
+	disableFatalDefects: true,
+	streamBufferSize: 16 // framed HTTP only; default 16
 }).pipe(
 	Layer.provide(UsersLive),
 	Layer.provide(RpcSerialization.layerNdjson)
@@ -273,7 +274,7 @@ See the `effect-http-server` skill for `HttpRouter.serve` options (middleware, `
 
 | Layer | Requires | supportsAck | span propagation | transferables |
 |---|---|---|---|---|
-| `RpcServer.layerProtocolHttp({ path })` | `RpcSerialization`, `HttpRouter` | no | no | no |
+| `RpcServer.layerProtocolHttp({ path, streamBufferSize? })` | `RpcSerialization`, `HttpRouter` | no | no | no |
 | `RpcServer.layerProtocolWebsocket({ path })` | `RpcSerialization`, `HttpRouter` | yes | yes | no |
 | `RpcServer.layerProtocolSocketServer` | `RpcSerialization`, `SocketServer` | yes | yes | no |
 | `RpcServer.layerProtocolStdio` | `RpcSerialization`, `Stdio` | yes | yes | no |
@@ -281,7 +282,7 @@ See the `effect-http-server` skill for `HttpRouter.serve` options (middleware, `
 
 `supportsAck` is what enables **stream backpressure** (§7). Each layer has a `makeProtocol*` Effect counterpart for inline composition, and `makeProtocolWithHttpEffect` / `makeProtocolWithHttpEffectWebsocket` return `{ protocol, httpEffect }` when you need both (§5).
 
-- **HTTP** (`layerProtocolHttp`) registers a `POST` route. Each HTTP request is a short-lived client: all messages in the body are processed, then the response is either buffered or streamed depending on serialization framing (§4). HTTP request headers are prepended to every rpc request's headers — so `authorization` etc. is visible to middleware without client cooperation.
+- **HTTP** (`layerProtocolHttp`) registers a `POST` route. Each HTTP request is a short-lived client: all messages in the body are processed, then the response is either buffered or streamed depending on serialization framing (§4). For framed responses, `streamBufferSize` bounds the response queue and defaults to `16`; pass `'unbounded'` to restore unbounded buffering. The option is also accepted by `layerHttp`, `makeProtocolHttp`, `makeProtocolWithHttpEffect`, and `toHttpEffect`. HTTP request headers are prepended to every rpc request's headers — so `authorization` etc. is visible to middleware without client cooperation.
 - **WebSocket** (`layerProtocolWebsocket`) registers a `GET` route that upgrades the connection. Upgrade-request headers are merged into every rpc's headers. Full duplex, acks, span propagation.
 - **TCP** (`layerProtocolSocketServer`) serves raw sockets:
 
@@ -324,6 +325,18 @@ const { supportsAck, supportsTransferables, supportsSpanPropagation, clientIds, 
 	yield* RpcServer.Protocol;
 ```
 
+The complete protocol surface also includes:
+
+```ts
+{
+	readonly supportsNotifications: boolean;
+}
+```
+
+`supportsNotifications` is `true` for sockets, stdio, workers, and framed HTTP; it is `false` for buffered unframed HTTP.
+
+Server-originated calls and notifications use `RpcMessage.RequestEncoded` in `FromServerEncoded`. Set `isNotification: true` for notifications; JSON-RPC serialization omits their id. Unframed HTTP buffers normal responses and intentionally drops notifications because it cannot deliver them before the response closes.
+
 ---
 
 ## 4. Serialization — Picking a Wire Format
@@ -355,7 +368,7 @@ Client and server must use the **same** serialization.
 
 When you want the RPC handler as a value to mount yourself — alongside other routes, behind your own middleware, or in a Fetch-style handler — use the `toHttpEffect` helpers instead of `layerProtocolHttp`.
 
-`RpcServer.toHttpEffect(group, options?)` starts the server in the current `Scope` and returns the request-handling Effect (`Effect<HttpServerResponse, never, Scope | HttpServerRequest>`). `toHttpEffectWebsocket` is the upgrade-handler equivalent. Options are `disableTracing` / `spanPrefix` / `spanAttributes` / `disableFatalDefects` — note there is **no `concurrency` option** on these two.
+`RpcServer.toHttpEffect(group, options?)` starts the server in the current `Scope` and returns the request-handling Effect (`Effect<HttpServerResponse, never, Scope | HttpServerRequest>`). `toHttpEffectWebsocket` is the upgrade-handler equivalent. HTTP options are `disableTracing` / `spanPrefix` / `spanAttributes` / `disableFatalDefects` / `streamBufferSize` — note there is **no `concurrency` option** on these two.
 
 ```ts
 const RpcRoute = Layer.effectDiscard(
@@ -376,7 +389,7 @@ const Main = HttpRouter.serve(Layer.mergeAll(RpcRoute, HealthRoutes)).pipe(
 
 `Layer.effectDiscard` supplies the `Scope` that keeps the forked RPC server alive for the lifetime of the layer.
 
-Lower still: `RpcServer.makeProtocolWithHttpEffect` / `makeProtocolWithHttpEffectWebsocket` give you `{ protocol, httpEffect }` so you can provide the `Protocol` to `RpcServer.make` yourself — useful when one process must mount the same server behind several routes or compose with a hand-built runtime.
+Lower still: `RpcServer.makeProtocolWithHttpEffect({ streamBufferSize? })` / `makeProtocolWithHttpEffectWebsocket` give you `{ protocol, httpEffect }` so you can provide the `Protocol` to `RpcServer.make` yourself — useful when one process must mount the same server behind several routes or compose with a hand-built runtime. `makeProtocolWithHttpEffect` is a function and must be called, even when no options are supplied: `yield* RpcServer.makeProtocolWithHttpEffect()`.
 
 ---
 
@@ -622,13 +635,14 @@ const myProtocol = RpcServer.Protocol.make((writeRequest) =>
 			initialMessage: Effect.succeedNone,
 			supportsAck: true,
 			supportsTransferables: false,
-			supportsSpanPropagation: false
+			supportsSpanPropagation: false,
+			supportsNotifications: true
 		};
 	})
 );
 ```
 
-Writes made before the server loop starts are buffered and replayed — you don't need to sequence startup manually. The message vocabulary lives in `RpcMessage` (`FromClientEncoded` = `Request | Ack | Interrupt | Ping | Eof`; `FromServerEncoded` = `Chunk | Exit | Defect | Pong | ClientProtocolError`).
+Writes made before the server loop starts are buffered and replayed — you don't need to sequence startup manually. The message vocabulary lives in `RpcMessage` (`FromClientEncoded` = `RequestEncoded | AckEncoded | InterruptEncoded | Ping | Eof`; `FromServerEncoded` = `ResponseChunkEncoded | ResponseExitEncoded | ResponseDefectEncoded | Pong | ClientProtocolError | RequestEncoded`). The final `RequestEncoded` case is the server-originated request/notification surface.
 
 ### `RpcServer.makeNoSerialization(group, options)`
 
@@ -749,3 +763,5 @@ const ServerLayer = RpcServer.layer(StoreRpcs, { concurrency: 1 }).pipe(
 13. **Detecting client aborts with `Effect.onInterrupt`.** Its callback only gets interruptor ids. Inspect the exit: `exit.cause.reasons.some((r) => r._tag === 'Interrupt' && r.annotations.has(RpcSchema.ClientAbort.key))`. Server-shutdown interrupts do *not* carry the annotation.
 14. **Ending a queue-form stream by failing it.** Use `Queue.end(queue)` (the `Cause.Done` signal) for a clean end-of-stream; a typed failure fails the client's stream instead. `Queue.end` requires `Cause.Done` in the queue's error channel — `Queue.bounded<User, Cause.Done>(16)` — or it won't typecheck.
 15. **Calling `RpcServer.toHttpEffect` outside a scope.** It forks the server with `Effect.forkScoped` — build it inside `Layer.effectDiscard` (or another `Scope`-providing context) or the server dies immediately. Also note it has no `concurrency` option; use `layer`/`layerHttp` if you need one.
+16. **Leaving framed HTTP response buffering implicit under heavy load.** It is bounded to 16 messages by default. Set `streamBufferSize` deliberately when throughput or memory behavior requires a different bound; use `'unbounded'` only intentionally.
+17. **Omitting notification capability from a custom protocol.** `supportsNotifications` is required; report whether server-originated notifications can actually be delivered.

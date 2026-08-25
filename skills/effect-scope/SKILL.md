@@ -133,7 +133,7 @@ const result = Effect.acquireUseRelease(
 ```
 
 - `release` receives the `Exit` of the **use** step (`Exit<A, E2>`), not of the whole program.
-- Unlike `acquireRelease`, the release here *can* fail (`E3`), and a release failure fails the whole effect even when `use` succeeded. Catch inside release if that is not desired.
+- Unlike `acquireRelease`, the release here *can* fail (`E3`), and a release failure fails the whole effect even when `use` succeeded. If both `use` and `release` fail, their causes are combined rather than one replacing the other. Catch inside release if that is not desired.
 - Release runs as soon as `use` finishes — choose `acquireRelease` + `Scope` when the resource must outlive a single callback.
 
 ---
@@ -182,7 +182,8 @@ Selective variants: `Effect.onExitIf(self, predicate, f)`, `Effect.onExitFilter(
 Semantics:
 
 - Finalizers attached with `onExit`/`ensuring` run in an **uninterruptible region** (unless you reach for the low-level `Effect.onExitPrimitive(self, f, interruptible)`, which also allows returning `undefined` to skip finalization).
-- If the finalizer itself fails (`onExit`'s `f` may have an error channel `XE`), that failure replaces the original result. `Effect.ensuring`'s public signature forbids finalizer failure (`Effect<X, never, R1>`).
+- If an `onExit` finalizer fails (`f` may have an error channel `XE`), its error joins the result error channel. If both the source and finalizer fail, their causes are combined rather than one replacing the other.
+- `Effect.ensuring` deliberately requires `Effect<X, never, R1>` as its finalizer, so typed finalizer errors must be handled before attachment. A finalizer defect can still occur at runtime and is combined with an existing source failure.
 - These only fire if the effect **starts** executing.
 
 Choosing between them:
@@ -299,6 +300,7 @@ Close semantics (from `internal/effect.ts` `scopeCloseFinalizers`):
 - Finalizers run in **reverse registration order** (LIFO).
 - `'sequential'` (default): one at a time, each awaited. `'parallel'`: all started concurrently, then awaited together.
 - **Every finalizer always runs** — a failing finalizer does not prevent the others. All failures are collected and combined into a single `Cause`; `Scope.close` then fails with that combined cause.
+- When scoped work and scope finalization both fail, the work cause and combined finalizer cause are merged.
 - Closing an already-closed scope is a no-op.
 - The scope transitions to `Closed` *before* finalizers run, so finalizers registered from inside finalizers execute immediately.
 - You can inspect `scope.state._tag` (`'Empty' | 'Open' | 'Closed'`) and `scope.strategy` directly.
@@ -672,7 +674,7 @@ class Plugin {
 8. **Assuming finalizers added to a closed scope are ignored.** `Scope.addFinalizer*` (and `Effect.addFinalizer` via it) runs the finalizer immediately with the scope's stored exit. The same applies to `Scope.fork` on a closed parent: the child is born closed.
 9. **Relying on registration-order cleanup.** Finalizers run in *reverse* registration order (LIFO), sequentially by default. Parallel finalization is opt-in per scope: `Scope.make('parallel')` — there is no v3-style `Effect.parallelFinalizers` combinator in v4.
 10. **Assuming one failing finalizer aborts the rest.** All finalizers run on close; their failures are combined into a single `Cause` that `Scope.close` fails with.
-11. **Using `acquireUseRelease` and swallowing release errors unknowingly — or the opposite.** Its release *can* fail and a release failure fails the whole effect even after a successful `use`. Conversely `acquireRelease`'s release is typed `never` — convert errors inside it.
+11. **Using `acquireUseRelease` and swallowing release errors unknowingly — or the opposite.** Its release *can* fail; a release failure fails the whole effect after successful `use`, and combines with the use cause after failed `use`. Conversely `acquireRelease`'s release is typed `never` — convert errors inside it.
 12. **Acquiring per-request resources in a `Layer.effect` constructor.** Layer finalizers run when the layer scope closes (shutdown), not per call. Acquire per-request resources inside the request handler under `Effect.scoped`, or fork a child scope per item (section 5).
 13. **v3 fork names**: `Effect.fork` → `Effect.forkChild`, `Effect.forkDaemon` → `Effect.forkDetach`. `forkScoped`/`forkIn` keep their names and now accept `{ startImmediately?, uninterruptible? }`.
 14. **Calling `Scope.closeUnsafe` and dropping the result.** It returns `Effect | undefined`; ignoring the returned effect skips every finalizer. Use `Scope.close` unless you are writing low-level machinery.

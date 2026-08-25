@@ -113,6 +113,15 @@ const AnthropicLive = AnthropicLanguageModel.layer({
 }).pipe(Layer.provide(AnthropicClientLayer));
 ```
 
+Anthropic capability detection preserves the lower output limits and structured-output support of known legacy Claude models. Unknown and newly released model identifiers default to modern capabilities: native structured outputs and `128_000` output tokens. Override capability detection with `structuredOutputs: false` (or `true`) when a model or compatible endpoint differs from that default; set `max_tokens` separately when the provider's output limit differs.
+
+```typescript
+const compatibleClaude = AnthropicLanguageModel.model('future-claude-model', {
+	structuredOutputs: false,
+	max_tokens: 8192
+});
+```
+
 ## OpenAI Provider
 
 ```typescript
@@ -139,6 +148,8 @@ Public OpenAI modules:
 - `OpenAiClient` — handwritten service with `createResponse`, `createResponseStream`, and `createEmbedding`
 - `OpenAiClientGenerated` — generated direct endpoint access when you need raw OpenAI API coverage
 - `OpenAiTool` — OpenAI provider-defined tools for native capabilities
+
+`OpenAiSchema.ResponseStreamEvent` accepts both flat OpenAI error events and compatible-provider events with details nested under `error`, normalizing both to the same decoded error event shape.
 
 ```typescript
 const client = yield* OpenAiClient.OpenAiClient;
@@ -340,6 +351,10 @@ const result2 =
 ```
 
 `OpenAiLanguageModel.Config` accepts Responses API request fields plus `fileIdPrefixes`, `text.verbosity`, restored `reasoning` config, and `strictJsonSchema`. Do not manually send library-only fields (`fileIdPrefixes`, `strictJsonSchema`) to OpenAI APIs; the language model strips them before request construction.
+
+Reasoning effort also accepts `'max'` for OpenAI-compatible providers that expose that level, in addition to the standard OpenAI effort values.
+
+OpenAI error classification distinguishes temporary rate limits from exhausted account quota. HTTP 402 responses, and HTTP 429 responses whose code or type is `insufficient_quota` or `billing_insufficient_balance`, become `AiError` values with reason `QuotaExhaustedError`; `error.isRetryable` is `false`, so do not retry them without explicit user action. Ordinary 429 responses remain retryable `RateLimitError` values and preserve retry metadata when available.
 
 ## Model.make — Model Abstraction
 

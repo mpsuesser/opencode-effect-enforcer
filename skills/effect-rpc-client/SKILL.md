@@ -79,7 +79,7 @@ const make: <Rpcs extends Rpc.Any, const Flatten extends boolean = false>(
 	options?: {
 		readonly spanPrefix?: string; // default 'RpcClient'; spans named `${spanPrefix}.${tag}`
 		readonly spanAttributes?: Record<string, unknown>;
-		readonly generateRequestId?: () => RequestId; // default: shared module-level bigint counter
+		readonly generateRequestId?: () => RequestId; // default: shared module-level numeric counter
 		readonly disableTracing?: boolean; // default false
 		readonly flatten?: Flatten; // default false
 	}
@@ -122,7 +122,7 @@ const user = yield* client('GetUser', { id: 'u1' });
 
 ### `generateRequestId`
 
-Request ids correlate requests with responses on a shared connection. The default is a process-wide incrementing `bigint`. Override only when ids must be globally meaningful (cluster uses snowflakes). The function must return `RequestId` (a branded bigint — construct via `RequestId(1n)` from `effect/unstable/rpc/RpcMessage`).
+Request ids correlate requests with responses on a shared connection. The default is a process-wide incrementing `number`. Override only when ids need application-specific generation. The function must return `RequestId`, a branded `string | number`; construct it with `RequestId(1)` or `RequestId('1')` from `effect/unstable/rpc/RpcMessage`. `bigint` is not accepted.
 
 ### Tracing
 
@@ -288,6 +288,8 @@ const TcpProtocolLive = RpcClient.layerProtocolSocket().pipe(
 	readonly supportsTransferables: boolean; // worker-only
 }
 ```
+
+`FromServerEncoded` now also includes `RequestEncoded` for server-originated requests and notifications. The ordinary generated RPC client ignores these requests; reverse-protocol adapters such as MCP build a matching client contract to handle them. A notification has `isNotification: true`, and JSON-RPC omits its id.
 
 Build your own with `RpcClient.Protocol.make((writeResponse, clientIds) => Effect<Omit<Service, 'run'>>)` — it buffers server responses per client until that client's `run` loop is installed. You rarely need this; prefer `RpcTest` for in-memory wiring (section 11).
 

@@ -23,9 +23,9 @@ Model Context Protocol (MCP) is a standard protocol for LLM tool integration. It
 ## Core Imports
 
 ```typescript
-import { Context, Effect, Layer, Logger } from 'effect';
+import { Cause, Context, Effect, Layer, Logger } from 'effect';
 import { Schema } from 'effect';
-import { McpServer, McpSchema, Tool, Toolkit } from 'effect/unstable/ai';
+import { McpProtocol, McpServer, McpSchema, Tool, Toolkit } from 'effect/unstable/ai';
 ```
 
 For platform-specific transports:
@@ -52,6 +52,27 @@ Layer.mergeAll(
   Layer.provide(loggingLayer)      // Logger — stderr for stdio transport
 )
 ```
+
+Every server runner now requires a non-empty `protocols` option. Put the preferred fallback revision first; an exact initialization offer is selected when present, otherwise the first adapter is used where the transport permits fallback. Streamable HTTP rejects an explicit unsupported `MCP-Protocol-Version` header with `400`.
+
+## Protocol Revisions
+
+Effect ships four dated adapters:
+
+```typescript
+const protocols = [
+	McpProtocol.v2025_11_25,
+	McpProtocol.v2025_06_18,
+	McpProtocol.v2025_03_26,
+	McpProtocol.v2024_11_05
+] as const;
+```
+
+- `2024-11-05` and `2025-03-26` are compatibility revisions.
+- `2025-06-18` supports form elicitation.
+- `2025-11-25` adds sampling with tools, independently advertised form/URL elicitation modes, descriptor icons, and elicitation-complete notifications.
+- Duplicate versions or an empty protocol declaration fail layer construction with `Cause.IllegalArgumentError`.
+- `v2024_11_05` over `layerHttp` uses Effect's single-endpoint Streamable HTTP compatibility transport. It does not recreate the historical two-endpoint HTTP+SSE transport, GET SSE, event resumption, session expiry, or client session termination.
 
 Each part layer has type `Layer.Layer<never, never, ...>` — they register themselves with the McpServer service and produce no output type.
 
@@ -229,7 +250,7 @@ const AnalysisPrompt = McpServer.prompt({
 
 ## Elicitation
 
-Request structured input from the user at runtime:
+`McpServer.elicit` requests form-based structured input from the current client and decodes accepted content:
 
 ```typescript
 const result = McpServer.elicit({
@@ -247,6 +268,78 @@ const result = McpServer.elicit({
 - Returns `Effect<S["Type"], ElicitationDeclined, McpServerClient>`
 - Handle `ElicitationDeclined` with `catchTag` for fallback behavior
 - If the user cancels, the effect is interrupted
+- The negotiated client must advertise form elicitation. In `2025-11-25`, an empty `elicitation` capability is treated as form support; explicit `elicitation.form` and `elicitation.url` capabilities are otherwise gated independently.
+
+URL elicitation is a `2025-11-25` reverse-client operation. Use the scoped client facade, then notify that specific client when the external flow completes:
+
+```typescript
+const mcpClient = yield* McpSchema.McpServerClient;
+const reverseClient = yield* mcpClient.getClient;
+
+const response = yield* reverseClient.elicit(
+	new McpSchema.ElicitRequestURLParams({
+		mode: 'url',
+		message: 'Authorize access',
+		elicitationId: 'authorization-1',
+		url: 'https://example.com/authorize'
+	})
+);
+
+const server = yield* McpServer.McpServer;
+yield* server.notifyElicitationComplete({
+	clientId: mcpClient.clientId,
+	elicitationId: 'authorization-1'
+});
+```
+
+### Sampling With Tools
+
+Server-initiated sampling is available through the same scoped reverse client. The `tools`, `toolChoice`, `tool_use`, and `tool_result` shapes require `2025-11-25` and a client that advertises `sampling.tools`; Effect rejects unsupported requests before sending them.
+
+```typescript
+const mcpClient = yield* McpSchema.McpServerClient;
+const reverseClient = yield* mcpClient.getClient;
+
+const sampled = yield* reverseClient.createMessage(
+	McpSchema.CreateMessage.payloadSchema.make({
+		messages: [
+			McpSchema.SamplingMessage.make({
+				role: 'user',
+				content: McpSchema.TextContent.make({ text: 'What is the weather?' })
+			})
+		],
+		tools: [
+			new McpSchema.Tool({
+				name: 'weather',
+				inputSchema: {
+					type: 'object',
+					properties: { city: { type: 'string' } },
+					required: ['city']
+				}
+			})
+		],
+		toolChoice: new McpSchema.ToolChoice({ mode: 'required' }),
+		maxTokens: 128
+	})
+);
+```
+
+The reverse client also gates `includeContext` on `sampling.context`. Unsupported reverse operations fail with `McpReverseOperationUnsupported`; projection or transport failures use `McpReverseOperationError`.
+
+## Icons And Server Metadata
+
+Server runners accept `description`, `websiteUrl`, and `icons`. Icons use `McpSchema.Icon` with `src` plus optional `mimeType`, `sizes`, and `theme`:
+
+```typescript
+const serverIcon = new McpSchema.Icon({
+	src: 'https://example.com/server.svg',
+	mimeType: 'image/svg+xml',
+	sizes: ['48x48', 'any'],
+	theme: 'dark'
+});
+```
+
+`McpSchema.Resource`, `McpSchema.ResourceTemplate`, `McpSchema.Prompt`, and `McpSchema.Tool` also accept `icons`. Add descriptor icons through the low-level `McpServer` registration surface (`addResource`, `addResourceTemplate`, `addPrompt`, or `addTool`); the high-level `resource`, `prompt`, and Effect `Toolkit` adapters do not currently expose an icon option. Revisions that do not support icons omit them during protocol projection.
 
 ## Transport Layers
 
@@ -255,10 +348,14 @@ const result = McpServer.elicit({
 For CLI-based MCP servers (most common — used by Claude Desktop, etc.):
 
 ```typescript
-// layerStdio takes { name, version } — the Stdio requirement is satisfied by NodeStdio.layer
+// The Stdio requirement is satisfied by NodeStdio.layer
 Layer.mergeAll(/* parts */).pipe(
 	Layer.provide(
-		McpServer.layerStdio({ name: 'My Server', version: '1.0.0' })
+		McpServer.layerStdio({
+			name: 'My Server',
+			version: '1.0.0',
+			protocols: [McpProtocol.v2025_11_25]
+		})
 	),
 	Layer.provide(NodeStdio.layer),
 	Layer.provide(Layer.succeed(Logger.LogToStderr)(true))
@@ -269,20 +366,21 @@ Layer.mergeAll(/* parts */).pipe(
 
 ### HTTP Transport
 
-For web-based MCP servers with SSE:
+For web-based MCP servers using Streamable HTTP:
 
 ```typescript
 McpServer.layerHttp({
 	name: 'My MCP Server',
 	version: '1.0.0',
-	path: '/mcp'
+	path: '/mcp',
+	protocols: [McpProtocol.v2025_11_25]
 });
 ```
 
 - Requires `HttpRouter.HttpRouter` in the context
-- Uses JSON-RPC serialization (not NDJSON like stdio)
+- Implements single-endpoint Streamable HTTP with JSON-RPC
 - The `path` parameter sets the HTTP endpoint path
-- Non-`initialize` HTTP requests without a valid `Mcp-Session-Id` intentionally return `404`; clients must keep and resend the session id from initialization.
+- Non-`initialize` HTTP requests with no session id return `400`; an unknown `Mcp-Session-Id` returns `404`. Clients must keep and resend the session id from initialization.
 
 ### Type signatures
 
@@ -291,16 +389,25 @@ McpServer.layerHttp({
 layerStdio: (options: {
 	name: string;
 	version: string;
-	extensions?: Record<`${string}/${string}`, unknown>;
-}) => Layer.Layer<McpServer | McpServerClient, never, Stdio>;
+	description?: string;
+	websiteUrl?: string;
+	icons?: ReadonlyArray<McpSchema.Icon>;
+	protocols: readonly [McpProtocol.ProtocolAdapter, ...Array<McpProtocol.ProtocolAdapter>];
+	extensions?: NonNullable<typeof McpSchema.ServerCapabilities.Type['extensions']>;
+}) => Layer.Layer<McpServer.McpServer | McpSchema.McpServerClient, Cause.IllegalArgumentError, Stdio>;
 
 // HTTP: requires HttpRouter
 layerHttp: (options: {
 	name: string;
 	version: string;
 	path: HttpRouter.PathInput;
-	extensions?: Record<`${string}/${string}`, unknown>;
-}) => Layer.Layer<McpServer | McpServerClient, never, HttpRouter.HttpRouter>;
+	description?: string;
+	websiteUrl?: string;
+	icons?: ReadonlyArray<McpSchema.Icon>;
+	protocols: readonly [McpProtocol.ProtocolAdapter, ...Array<McpProtocol.ProtocolAdapter>];
+	extensions?: NonNullable<typeof McpSchema.ServerCapabilities.Type['extensions']>;
+	allowedOrigins?: ReadonlyArray<string>;
+}) => Layer.Layer<McpServer.McpServer | McpSchema.McpServerClient, Cause.IllegalArgumentError, HttpRouter.HttpRouter>;
 ```
 
 ## Client Capabilities
@@ -358,7 +465,7 @@ const WorkspaceResource = Layer.effectDiscard(
 import { NodeRuntime, NodeStdio } from '@effect/platform-node';
 import { Effect, Layer, Logger } from 'effect';
 import { Schema } from 'effect';
-import { McpSchema, McpServer, Tool, Toolkit } from 'effect/unstable/ai';
+import { McpProtocol, McpSchema, McpServer, Tool, Toolkit } from 'effect/unstable/ai';
 
 // --- Tools ---
 const GreetTool = Tool.make('GreetTool', {
@@ -413,7 +520,8 @@ const ServerLayer = Layer.mergeAll(
 	Layer.provide(
 		McpServer.layerStdio({
 			name: 'Demo MCP Server',
-			version: '1.0.0'
+			version: '1.0.0',
+			protocols: [McpProtocol.v2025_11_25]
 		})
 	),
 	Layer.provide(NodeStdio.layer),
@@ -496,3 +604,5 @@ const ConfigResource = McpServer.resource({
 6. **`McpSchema.param`** — Use for resource URI template parameters with automatic string codec
 7. **`Effect.fn`** — Use for resource template content handlers that receive multiple arguments
 8. **Launch with `Layer.launch`** — The server runs as a long-lived layer: `Layer.launch(ServerLayer).pipe(NodeRuntime.runMain)`
+9. **Declare protocols explicitly** — Pass a non-empty `protocols` array to every `run`, `layer`, `layerStdio`, or `layerHttp`; put the fallback revision first
+10. **Gate reverse operations by negotiated capabilities** — Sampling tools and URL elicitation are `2025-11-25` features and fail before transport when unsupported

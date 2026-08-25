@@ -115,7 +115,7 @@ Flags are named options with `--name` or `-alias` syntax.
 ```typescript
 import { Flag } from 'effect/unstable/cli';
 
-Flag.boolean('verbose'); // --verbose / --no-verbose
+Flag.boolean('verbose'); // required: --verbose / --no-verbose; omission fails
 Flag.string('config'); // --config value
 Flag.integer('port'); // --port 8080
 Flag.float('rate'); // --rate 3.14
@@ -144,10 +144,16 @@ Flag.keyValuePair('env'); // --env FOO=bar → Record<string, string>
 import { Flag } from 'effect/unstable/cli';
 
 // Alias
-Flag.boolean('verbose').pipe(Flag.withAlias('v')); // --verbose or -v
+Flag.boolean('verbose').pipe(
+	Flag.withAlias('v'),
+	Flag.withDefault(false)
+); // switch semantics: omission is false
 
 // Hidden from help, completions, and typo suggestions, but still parsed
-Flag.boolean('experimental-foo').pipe(Flag.withHidden);
+Flag.boolean('experimental-foo').pipe(
+	Flag.withHidden,
+	Flag.withDefault(false)
+);
 
 // Description
 Flag.string('config').pipe(Flag.withDescription('Path to config file'));
@@ -193,13 +199,18 @@ Flag.string('name').pipe(
 
 Hidden flags parse normally, but generated help, shell completions, and typo suggestions omit them.
 
-### Prompt Defaults
+Bare boolean flags are required. `--verbose` produces `true`, `--no-verbose` produces `false`, and omission produces `CliError.MissingOption`. Add `Flag.withDefault(false)` for ordinary opt-in switch behavior, or use `Flag.optional` / a config or prompt fallback when absence has separate meaning.
+
+### Prompt Defaults and Prefixes
 
 ```typescript
 import { Prompt } from 'effect/unstable/cli';
 
 Prompt.integer({ message: 'Count', default: 42 });
 Prompt.file({ message: 'Pick file', default: '/workspace/config.json' });
+
+// The default prefix is "?"; an empty string omits it.
+Prompt.text({ message: 'Name', prefix: '>' });
 ```
 
 Integer prompt defaults are editable and Enter submits the default if unchanged. `Prompt.file` resolves/selects the default as the initial path.
@@ -220,7 +231,7 @@ const version = Command.make('version');
 // Command with config (no handler yet)
 const deploy = Command.make('deploy', {
 	env: Flag.string('env'),
-	force: Flag.boolean('force'),
+	force: Flag.boolean('force').pipe(Flag.withDefault(false)),
 	files: Argument.string('files').pipe(Argument.variadic)
 });
 
@@ -250,7 +261,7 @@ const cmd = Command.make(
 	'deploy',
 	{
 		env: Flag.choice('env', ['dev', 'staging', 'prod']),
-		dryRun: Flag.boolean('dry-run')
+		dryRun: Flag.boolean('dry-run').pipe(Flag.withDefault(false))
 	},
 	Effect.fn(function* ({ env, dryRun }) {
 		if (dryRun) {
@@ -288,7 +299,7 @@ Command.make('deploy', config, handler).pipe(
 );
 ```
 
-`Command.unlisted` keeps a subcommand invocable by exact name while omitting it from parent help output, shell completions, and "did you mean?" suggestions. In beta.104, this replaced `Command.withHidden`, and the command metadata property was renamed from `hidden` to `unlisted`. `Flag.withHidden` is unchanged and remains the correct combinator for flags.
+`Command.unlisted` keeps a subcommand invocable by exact name while omitting it from parent help output, shell completions, and "did you mean?" suggestions. In Effect v4, this replaces `Command.withHidden`; the command metadata property is `unlisted`. `Flag.withHidden` remains the correct combinator for flags.
 
 ### Nested Config
 
@@ -351,7 +362,10 @@ const tasks = Command.make('tasks').pipe(
 			Flag.withAlias('w'),
 			Flag.withDefault('personal')
 		),
-		verbose: Flag.boolean('verbose').pipe(Flag.withAlias('v'))
+		verbose: Flag.boolean('verbose').pipe(
+			Flag.withAlias('v'),
+			Flag.withDefault(false)
+		)
 	})
 );
 
@@ -389,7 +403,7 @@ const list = Command.make(
 		status: Flag.choice('status', ['open', 'done', 'all']).pipe(
 			Flag.withDefault('open')
 		),
-		json: Flag.boolean('json')
+		json: Flag.boolean('json').pipe(Flag.withDefault(false))
 	},
 	Effect.fn(function* ({ status, json }) {
 		const root = yield* tasks;
@@ -500,7 +514,7 @@ const run = Command.runWith(myCommand, { version: '1.0.0' });
 
 ## Key Patterns
 
-1. **`Argument` = positional, `Flag` = named** — No `Argument.boolean`; use `Flag.boolean` for toggles
+1. **`Argument` = positional, `Flag` = named** — No `Argument.boolean`; use `Flag.boolean` for toggles, and add `Flag.withDefault(false)` when omission should mean `false`
 2. **Handlers use `Effect.fn`** — `Effect.fn(function*({ ...config }) { ... })`
 3. **Parent access via yield** — `const root = yield* parentCommand` inside subcommand handlers
 4. **Shared flags** — `Command.withSharedFlags` on parent; only flags allowed (no arguments)

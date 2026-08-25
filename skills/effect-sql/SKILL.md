@@ -91,6 +91,9 @@ const stmt = sql`SELECT * FROM users`;
 // Execute as Effect (default) — returns ReadonlyArray<Row>
 yield* stmt;
 
+// Require the first row; fails with Cause.NoSuchElementError when empty
+const first = yield* Effect.head(stmt);
+
 // Stream results row by row (for large result sets)
 const stream = stmt.stream; // Stream<Row, SqlError>
 
@@ -153,6 +156,8 @@ yield*
 ```
 
 Transaction context is attached to the active `SqlClient` service instance. Queries join a transaction only when they run with that same client; avoid mixing clients or manually reserved connections for one atomic unit of work.
+
+A failed top-level `BEGIN` or nested `SAVEPOINT` is propagated as a typed `SqlError`; the wrapped effect does not run, and no rollback is attempted for the transaction or savepoint that never started. If a nested `SAVEPOINT` failure escapes the outer transaction body, the already-started outer transaction rolls back. Because the failure is typed, outer code may catch it and continue the transaction instead. Commit and rollback command failures are treated as defects.
 
 ### Dialect Branching
 

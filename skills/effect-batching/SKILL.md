@@ -308,7 +308,7 @@ const userCache =
 		})
 	);
 
-// Cache operations are module functions in beta.107
+// Cache operations are module functions in Effect v4
 const user = yield* Cache.get(userCache, new GetUserById({ id: 1 }));
 ```
 
@@ -502,7 +502,7 @@ const FindById = SqlResolver.findById({
 });
 
 const findById = SqlResolver.request(FindById);
-// findById(1) => Effect<User, NoSuchElementError | SqlError | SchemaError>
+// findById(1) => Effect<User, NoSuchElementError | SqlError | Schema.SchemaError>
 ```
 
 ### SqlResolver.void

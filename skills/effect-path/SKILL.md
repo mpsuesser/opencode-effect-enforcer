@@ -251,7 +251,7 @@ const buildOutputPath = Effect.gen(function* () {
 
 ## File-System Migration Loaders
 
-As of beta.107, `Migrator.fromFileSystem(directory)` requires both `FileSystem.FileSystem` and `Path.Path`. Migration modules are imported through `path.toFileUrl(path.join(directory, file))` so absolute Windows paths are valid ESM specifiers.
+In Effect v4, `Migrator.fromFileSystem(directory)` requires both `FileSystem.FileSystem` and `Path.Path`. Migration modules are imported through `path.toFileUrl(path.join(directory, file))` so absolute Windows paths are valid ESM specifiers.
 
 ```typescript
 import { FileSystem, Path } from 'effect';

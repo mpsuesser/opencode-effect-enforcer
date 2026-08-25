@@ -136,7 +136,7 @@ client.query(tag, payload, options?) =>
 
 Query atoms are **cached by request key** — calling `query('GetUser', { id: '1' })` from many components returns the *same* atom, so the rpc fires once and shares the result.
 
-In beta.107, query wrappers preserve serialization and retention metadata while adding reactivity. It is therefore safe to combine `reactivityKeys`, `serializationKey`, and `timeToLive`; hydration identity and idle retention are not discarded by the reactive wrapper.
+Effect v4 query wrappers preserve serialization and retention metadata while adding reactivity. It is therefore safe to combine `reactivityKeys`, `serializationKey`, and `timeToLive`; hydration identity and idle retention are not discarded by the reactive wrapper.
 
 ```ts
 import { useAtomValue } from '@effect/atom-react';

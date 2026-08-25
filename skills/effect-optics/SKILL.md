@@ -237,6 +237,40 @@ const doubled = _positive.modifyAll((n) => n * 2);
 doubled({ items: [1, -2, 3] }); // { items: [2, -2, 6] }
 ```
 
+## Standalone Dual Helpers
+
+Every derived read/update operation also has a standalone dual function. Use these when composing data pipelines or when passing the operation as a value:
+
+| Helper                | Data-first                                      | Data-last / pipeable                         |
+| --------------------- | ----------------------------------------------- | -------------------------------------------- |
+| `Optic.get`           | `Optic.get(self, lens)`                         | `Optic.get(lens)(self)`                      |
+| `Optic.getResult`     | `Optic.getResult(self, optional)`               | `Optic.getResult(optional)(self)`            |
+| `Optic.set`           | `Optic.set(value, prism)`                       | `Optic.set(prism)(value)`                    |
+| `Optic.replace`       | `Optic.replace(self, optional, value)`          | `Optic.replace(optional, value)(self)`       |
+| `Optic.replaceResult` | `Optic.replaceResult(self, optional, value)`    | `Optic.replaceResult(optional, value)(self)` |
+| `Optic.modify`        | `Optic.modify(self, optional, f)`               | `Optic.modify(optional, f)(self)`            |
+| `Optic.getAll`        | `Optic.getAll(self, traversal)`                 | `Optic.getAll(traversal)(self)`              |
+| `Optic.modifyAll`     | `Optic.modifyAll(self, traversal, f)`           | `Optic.modifyAll(traversal, f)(self)`        |
+
+```ts
+import { Optic, pipe } from 'effect';
+
+type State = { readonly user: { readonly age: number } };
+
+const age = Optic.id<State>().key('user').key('age');
+const state: State = { user: { age: 30 } };
+
+Optic.get(state, age); // 30
+
+const older = pipe(
+	state,
+	Optic.modify(age, (value) => value + 1),
+	Optic.replace(age, 40)
+);
+```
+
+The standalone helpers delegate to the corresponding instance methods. `replace` / `modify` still return the original source on focus failure, while `replaceResult` / `getResult` retain the structured `SchemaIssue.Issue`.
+
 ## Constructors
 
 For custom optics beyond the builder chain:

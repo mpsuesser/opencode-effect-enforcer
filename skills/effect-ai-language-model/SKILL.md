@@ -90,9 +90,13 @@ const withConcurrency = LanguageModel.generateText({
 const manualTools = LanguageModel.generateText({
 	prompt: 'Search for X',
 	toolkit: searchToolkit,
-	disableToolCallResolution: true // Get tool calls without executing
+	disableToolCallResolution: true // Get encoded tool calls without executing
 });
 ```
+
+When `disableToolCallResolution: true`, tool-call `params` are preserved in the schema's **encoded** representation instead of being decoded and then returned. The response type reflects this as `GenerateTextResponse<Tools, true>` and `Response.ToolCallParts<Tools, true>`; streaming uses `Response.StreamPart<Tools, true>`. This matters for transformations such as `Schema.NumberFromString`: manual calls contain the wire value `{ count: '3' }`, not `{ count: 3 }`.
+
+Pass those encoded params directly to `toolkit.handle(name, params, toolCallId)` when resolving manually. `Toolkit.handle` now accepts `Tool.ParametersEncoded<T>` and performs the decode before the handler receives `Tool.Parameters<T>`.
 
 ### Response Accessors
 
@@ -100,7 +104,7 @@ const manualTools = LanguageModel.generateText({
 const response = yield* LanguageModel.generateText({ prompt: '...' });
 
 response.text; // string - concatenated text content
-response.toolCalls; // Array<ToolCallParts> - tool invocations
+response.toolCalls; // decoded params normally; encoded params when resolution is disabled
 response.toolResults; // Array<ToolResultParts> - tool outputs
 response.finishReason; // "stop" | "length" | "content-filter" | "tool-calls" | "error" | "pause" | "unknown" | "other"
 response.usage; // Usage object with nested structure, e.g. response.usage.outputTokens.total
@@ -310,10 +314,14 @@ type MyError = LanguageModel.ExtractError<typeof options>;
 // Extract service requirements from options
 type MyRequirements = LanguageModel.ExtractServices<typeof options>;
 
+// true only when options has literal disableToolCallResolution: true
+type EncodedParams = LanguageModel.ExtractEncodedToolParameters<typeof options>;
+
 // Inferred based on:
 // - toolkit: Toolkit.WithHandler<Tools> → Tool.HandlerError<Tools> ∈ E
 // - toolkit: Effect<Toolkit, E, R> → E | Tool.HandlerError<Tools> ∈ E, R ∈ R
 // - disableToolCallResolution: true → no Tool.HandlerError in E
+//   and no handler/result-decoding services in R; tool-call params remain encoded
 ```
 
 ## Provider Implementation Pattern

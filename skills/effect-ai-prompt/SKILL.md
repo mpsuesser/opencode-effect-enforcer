@@ -50,7 +50,7 @@ Prompt.setSystem  :: (Prompt, String) → Prompt
 fromResponseParts :: ReadonlyArray<Response.Part> → Prompt
 ```
 
-The beta.107 module also exports runtime schemas for every part and each role-specific part union: `TextPart`, `ReasoningPart`, `FilePart`, `ToolCallPart`, `ToolResultPart`, `ToolApprovalRequestPart`, `ToolApprovalResponsePart`, `UserMessagePart`, `AssistantMessagePart`, and `ToolMessagePart`. Use these schemas to decode unknown persisted or provider-adapter input instead of relying only on `isPart`.
+The Effect v4 module also exports runtime schemas for every part and each role-specific part union: `TextPart`, `ReasoningPart`, `FilePart`, `ToolCallPart`, `ToolResultPart`, `ToolApprovalRequestPart`, `ToolApprovalResponsePart`, `UserMessagePart`, `AssistantMessagePart`, and `ToolMessagePart`. Use these schemas to decode unknown persisted or provider-adapter input instead of relying only on `isPart`.
 
 ## Message Types
 

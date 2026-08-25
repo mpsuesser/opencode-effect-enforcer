@@ -247,6 +247,7 @@ export * as MyServiceModule from './my-service.js';
 
 - Exported APIs in package/tooling source require JSDoc.
 - Examples must remain docgen-clean.
+- Runnable documentation examples may live in JSDoc, Markdown, or MDX; when the project uses `@effect/doctest`, keep all three doctest-clean.
 
 ### EF-12: Schema annotations are intentional
 

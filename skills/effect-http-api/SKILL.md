@@ -49,6 +49,7 @@ import {
 	HttpServer,
 	HttpServerRequest,
 	HttpServerResponse,
+	HttpStatus,
 	Multipart
 } from 'effect/unstable/http';
 
@@ -264,6 +265,13 @@ class UserNotFound extends Schema.TaggedError<UserNotFound>()(
 ```
 
 `HttpApiSchema.StatusLiteral` is the exported keyof type for the literal form. The full set covers the standard codes (`Continue`, `OK`, `Created`, `Accepted`, `NoContent`, `MovedPermanently`, `Found`, `BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `MethodNotAllowed`, `NotAcceptable`, `RequestTimeout`, `Conflict`, `Gone`, `UnprocessableEntity`, `TooManyRequests`, `InternalServerError`, `NotImplemented`, `BadGateway`, `ServiceUnavailable`, `GatewayTimeout`, etc.). Unannotated success schemas default to 200, and unannotated error schemas default to 500. If you omit `success`, the endpoint defaults to `HttpApiSchema.NoContent` (204). `success: Schema.Void` is an empty 200 response unless you annotate it or use `HttpApiSchema.NoContent`.
+
+The literal mapping is centralized in `HttpStatus` from `effect/unstable/http`. Use `HttpStatus.fromLiteral` when plain HTTP code needs the corresponding numeric literal type; `HttpApiSchema.status` uses the same mapping internally:
+
+```ts
+HttpStatus.fromLiteral('OK'); // 200
+HttpStatus.fromLiteral('Conflict'); // 409
+```
 
 ### Typed Response Headers
 
@@ -710,13 +718,13 @@ handlers.handle('getUser', ({ params }) =>
 
 ### Schema Validation Errors
 
-When a request fails decoding (bad params, invalid query, malformed body), the framework wraps the underlying `SchemaError` in `HttpApiError.HttpApiSchemaError`:
+When a request fails decoding (bad params, invalid query, malformed body), the framework wraps the underlying `Schema.SchemaError` in `HttpApiError.HttpApiSchemaError`:
 
 ```ts
 {
   _tag: "HttpApiSchemaError",
   kind: "Params" | "Headers" | "Query" | "Body" | "Payload",
-  cause: SchemaError
+  cause: Schema.SchemaError
 }
 ```
 
@@ -757,7 +765,7 @@ const Live = HttpApiBuilder.layer(Api).pipe(
 );
 ```
 
-You can detect this error type explicitly with `HttpApiError.HttpApiSchemaError.is(value)` and wrap a `SchemaError`-failing effect with `HttpApiError.HttpApiSchemaError.wrap(kind, effect)`.
+You can detect this error type explicitly with `HttpApiError.HttpApiSchemaError.is(value)` and wrap a `Schema.SchemaError`-failing effect with `HttpApiError.HttpApiSchemaError.wrap(kind, effect)`. `SchemaError` is no longer a standalone root module; use `Schema.SchemaError` and `Schema.isSchemaError`.
 
 ## Security and Middleware
 
@@ -1068,7 +1076,7 @@ class ApiClient extends Context.Service<
 
 Each generated client method accepts an optional `responseMode`:
 
-| Mode                       | Return type                                  | Errors include `SchemaError` + endpoint errors? |
+| Mode                       | Return type                                  | Errors include `Schema.SchemaError` + endpoint errors? |
 | -------------------------- | -------------------------------------------- | ------------------------------------------------ |
 | `"decoded-only"` (default) | `Success`                                    | yes                                              |
 | `"decoded-and-response"`   | `[Success, HttpClientResponse]` tuple        | yes                                              |
@@ -1203,8 +1211,25 @@ HttpApiSwagger.layer(Api, { path: '/docs' });
 
 ```ts
 const spec = OpenApi.fromApi(Api);
-// spec is OpenAPI 3.1.0; cached per HttpApi instance via WeakMap
+// spec is OpenAPI 3.1.0
 ```
+
+`fromApi` caches by both the `HttpApi` instance and the identity of the options object, but every call returns a fresh mutable spec copy. Mutating one returned spec does not contaminate later calls. Reuse one immutable options object to reuse the cache; mutating that options object does not invalidate an existing entry. The clone preserves frozen `JSON.rawJSON` values rather than flattening them into ordinary objects.
+
+The options accept the Schema representation `referencePolicy`. It runs at the canonical JSON-encoded AST boundary and controls which schemas become OpenAPI component references; by default only schemas with resolved identifiers are extracted, while anonymous non-recursive schemas remain inline:
+
+```ts
+import { SchemaRepresentation } from 'effect';
+
+const openApiOptions = {
+	referencePolicy: ({ ast, identifier, occurrences }) =>
+		identifier ?? (occurrences > 1 ? `${ast._tag}_` : undefined)
+} satisfies SchemaRepresentation.ToRepresentationOptions;
+
+const spec = OpenApi.fromApi(Api, openApiOptions);
+```
+
+Recursive candidates always receive references even when the policy returns `undefined`. Keep the callback deterministic and treat its AST input as immutable.
 
 ### Annotations
 

@@ -311,7 +311,7 @@ const pathOps = Effect.gen(function* () {
 });
 ```
 
-`Migrator.fromFileSystem` requires both `FileSystem.FileSystem` and `Path.Path` as of beta.107 because migration module paths are converted to file URLs before dynamic import. Aggregate Node/Bun service layers satisfy both requirements. When providing services individually on Windows, use the host-aware path layer rather than core `Path.layer`, which has POSIX semantics.
+In Effect v4, `Migrator.fromFileSystem` requires both `FileSystem.FileSystem` and `Path.Path` because migration module paths are converted to file URLs before dynamic import. Aggregate Node/Bun service layers satisfy both requirements. When providing services individually on Windows, use the host-aware path layer rather than core `Path.layer`, which has POSIX semantics.
 
 ### ChildProcess - Process Execution
 
@@ -725,6 +725,29 @@ const typedStore = Effect.gen(function* () {
 });
 ```
 
+### Redis - Commands and Scoped Subscriptions
+
+The portable `Redis.Redis` service in `effect/unstable/persistence` provides `send`, cached script evaluation, and scoped pub/sub. Platform-specific layers provide the client: `NodeRedis.layer(...)`, `DenoRedis.layer(...)`, or `BunRedis.layer(...)`. These are specialized layers and are not included in `NodeServices.layer` or `BunServices.layer`.
+
+```typescript
+import { NodeRedis } from '@effect/platform-node';
+import { Effect, Queue } from 'effect';
+import { Redis } from 'effect/unstable/persistence';
+
+const RedisLayer = NodeRedis.layer({
+	database: 1,
+	socket: { host: '127.0.0.1', port: 6379 }
+});
+
+const receiveOne = Effect.gen(function* () {
+	const redis = yield* Redis.Redis;
+	const subscription = yield* redis.subscribe('events');
+	return yield* Queue.take(subscription);
+}).pipe(Effect.scoped, Effect.provide(RedisLayer));
+```
+
+`redis.subscribe(channel)` requires `Scope` and returns a `Queue.Dequeue<RedisMessage, RedisError>`. Closing the scope shuts down the queue and releases the dedicated subscriber. Node and Deno subscribers reconnect and re-subscribe after interruptions, which can leave message-delivery gaps; Bun subscriptions do not reconnect, so a dropped connection fails the dequeue and callers must subscribe again.
+
 ### CLI Arguments - effect/unstable/cli
 
 For CLI applications, use `effect/unstable/cli` instead of direct `process.argv`.
@@ -801,6 +824,7 @@ Complete reference table of platform abstractions:
 | **HTTP Server**           | `HttpServer.HttpServer`                | `http.createServer`          | `effect/unstable/http`        |
 | **Sockets**               | `Socket.Socket` / `SocketServer.SocketServer` | raw TCP/WebSocket APIs | `effect/unstable/socket`      |
 | **Key-Value Store**       | `KeyValueStore.KeyValueStore`          | `localStorage`, manual files | `effect/unstable/persistence` |
+| **Redis**                 | `Redis.Redis`                          | direct Redis clients         | `effect/unstable/persistence` |
 | **CLI Arguments**         | `Argument` + `Flag` + `Command`        | `process.argv`, `yargs`      | `effect/unstable/cli`         |
 | **Environment Variables** | `Config` from effect                   | `process.env`                | `effect`                      |
 | **Streams**               | `Stream`                               | Node streams, ReadableStream | `effect`                      |

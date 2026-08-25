@@ -16,7 +16,7 @@ Key files:
 - `packages/effect/src/unstable/http/HttpClient.ts` — the `HttpClient` service, `make`/`makeWith`, every client combinator (`mapRequest`, `transform`, `filterStatus*`, `retry`, `retryTransient`, `withRateLimiter`, `withCookiesRef`, `withScope`, `followRedirects`, `catch*`, `tap*`), tracing references
 - `packages/effect/src/unstable/http/HttpClientRequest.ts` — immutable request model, method constructors, URL/param/header/body combinators, `toWeb`/`fromWeb`
 - `packages/effect/src/unstable/http/HttpClientResponse.ts` — response model, `schemaJson`/`schemaNoBody`, `matchStatus`, `filterStatus(Ok)`, `stream`
-- `packages/effect/src/unstable/http/HttpIncomingMessage.ts` — shared body accessors plus `schemaBodyJson`, `schemaBodyUrlParams`, `schemaHeaders` (re-exported by HttpClientResponse)
+- `packages/effect/src/unstable/http/HttpIncomingMessage.ts` — shared body accessors plus `JsonOptions`, `schemaBodyJson`, `schemaBodyUrlParams`, `schemaHeaders` (re-exported by HttpClientResponse)
 - `packages/effect/src/unstable/http/HttpClientError.ts` — `HttpClientError` wrapper and its `reason` union
 - `packages/effect/src/unstable/http/HttpBody.ts` — body variants (`Empty`, `Raw`, `Uint8Array`, `FormData`, `Stream`) and constructors (`json`, `jsonSchema`, `text`, `urlParams`, `formDataRecord`, `stream`, `file`)
 - `packages/effect/src/unstable/http/FetchHttpClient.ts` — fetch transport: `layer`, `Fetch` reference, `RequestInit` service
@@ -233,7 +233,7 @@ request.pipe(
 
 `UrlParams.Input` accepts records, iterables of `[key, value]` tuples, or `URLSearchParams`. Values may be `string | number | bigint | boolean | null | undefined`; `undefined` entries are **skipped** (great for optional params), arrays produce repeated keys, and nested records render with bracket notation (`filter[name]=x`).
 
-For standalone `UrlParams` values (e.g. `response.urlParamsBody`) the module mirrors these combinators: `UrlParams.getFirst`/`getAll`, `set`/`append`/`setAll`/`appendAll`, `toRecord`. In schema pipelines, `UrlParams.schemaRecord` decodes params into a record (`schemaBodyUrlParams` wraps it) and `UrlParams.schemaJsonField(name)` parses one field's value as JSON.
+For standalone `UrlParams` values (e.g. `response.urlParamsBody`) the module mirrors these combinators: `UrlParams.getFirst`/`getAll`, `set`/`append`/`setAll`/`appendAll`, `toRecord`. In schema pipelines, `UrlParams.schemaRecord` decodes params into a record (`schemaBodyUrlParams` wraps it) and `UrlParams.schemaJsonField(name, { reviver })` parses one field's value as JSON with an optional `JSON.parse` reviver.
 
 ### Headers and auth
 
@@ -386,6 +386,17 @@ HttpClientResponse.schemaBodyUrlParams(MyFormSchema); // urlencoded body
 HttpClientResponse.schemaHeaders(ResponseHeaders);
 HttpClientResponse.schemaJson(TodoResponse); // { status, headers, body }
 HttpClientResponse.schemaNoBody(NoContentResponse); // { status, headers } — no body read
+```
+
+`schemaBodyJson` and `schemaJson` accept schema parse options plus `{ reviver }`. The reviver runs during JSON parsing and may produce arbitrary values; the supplied schema still validates the revived result.
+
+```ts
+const revived = yield* client.get('/todos/1').pipe(
+	Effect.flatMap(HttpClientResponse.filterStatusOk),
+	Effect.flatMap(HttpClientResponse.schemaBodyJson(Todo, {
+		reviver: (key, value) => key === 'title' ? 'revived title' : value
+	}))
+);
 ```
 
 ### Pattern matching on status
@@ -896,7 +907,7 @@ const createUser = (input: typeof CreateUser.Type) =>
 		Effect.flatMap(HttpClientResponse.filterStatusOk),
 		Effect.flatMap(HttpClientResponse.schemaBodyJson(User))
 	);
-// Effect<User, HttpBodyError | HttpClientError | SchemaError> — R is never with a
+// Effect<User, HttpBodyError | HttpClientError | Schema.SchemaError> — R is never with a
 // captured client; R = HttpClient.HttpClient only via accessors like HttpClient.execute
 ```
 
