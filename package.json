@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.schemastore.org/package.json",
   "name": "opencode-effect-enforcer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "OpenCode V2 plugin for Effect v4 skills, guidance, and pattern enforcement",
   "keywords": [
     "opencode",
@@ -17,7 +17,7 @@
   "author": "Marc Suesser",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mpsuesser/opencode-effect-enforcer.git"
+    "url": "git+https://github.com/mpsuesser/opencode-effect-enforcer.git"
   },
   "publishConfig": {
     "access": "public"

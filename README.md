@@ -21,7 +21,7 @@ That is the complete installation. OpenCode resolves published package entries
 for you; there is no separate `npm install` step. Use the global config at
 `~/.config/opencode/opencode.jsonc` to enable it everywhere, or a project config
 to enable it only for that project. You can also pin a release, for example
-`"opencode-effect-enforcer@0.2.0"`.
+`"opencode-effect-enforcer@0.2.1"`.
 
 Start a new OpenCode session, then verify the plugin if needed:
 
