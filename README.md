@@ -21,7 +21,7 @@ That is the complete installation. OpenCode resolves published package entries
 for you; there is no separate `npm install` step. Use the global config at
 `~/.config/opencode/opencode.jsonc` to enable it everywhere, or a project config
 to enable it only for that project. You can also pin a release, for example
-`"opencode-effect-enforcer@0.2.1"`.
+`"opencode-effect-enforcer@0.2.2"`.
 
 Start a new OpenCode session, then verify the plugin if needed:
 
@@ -55,8 +55,7 @@ available.
 - [Effect, and the Near-Inexpressible Majesty of Layers](guidance/post__effect-and-the-near-inexpressible-majesty-of-layers.md): Explains services, Layers, typed dependencies, and testable implementations.
 - [Parse, don't validate](guidance/post__parse-dont-validate.md): Shows how refined types preserve validation knowledge and make illegal states unrepresentable.
 
-<details>
-<summary><strong>Skills (54)</strong></summary>
+### Skills (54)
 
 #### Modeling And Core APIs
 
@@ -133,10 +132,7 @@ available.
 - [`effect-concurrency-testing`](skills/effect-concurrency-testing/SKILL.md): Test fibers, PubSub, Deferred, Latch, SubscriptionRef, and concurrent streams.
 - [`effect-incremental-migration`](skills/effect-incremental-migration/SKILL.md): Migrate Promise-based modules incrementally while preserving required compatibility.
 
-</details>
-
-<details>
-<summary><strong>Patterns (46)</strong></summary>
+### Patterns (46)
 
 #### Types, Modeling, And Collections
 
@@ -198,8 +194,6 @@ available.
 - [`avoid-react-hooks`](patterns/avoid-react-hooks.md): Directs React state and effects into Effect Atom View Models.
 - [`vm-in-wrong-file`](patterns/vm-in-wrong-file.md): Enforces dedicated `.vm.ts` files for View Model definitions.
 - [`avoid-expect-in-if`](patterns/avoid-expect-in-if.md): Prevents conditional assertions that allow tests to pass without checking behavior.
-
-</details>
 
 ## Per-Agent Opt-Out
 

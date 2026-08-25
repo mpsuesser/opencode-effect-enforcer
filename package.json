@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.schemastore.org/package.json",
   "name": "opencode-effect-enforcer",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "OpenCode V2 plugin for Effect v4 skills, guidance, and pattern enforcement",
   "keywords": [
     "opencode",
