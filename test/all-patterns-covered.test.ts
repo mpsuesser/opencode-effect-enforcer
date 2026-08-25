@@ -8,6 +8,7 @@ const INFRASTRUCTURE_TESTS = new Set([
   "all-patterns-covered.test.ts",
   "comment-string-false-positives.test.ts",
   "pattern-enforcement.test.ts",
+  "readme-inventory.test.ts",
   "skills-runtime.test.ts",
   "write-projection.test.ts"
 ])
