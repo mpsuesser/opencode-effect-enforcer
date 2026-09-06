@@ -21,13 +21,39 @@ That is the complete installation. OpenCode resolves published package entries
 for you; there is no separate `npm install` step. Use the global config at
 `~/.config/opencode/opencode.jsonc` to enable it everywhere, or a project config
 to enable it only for that project. You can also pin a release, for example
-`"opencode-effect-enforcer@0.2.2"`.
+`"opencode-effect-enforcer@0.2.3"`.
 
 Start a new OpenCode session, then verify the plugin if needed:
 
 ```sh
 opencode2 api get /api/plugin
 ```
+
+### Local Checkout
+
+When loading this repository directly, configure its `src` directory:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["/absolute/path/opencode-effect-enforcer/src"],
+}
+```
+
+OpenCode `v0.0.0-beta-19157` resolves local directories by looking for `server`
+or `index` directly inside them, rather than using `package.json` exports.
+Pointing at the repository root silently skips the plugin; pointing at the
+`src/index.ts` file is rejected because configured local paths must be directories.
+
+Verify activation for the session's actual working directory, replacing the
+example path below:
+
+```sh
+opencode2 api post '/api/plugin/await-activation?location[directory]=/path/to/project'
+opencode2 api get '/api/plugin?location[directory]=/path/to/project'
+```
+
+Look for `opencode.effect-enforcer` with `state.status` set to `active`.
 
 ## What You Get
 
