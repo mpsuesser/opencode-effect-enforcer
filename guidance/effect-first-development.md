@@ -2,6 +2,12 @@
 
 This document defines the working model behind Effect-first code using the Effect v4 ecosystem.
 
+Bundled baseline: **Effect 4.0.0-rc.112**. Check the consuming project's installed
+version and inspect the matching upstream release tag before using newer APIs.
+The release changelog and migration audit are in `docs/effect-4.0.0-rc.112.md`.
+Source paths below are relative to the Effect source reference; locate symbols
+by name rather than relying on line numbers or a particular tool name.
+
 ## Definition
 
 Effect-first development means domain code is written in Effect-native constructs first, and native JavaScript/TypeScript patterns only at explicit boundaries.
@@ -289,7 +295,8 @@ export type Tenant = typeof Tenant.Type;
 - If schema properties are a union of literal strings (for example `kind`, `state`, `category`), compose class variants into a `Schema.Union` and finalize with `Schema.toTaggedUnion("<field>")`.
 - Prefer `Schema.Class` for tagged union member schemas.
 - Use `Schema.TaggedUnion` only for canonical `_tag` object-union construction.
-- Reference: [Effect schema docs](packages/effect/SCHEMA.md:1891) (via effect_ref_read) and [toTaggedUnion notes](packages/effect/SCHEMA.md:1934) (via effect_ref_read).
+- Reference: `packages/effect/SCHEMA.md`, sections `TaggedUnion` and `toTaggedUnion`.
+- In rc.112, both union forms offer `matchOrElse` for partial matching with a typed fallback. Prefer `match` when every variant must be handled separately. `toTaggedUnion` narrows fallback input to unmatched variants; direct `Schema.TaggedUnion` types it as the full union.
 
 Example:
 
@@ -342,7 +349,8 @@ export const InternalJobEvent = Schema.TaggedUnion({
 
 - Prefer `Effect.fn("Name")(...)` for reusable/public effectful functions.
 - Use `Effect.fnUntraced(...)` for internal hot paths where tracing overhead is unnecessary.
-- Reference: [Effect.fn docs](packages/effect/src/Effect.ts:12850) (via effect_ref_read) and [Effect.fnUntraced docs](packages/effect/src/Effect.ts:12821) (via effect_ref_read).
+- Reference: `Effect.fn` / `Effect.fnUntraced` in `packages/effect/src/Effect.ts`.
+- Pass result-transforming combinators after the function body in the `Effect.fn` constructor call. The returned function itself has no `.pipe` method; its returned Effect does.
 
 Example:
 
@@ -374,11 +382,12 @@ const parseInternal = Effect.fnUntraced(function* (input: string) {
 
 Example:
 
+<!-- typecheck -->
 ```ts
 import { Effect } from 'effect';
 import * as Metric from 'effect/Metric';
 
-const durationMs = Metric.histogram('workflow_duration_ms', {
+const durationMs = Metric.timer('workflow_duration_ms', {
 	boundaries: Metric.boundariesFromIterable([10, 50, 100, 250, 500, 1000])
 });
 const failures = Metric.counter('workflow_failures_total');
@@ -387,7 +396,7 @@ const workflow = Effect.fn('Workflow.run')(function* (requestId: string) {
 	yield* Effect.annotateCurrentSpan('requestId', requestId);
 	yield* Effect.logInfo('workflow started');
 	return 'ok';
-}).pipe(
+},
 	Effect.withLogSpan('workflow.run'),
 	Effect.annotateLogs({ service: 'my-app' }),
 	Effect.trackDuration(durationMs),
@@ -418,7 +427,7 @@ const program = Effect.sleep(pollInterval).pipe(Effect.timeout(timeout));
     - `Schema.OptionFromNullishOr`
     - `Schema.OptionFromOptionalKey`
     - `Schema.OptionFromOptional`
-- Reference: [Schema Option helpers](packages/effect/src/Schema.ts:5422) (via effect_ref_read) and [Schema optional field docs](packages/effect/SCHEMA.md:636) (via effect_ref_read).
+- Reference: `Schema.OptionFrom*` in `packages/effect/src/Schema.ts` and optional fields in `packages/effect/SCHEMA.md`.
 
 Example:
 
@@ -439,7 +448,7 @@ export class AccountInput extends Schema.Class<AccountInput>('AccountInput')({
     - Data-first: `fn(self, arg)`
     - Data-last: `pipe(self, fn(arg))`
 - Build these helpers with `dual` from `effect/Function`.
-- Reference: [dual API](packages/effect/src/Function.ts:106) (via effect_ref_read).
+- Reference: `dual` in `packages/effect/src/Function.ts`.
 
 Example:
 
@@ -492,7 +501,7 @@ You are not done if these fail:
 - Application entrypoints and tests may execute effects with `Effect.run*`.
 - Library and domain exports should return `Effect` values.
 - Keep runtime execution in one place so wiring, logging, and lifecycle behavior stay auditable.
-- Reference: [runPromise](packages/effect/src/Effect.ts:8423) (via effect_ref_read), [runSync](packages/effect/src/Effect.ts:8606) (via effect_ref_read), and [runFork](packages/effect/src/Effect.ts:8264) (via effect_ref_read).
+- Reference: `runPromise`, `runSync`, and `runFork` in `packages/effect/src/Effect.ts`.
 
 Example:
 
@@ -530,7 +539,8 @@ const readSdkValue = (client: ExternalSdk) =>
 - Use `Effect.acquireUseRelease` for acquisition/use/release flows.
 - Prefer `Effect.scoped` for helper composition that allocates resources.
 - Do not manually open resources without an explicit finalization strategy.
-- Reference: [acquireUseRelease](packages/effect/src/Effect.ts:6254) (via effect_ref_read) and [scoped](packages/effect/src/Effect.ts:6079) (via effect_ref_read).
+- Reference: `acquireUseRelease` and `scoped` in `packages/effect/src/Effect.ts`.
+- For pool checkouts in rc.112 use `Pool.use(pool, callback)` to return the item on every exit without adding a caller `Scope` requirement. Do not return an item from `Effect.scoped(Pool.get(pool))` and then use it after release.
 
 Example:
 
@@ -549,7 +559,7 @@ const withConnection = <A, E, R>(
 - Keep retry policy close to the failing effect.
 - Retry only proven-idempotent operations at the narrowest boundary that can classify the failure.
 - Let exhausted failures remain visible unless the boundary has a truthful fallback.
-- Reference: [retry](packages/effect/src/Effect.ts:3978) (via effect_ref_read).
+- Reference: `retry` in `packages/effect/src/Effect.ts` and the Schedule cookbook.
 
 Example:
 
@@ -564,17 +574,18 @@ const resilientFetch = fetchRemote.pipe(Effect.retry(Schedule.recurs(3)));
 - Use `Effect.timeoutOption` when timeout should become `Option.None`.
 - Use `Effect.timeoutOrElse` when timeout should produce a typed fallback effect.
 - Avoid manually racing ad-hoc timers for business logic timeouts.
-- Reference: [timeoutOption](packages/effect/src/Effect.ts:4421) (via effect_ref_read) and [timeoutOrElse](packages/effect/src/Effect.ts:4467) (via effect_ref_read).
+- Reference: `timeoutOption` and `timeoutOrElse` in `packages/effect/src/Effect.ts`.
 
 Example:
 
 ```ts
 import { Duration, Effect } from 'effect';
 
+declare const slowLookup: Effect.Effect<string>;
 const lookupCachedOnTimeout = slowLookup.pipe(
 	Effect.timeoutOrElse({
 		duration: Duration.seconds(2),
-		onTimeout: () => Effect.succeed('cached-value')
+		orElse: () => Effect.succeed('cached-value')
 	})
 );
 ```
@@ -584,7 +595,7 @@ const lookupCachedOnTimeout = slowLookup.pipe(
 - Prefer `Effect.forkChild` so lifecycle is supervised by parent scope.
 - Use `Effect.forkDetach` only for explicit daemon semantics.
 - Make fork intent explicit in code review and comments for detached work.
-- Reference: [forkChild](packages/effect/src/Effect.ts:7978) (via effect_ref_read) and [forkDetach](packages/effect/src/Effect.ts:8121) (via effect_ref_read).
+- Reference: `forkChild` and `forkDetach` in `packages/effect/src/Effect.ts`.
 
 Example:
 
@@ -621,7 +632,7 @@ const hydrateUsers = (ids: ReadonlyArray<string>) =>
 - Use `Config` and `ConfigProvider` for configuration loading and parsing.
 - Keep direct `process.env` access out of domain code.
 - Layer/provide config sources explicitly for tests and non-default environments.
-- Reference: [Config](packages/effect/src/Config.ts) (via effect_ref_read) and [ConfigProvider](packages/effect/src/ConfigProvider.ts:358) (via effect_ref_read).
+- Reference: `packages/effect/CONFIG.md`, `packages/effect/src/Config.ts`, and `ConfigProvider.ts`.
 
 Example:
 
@@ -638,7 +649,7 @@ const loadPort = Effect.fn('Config.loadPort')(function* () {
 - Use `Config.redacted` for secret config values.
 - Use `Redacted.make` for sensitive values coming from non-config sources.
 - Never log secret values after unwrapping.
-- Reference: [Config.redacted](packages/effect/src/Config.ts:1161) (via effect_ref_read) and [Redacted](packages/effect/src/Redacted.ts) (via effect_ref_read).
+- Reference: `Config.redacted` in `packages/effect/src/Config.ts` and `packages/effect/src/Redacted.ts`.
 
 Example:
 
@@ -681,7 +692,7 @@ const findUserOptional = (id: string) =>
     - Unrecoverable infrastructure failures where surfacing the error provides no actionable recovery path (e.g., the data directory is unwritable).
     - Discarding irrelevant upstream error types: when a consuming service cannot meaningfully recover from a dependency's error type and the error is not part of the consumer's own contract, `Effect.orDie` is legitimate. For example, a config loader that depends on an auth service may use `yield* authSvc.all().pipe(Effect.orDie)` because auth failures during config loading are unrecoverable.
 - Do not model normal user-facing errors as defects.
-- Reference: [die](packages/effect/src/Effect.ts:1745) (via effect_ref_read) and [orDie](packages/effect/src/Effect.ts:3557) (via effect_ref_read).
+- Reference: `die` and `orDie` in `packages/effect/src/Effect.ts`.
 
 Example:
 
@@ -710,7 +721,7 @@ const validateInput = Effect.fn('Input.validate')(function* (value: string) {
 - Document why isolation is necessary for behavior-sensitive paths.
 - Compose `defaultLayer` values directly by default.
 - Use `Layer.suspend(() => ...)` only when import evaluation order or a real circular dependency requires deferred composition.
-- Reference: [Effect.provide local option](packages/effect/src/Effect.ts:5592) (via effect_ref_read) and [Layer.fresh](packages/effect/src/Layer.ts:1621) (via effect_ref_read).
+- Reference: `Effect.provide` and `Layer.fresh` in `packages/effect/src/{Effect,Layer}.ts`.
 
 Example:
 
@@ -751,7 +762,8 @@ export class CreateOrderInput extends Schema.Class<CreateOrderInput>(
 - Put defaults in schema definitions, not in handler/service fallback object literals.
 - Use `Schema.withConstructorDefault` for constructor-time defaults.
 - Use `Schema.withDecodingDefault` / `Schema.withDecodingDefaultKey` for decode-time defaults.
-- Constructor defaults may fail with `SchemaIssue.Issue`. Likewise, `Schema.makeEffect` returns validation failures directly as `SchemaIssue.Issue`, not wrapped in `Schema.SchemaError`.
+- Constructor defaults may fail with `SchemaIssue.Issue`. Likewise, `MySchema.makeEffect(fields)` returns validation failures directly as `SchemaIssue.Issue`, not wrapped in `Schema.SchemaError`.
+- Constructor defaults (including `Schema.tag`) do not automatically apply during boundary decoding. Unknown input uses `Schema.decodeUnknownEffect`; `decodeSync` is not a constructor replacement.
 
 Example:
 
@@ -982,6 +994,7 @@ const UnknownToString = Schema.Unknown.pipe(
 - For invalidatable caches, use `Effect.cachedInvalidateWithTTL(effect, Duration.infinity)` which returns a `[cachedEffect, invalidate]` tuple. Call `yield* invalidate` to force re-computation on next access.
 - For time-based caches, use `Effect.cachedWithTTL(effect, duration)`.
 - Prefer `Effect.cachedInvalidateWithTTL` with `Duration.infinity` over mutable `let` rebinding of cached effects.
+- For keyed scoped resources, rc.112 adds `RcMap.getOption` and `LayerMap.contextEffectOption`. They atomically retain already-cached entries and propagate acquisition failures; `None` means missing/closed, not failed. A `has` check followed by `get` is not equivalent.
 
 Example:
 

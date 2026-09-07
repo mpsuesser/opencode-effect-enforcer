@@ -47,8 +47,13 @@ structured = do
 test :: Effect () TestConsole
 test = do
   program
-  logs ← TestConsole.output
+  logs ← TestConsole.logLines
   assert (logs `contains` "expected message")
 ```
 
 `console.*` in Effect code breaks the paradigm. Use `Console` service or `Effect.log*` for structured, testable logging.
+
+`TestConsole.logLines` captures `Console.log` with `TestConsole.layer` provided;
+`errorLines` captures `Console.error`. Structured `Effect.log*` records should be
+asserted through a test logger (`Logger.make` / `Logger.layer`), rather than
+assuming every logger writes to the test console.

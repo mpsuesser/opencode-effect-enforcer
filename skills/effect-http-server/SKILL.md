@@ -24,9 +24,9 @@ Key files:
 - `packages/effect/src/unstable/http/HttpBody.ts` — body variants (`Empty`/`Raw`/`Uint8Array`/`FormData`/`Stream`) and constructors
 - `packages/effect/src/unstable/http/Headers.ts`, `Cookies.ts`, `Multipart.ts` — header/cookie/multipart models and limits
 - `packages/effect/src/unstable/http/HttpStaticServer.ts` — static file serving
-- `packages/platform-node/src/NodeHttpServer.ts` — Node server adapter, `layer`, `layerTest`, graceful shutdown
-- `packages/platform-bun/src/BunHttpServer.ts` — Bun equivalent
-- `packages/platform-node/test/NodeHttpServer.test.ts` — the best end-to-end reference for real route/middleware/multipart wiring
+- `packages/platform/node/src/NodeHttpServer.ts` — Node server adapter, `layer`, `layerTest`, graceful shutdown
+- `packages/platform/bun/src/BunHttpServer.ts` — Bun equivalent
+- `packages/platform/node/test/NodeHttpServer.test.ts` — the best end-to-end reference for real route/middleware/multipart wiring
 
 ## Core Model
 
@@ -196,6 +196,10 @@ const byteStream = request.stream; // Stream<Uint8Array, HttpServerError> (singl
 ```
 
 Cap accepted body sizes with the `MaxBodySize` reference (re-exported from `HttpIncomingMessage`, default `undefined` = unlimited):
+
+On Node in rc.112, `remoteAddress` returns `Option.none()` after Node has cleared
+the incoming message's socket. Preserve absence; do not dereference the native
+socket after request cleanup. The same behavior applies to Node client responses.
 
 ```ts
 import { FileSystem } from 'effect';
@@ -649,6 +653,13 @@ yield* HttpServer.serveEffect(httpEffect);
 ---
 
 ## 8. WebSocket Upgrades
+
+In `@effect/platform-bun` rc.112, outgoing WebSocket messages are compressed when
+per-message deflate is configured **and negotiated**. The server option
+`websocket.compressionThreshold` sets the minimum byte size (default `1024`);
+smaller messages stay uncompressed. Configure it alongside
+`websocket.perMessageDeflate` on `BunHttpServer.layer` rather than pre-compressing
+application payloads. See `packages/platform/bun/src/BunHttpServer.ts`.
 
 `request.upgrade` yields a `Socket` (from `effect/unstable/socket`) once the connection is upgraded. Both `NodeHttpServer` and `BunHttpServer` handle the platform `upgrade` events for you — just write a normal route:
 

@@ -292,7 +292,7 @@ const TestContext = Layer.mergeAll(
 		Terminal.make({
 			columns: Effect.succeed(80),
 			rows: Effect.succeed(24),
-			readInput: Effect.dieMessage('readInput not used in this test'),
+		readInput: Effect.die('readInput not used in this test'),
 			readLine: Effect.succeed('test input'),
 			display: () => Effect.void
 		})

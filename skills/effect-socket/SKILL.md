@@ -15,11 +15,11 @@ Key files:
 
 - `packages/effect/src/unstable/socket/Socket.ts` — `Socket` interface and service tag, `make`, `CloseEvent`, the `SocketError` taxonomy, channel adapters (`toChannel`, `toChannelString`, `toChannelMap`, `makeChannel`), WebSocket constructors (`makeWebSocket`, `fromWebSocket`, `layerWebSocket`, `WebSocketConstructor`), `fromTransformStream`
 - `packages/effect/src/unstable/socket/SocketServer.ts` — `SocketServer` service contract, `Address` (`TcpAddress` / `UnixAddress`), `SocketServerError`
-- `packages/platform-node-shared/src/NodeSocket.ts` — `makeNet`, `fromDuplex`, `makeNetChannel`, `layerNet`, `NetSocket` service, `NodeWS` (`ws` re-export)
-- `packages/platform-node-shared/src/NodeSocketServer.ts` — TCP/Unix server `make`/`layer`, WebSocket server `makeWebSocket`/`layerWebSocket`, `IncomingMessage` service
-- `packages/platform-node/src/NodeSocket.ts` — re-exports shared module; adds `layerWebSocketConstructor`, `layerWebSocketConstructorWS`, `layerWebSocket`
-- `packages/platform-bun/src/BunSocket.ts` — same shared re-export; Bun-global WebSocket constructor layers
-- `packages/platform-node/test/NodeSocket.test.ts` — loopback echo server, WebSocket client semantics, transform-stream sockets
+- `packages/platform/node-shared/src/NodeSocket.ts` — `makeNet`, `fromDuplex`, `makeNetChannel`, `layerNet`, `NetSocket` service, `NodeWS` (`ws` re-export)
+- `packages/platform/node-shared/src/NodeSocketServer.ts` — TCP/Unix server `make`/`layer`, WebSocket server `makeWebSocket`/`layerWebSocket`, `IncomingMessage` service
+- `packages/platform/node/src/NodeSocket.ts` — re-exports shared module; adds `layerWebSocketConstructor`, `layerWebSocketConstructorWS`, `layerWebSocket`
+- `packages/platform/bun/src/BunSocket.ts` — same shared re-export; Bun-global WebSocket constructor layers
+- `packages/platform/node/test/NodeSocket.test.ts` — loopback echo server, WebSocket client semantics, transform-stream sockets
 - `packages/effect/src/unstable/devtools/DevToolsClient.ts` — production example of NDJSON-framed request/response over a `Socket`
 - `packages/effect/src/unstable/rpc/RpcClient.ts` (`makeProtocolSocket`) — production example of socket reconnect with retry schedules
 

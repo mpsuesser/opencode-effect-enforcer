@@ -24,8 +24,8 @@ describe("README source catalog", () => {
       .filter((name) => name.endsWith(".md"))
       .map((name) => `guidance/${name}`)
 
-    expect(skillPaths).toHaveLength(54)
-    expect(patternPaths).toHaveLength(46)
+    expect(skillPaths).toHaveLength(53)
+    expect(patternPaths).toHaveLength(45)
     expect(guidancePaths).toHaveLength(4)
 
     const documentedPaths = [...skillPaths, ...patternPaths, ...guidancePaths]

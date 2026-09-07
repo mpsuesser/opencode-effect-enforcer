@@ -14,7 +14,7 @@ Key reference files:
 - `packages/effect/HTTPAPI.md` — canonical HttpApi documentation
 - `packages/effect/src/unstable/httpapi/*.ts` — module sources
 - `packages/effect/typetest/unstable/httpapi/*.tst.ts` — type-level contracts
-- `packages/platform-node/test/HttpApi.test.ts` — comprehensive runtime tests
+- `packages/platform/node/test/HttpApi.test.ts` — comprehensive runtime tests
 - `ai-docs/src/51_http-server/` — server walkthrough with fixtures
 - `ai-docs/src/50_http-client/` — HttpClient walkthrough
 
@@ -1169,6 +1169,17 @@ buildUrl.users.getUser({ params: { id: 123 }, query: { page: 1 } });
 Top-level group endpoints are at the root: `buildUrl.health()`. With `disableCodecs: true` on the endpoint, the builder accepts the raw encoded shape directly.
 
 ## OpenAPI Documentation
+
+As of rc.112 built-in OpenAPI documentation responses are generated lazily on
+the first request, rather than while the route layer is built. A generation
+defect is not permanently cached: a later request retries generation. Include a
+documentation-route request in integration checks if generation must be verified;
+successful server startup alone no longer proves it. Explicit `OpenApi.fromApi`
+remains a direct synchronous generation call.
+
+JSON Schema import/conversion now rejects unsupported references, validation
+keywords, and unrepresentable dialect conversions instead of weakening them.
+See `effect-schema-v4` before importing third-party schemas into an API contract.
 
 ### Scalar UI
 

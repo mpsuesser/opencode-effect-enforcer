@@ -1083,7 +1083,7 @@ const secondaryService: Effect.Effect<Data, SecondaryServiceError> =
 
 // Try primary, fallback to secondary
 //          Effect<Data, SecondaryServiceError, Dependencies>
-const program = primaryService.pipe(Effect.orElse(() => secondaryService));
+const program = primaryService.pipe(Effect.catch(() => secondaryService));
 ```
 
 ### Retry with Schedule
@@ -1205,10 +1205,11 @@ const program = loadConfig.pipe(
 
 // With custom defect message
 const program2 = loadConfig.pipe(
-	Effect.orDieWith(
+	Effect.mapError(
 		(error) =>
 			new Error(`Fatal: Configuration failed to load: ${error._tag}`)
-	)
+	),
+	Effect.orDie
 );
 ```
 
@@ -1387,7 +1388,7 @@ Model ambiguous HTTP responses (where the body structure differs for success vs 
 
 ```typescript
 import { Effect, Schema } from 'effect';
-import { HttpClientResponse } from 'effect/unstable/HttpClient';
+import { HttpClientResponse } from 'effect/unstable/http';
 
 class TokenSuccess extends Schema.Class<TokenSuccess>('TokenSuccess')({
 	access_token: AccessToken,

@@ -24,7 +24,7 @@ Key files:
 - `packages/effect/src/unstable/http/Url.ts` — immutable helpers over the native `URL`
 - `packages/effect/src/unstable/http/Cookies.ts` — cookie model, `fromSetCookie`, `toCookieHeader`, `getValue`
 - `packages/effect/src/unstable/http/Headers.ts` — header model, `Input` forms, `CurrentRedactedNames`
-- `packages/platform-node/src/NodeHttpClient.ts` — Node transports: undici, node:http, fetch re-export
+- `packages/platform/node/src/NodeHttpClient.ts` — Node transports: undici, node:http, fetch re-export
 - `packages/effect/test/unstable/http/HttpClient.test.ts` — retryTransient, withRateLimiter, abort semantics
 - `ai-docs/src/50_http-client/10_basics.ts` — canonical "wrap a configured client in a service" lesson
 

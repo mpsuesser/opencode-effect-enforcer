@@ -431,7 +431,7 @@ import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
 const chat = Effect.gen(function* () {
 	const history = yield* SubscriptionRef.make(Prompt.empty);
 
-	function* generateText(userInput: string) {
+	const generateText = Effect.fn('Chat.generateText')(function* (userInput: string) {
 		const currentHistory = yield* SubscriptionRef.get(history);
 		const prompt = pipe(currentHistory, Prompt.concat(userInput));
 
@@ -445,7 +445,7 @@ const chat = Effect.gen(function* () {
 		yield* SubscriptionRef.set(history, newHistory);
 
 		return response;
-	}
+	});
 
 	return { generateText };
 });
@@ -515,6 +515,40 @@ const program = Effect.gen(function* () {
 ```
 
 ## Provider-Specific Options
+
+### OpenAI Responses explicit cache breakpoints (rc.112)
+
+With `@effect/ai-openai` loaded, system-message and text-part options accept
+`openai.promptCacheBreakpoint`. This requires GPT-5.6 or later; earlier models
+may reject it. Provider config uses snake_case; Prompt metadata uses camelCase.
+
+```typescript
+import { OpenAiLanguageModel } from '@effect/ai-openai';
+import { Effect } from 'effect';
+import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
+import * as Prompt from 'effect/unstable/ai/Prompt';
+
+const program = LanguageModel.generateText({
+	prompt: Prompt.make([
+		Prompt.systemMessage({
+			content: 'Stable instructions',
+			options: { openai: { promptCacheBreakpoint: { mode: 'explicit' } } }
+		}),
+		Prompt.userMessage({
+			content: [Prompt.textPart({ text: 'Question for this turn' })]
+		})
+	])
+}).pipe(Effect.provide(OpenAiLanguageModel.model('gpt-5.6', {
+	prompt_cache_key: 'assistant:v1',
+	prompt_cache_options: { mode: 'explicit', ttl: '30m' }
+})));
+```
+
+A text part can carry the same breakpoint after reusable user context. The
+adapter forwards it as `prompt_cache_breakpoint` on input text. Supply the
+OpenAI client layer at the runtime boundary (see `effect-ai-provider`).
+
+### Other provider metadata
 
 ```typescript
 // Augment options interfaces via module augmentation

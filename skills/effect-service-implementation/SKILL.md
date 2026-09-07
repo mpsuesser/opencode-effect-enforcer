@@ -344,7 +344,10 @@ This reduces cognitive load in the parent service and makes race-sensitive behav
 
 ## Pattern: No Requirement Leakage
 
-Service methods should **never** have requirements in their return type:
+Capture stable implementation dependencies at construction. Preserve intentional
+call-time requirements such as `Scope`, transactions, request context, and
+schema decoding/encoding services in method return types; capturing those in an
+application-lifetime layer would give them the wrong lifetime or authority.
 
 ```typescript
 // database.ts
@@ -389,7 +392,8 @@ Dependencies are handled by:
 1. **`Layer.effect` closure** — services captured at construction time via `yield*`
 2. **`Layer.provide`** — wires dependency layers into `defaultLayer`
 
-Both keep the method signatures clean (`R = never`).
+Both remove stable infrastructure dependencies from method signatures. `R = never`
+is appropriate only when the operation has no intentional caller-supplied context.
 
 ## Pattern: Whole-Function Transforms
 
@@ -556,7 +560,9 @@ const TestWebhook = Layer.mock(PaymentWebhookGateway.Service)({
 });
 ```
 
-`Layer.mock(Service)({...})` is shorthand for `Layer.succeed(Service, Service.of({...}))` — use whichever reads more clearly in context.
+`Layer.mock(Service)({...})` accepts a partial implementation and supplies defecting
+stubs for unimplemented members. Use a complete `Layer.succeed(Service,
+Service.of({...}))` fake when every method must be implemented at compile time.
 
 For a reusable stateful fake, expose a separate test-control service and provide the same implementation under both tags with `Layer.effectContext`. Production code sees only the production interface; tests can inspect state and trigger transitions deterministically.
 
@@ -643,7 +649,7 @@ Tag identifiers should include the domain name according to project convention:
 - [ ] When using class-style `Context.Service`, the shape is its type parameter and the class body is empty
 - [ ] Service methods use `Effect.fn("Domain.methodName")` with the projected domain prefix
 - [ ] Service represents single capability
-- [ ] All operations have Requirements = never (no R parameter)
+- [ ] Stable dependencies are captured; intentional caller-scoped requirements remain explicit in R
 - [ ] Dependencies captured in `Layer.effect` closure via `yield*`; wired via `Layer.provide` on `defaultLayer`
 - [ ] The project tag's implementation constructor is used; for `Context.Service`, use `Service.of({...})`
 - [ ] Tagged with a descriptive, unique identifier under project convention

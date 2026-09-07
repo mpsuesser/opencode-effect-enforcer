@@ -55,8 +55,7 @@ When you need an `Equivalence` instance (for use with combinators), derive it fr
 import { Schema, Array } from 'effect';
 import * as Equivalence from 'effect/Equivalence';
 
-declare const Task: Schema.Schema<any, any, never>;
-type Task = Schema.Schema.Type<typeof Task>;
+class Task extends Schema.Class<Task>('Task')({ id: Schema.String }) {}
 
 // Derive from schema (structural equality)
 export const TaskEquivalence = Schema.toEquivalence(Task);
@@ -603,7 +602,7 @@ declare const appointments: Array<Appointment.Appointment>;
  * import { pipe } from "effect/Function"
  *
  * const tomorrow = DateTime.addDuration(
- *   DateTime.unsafeNow(),
+ *   DateTime.makeUnsafe('2026-09-06T00:00:00Z'),
  *   Duration.days(1)
  * )
  *
@@ -612,7 +611,8 @@ declare const appointments: Array<Appointment.Appointment>;
  *   Array.filter(Appointment.isScheduledBefore(tomorrow))
  * )
  */
-const tomorrow = DateTime.addDuration(DateTime.unsafeNow(), Duration.days(1));
+// Deterministic fixture; in runtime code obtain the instant with yield* DateTime.now.
+const tomorrow = DateTime.addDuration(DateTime.makeUnsafe('2026-09-06T00:00:00Z'), Duration.days(1));
 
 const beforeTomorrow = pipe(
 	appointments,
@@ -791,8 +791,7 @@ const areSame = Equal.equals(t1, t2);
 ```typescript
 import { Schema, Array } from 'effect';
 
-declare const Task: Schema.Schema<any, any, never>;
-type Task = Schema.Schema.Type<typeof Task>;
+class Task extends Schema.Class<Task>('Task')({ id: Schema.String }) {}
 
 export const Equivalence = Schema.toEquivalence(Task);
 

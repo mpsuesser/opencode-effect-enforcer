@@ -44,7 +44,7 @@ const retryPolicy = Schedule.exponential('100 millis').pipe(
 const result = request.pipe(
 	Effect.retryOrElse(retryPolicy, (error, scheduleOutput) =>
 		Effect.logError('request retries exhausted', error).pipe(
-			Effect.zipRight(fallback(error, scheduleOutput))
+			Effect.andThen(fallback(error, scheduleOutput))
 		)
 	)
 );

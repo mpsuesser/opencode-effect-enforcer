@@ -91,7 +91,7 @@ const GetCurrentTime = Tool.make('GetCurrentTime', {
 	success: Schema.Number
 });
 
-const result = Tool.Success<typeof GetCurrentTime>;
+type Result = Tool.Success<typeof GetCurrentTime>;
 ```
 
 **Key Pattern: Tool.make**
@@ -234,13 +234,13 @@ const QueryDatabase = Tool.make('QueryDatabase', {
 	dependencies: [Database]
 });
 
-type Requirements = Tool.Requirements<typeof QueryDatabase>;
+type Requirements = Tool.HandlerServices<typeof QueryDatabase>;
 ```
 
 **Key Pattern: dependencies**
 
 - Array of service tags
-- Requirements extracted at type level
+- `Tool.HandlerServices<T>` includes declared dependencies, parameter-decoding services, and result-encoding services
 - Must be provided when creating handlers
 
 ## Creating Toolkits
@@ -392,12 +392,12 @@ const toolkitLayer = toolkit.toLayer({
 });
 
 const program = Effect.gen(function* () {
-	const handlers = yield* toolkitLayer;
+	const handlers = yield* toolkit;
 	const resultStream = yield* handlers.handle('GetWeather', { location: 'NYC' });
 	return resultStream;
-}).pipe(Effect.provide(WeatherServiceLive));
+}).pipe(Effect.provide(toolkitLayer), Effect.provide(WeatherServiceLive));
 
-declare const WeatherServiceLive: Layer<WeatherService>;
+declare const WeatherServiceLive: Layer.Layer<WeatherService>;
 ```
 
 **Key Pattern: Handler Context**
@@ -666,7 +666,7 @@ Approved calls execute on the next model call; denied calls are converted to fai
 import { Effect, Stream } from 'effect';
 
 const program = Effect.gen(function* () {
-	const toolkit = yield* MyToolkitLayer;
+	const toolkit = yield* MyToolkit;
 
 	const resultStream = yield* toolkit.handle('GetWeather', {
 		location: 'San Francisco'
@@ -823,7 +823,7 @@ import { Effect, Match } from 'effect';
 
 const executeTool = (toolName: string, params: unknown) =>
 	Effect.gen(function* () {
-		const toolkit = yield* MyToolkitLayer;
+		const toolkit = yield* MyToolkit;
 
 		const handler = Match.value(toolName).pipe(
 			Match.when('GetWeather', () =>
@@ -843,10 +843,12 @@ const executeTool = (toolName: string, params: unknown) =>
 
 ## Complete Example
 
+<!-- typecheck -->
 ```typescript
 import * as Tool from 'effect/unstable/ai/Tool';
 import * as Toolkit from 'effect/unstable/ai/Toolkit';
-import { Effect, Schema, Layer, Stream } from 'effect';
+import * as Schema from 'effect/Schema';
+import { Clock, Context, Effect, Layer, Stream } from 'effect';
 
 class UserNotFound extends Schema.TaggedError<UserNotFound>()(
 	'UserNotFound',
@@ -855,40 +857,27 @@ class UserNotFound extends Schema.TaggedError<UserNotFound>()(
 	}
 ) {}
 
-class Database extends Context.Service<
-	Database,
-	{
-		readonly query: (sql: string) => Effect.Effect<unknown>;
-	}
->()('Database') {}
+class User extends Schema.Class<User>('User')({
+	id: Schema.String,
+	name: Schema.String,
+	email: Schema.String
+}) {}
+
+class UserQuery extends Schema.Class<UserQuery>('UserQuery')({
+	userId: Schema.String
+}) {}
+
+class Users extends Context.Service<Users, {
+	readonly get: (id: string) => Effect.Effect<User, UserNotFound>;
+}>()('app/Users') {}
 
 const GetUser = Tool.make('GetUser', {
 	description: 'Retrieve user information by ID',
-	parameters: Schema.Struct({
-		userId: Schema.String
-	}),
-	success: Schema.Struct({
-		id: Schema.String,
-		name: Schema.String,
-		email: Schema.String
-	}),
-	failure: Schema.instanceOf(UserNotFound),
+	parameters: UserQuery,
+	success: User,
+	failure: UserNotFound,
 	failureMode: 'error',
-	dependencies: [Database]
-});
-
-const CreateUser = Tool.make('CreateUser', {
-	description: 'Create a new user',
-	parameters: Schema.Struct({
-		name: Schema.String,
-		email: Schema.String
-	}),
-	success: Schema.Struct({
-		id: Schema.String,
-		name: Schema.String,
-		email: Schema.String
-	}),
-	dependencies: [Database]
+	dependencies: [Users]
 });
 
 const GetCurrentTime = Tool.make('GetCurrentTime', {
@@ -896,58 +885,26 @@ const GetCurrentTime = Tool.make('GetCurrentTime', {
 	success: Schema.Number
 });
 
-const UserToolkit = Toolkit.make(GetUser, CreateUser, GetCurrentTime);
+const UserToolkit = Toolkit.make(GetUser, GetCurrentTime);
 
 const UserToolkitLive = UserToolkit.toLayer({
-	GetUser: ({ userId }) =>
-		Effect.gen(function* () {
-			const db = yield* Database;
-			const user = yield* db.query(
-				`SELECT * FROM users WHERE id = ?`,
-				userId
-			);
-
-			if (!user) {
-				return yield* Effect.fail(new UserNotFound({ userId }));
-			}
-
-			return user as { id: string; name: string; email: string };
-		}),
-
-	CreateUser: ({ name, email }) =>
-		Effect.gen(function* () {
-			const db = yield* Database;
-			const id = crypto.randomUUID();
-
-			yield* db.query(
-				`INSERT INTO users (id, name, email) VALUES (?, ?, ?)`,
-				id,
-				name,
-				email
-			);
-
-			return { id, name, email };
-		}),
-
-	GetCurrentTime: () => Effect.succeed(Date.now())
+	GetUser: Effect.fn('Tools.GetUser')(function* ({ userId }) {
+		const users = yield* Users;
+		return yield* users.get(userId);
+	}),
+	GetCurrentTime: Effect.fn('Tools.GetCurrentTime')(() => Clock.currentTimeMillis)
 });
 
-const DatabaseLive = Layer.succeed(Database, {
-	query: (sql: string, ...params: ReadonlyArray<unknown>) =>
-		Effect.logInfo(`Query: ${sql}`).pipe(Effect.as({}))
-});
+// A complete, typed demo implementation; production supplies a repository adapter.
+const exampleUser = new User({ id: 'user-123', name: 'Alice', email: 'alice@example.com' });
+const UsersTest = Layer.succeed(Users, Users.of({
+	get: Effect.fn('Users.get')((userId: string): Effect.Effect<User, UserNotFound> => userId === exampleUser.id
+		? Effect.succeed(exampleUser)
+		: Effect.fail(new UserNotFound({ userId })))
+}));
 
 const program = Effect.gen(function* () {
-	const toolkit = yield* UserToolkitLive;
-
-	const createStream = yield* toolkit.handle('CreateUser', {
-		name: 'Alice',
-		email: 'alice@example.com'
-	});
-
-	yield* createStream.pipe(
-		Stream.runForEach((result) => Effect.log('Created user:', result.result))
-	);
+	const toolkit = yield* UserToolkit;
 
 	const getStream = yield* toolkit.handle('GetUser', {
 		userId: 'user-123'
@@ -962,8 +919,14 @@ const program = Effect.gen(function* () {
 	yield* timeStream.pipe(
 		Stream.runForEach((result) => Effect.log('Current time:', result.result))
 	);
-}).pipe(Effect.provide(DatabaseLive));
+}).pipe(Effect.provide(UserToolkitLive), Effect.provide(UsersTest));
 ```
+
+Yield the **Toolkit**, then provide its handler **Layer**. A Layer is not a
+yieldable toolkit instance. Encode tagged failures with the error schema itself
+rather than `Schema.instanceOf(ErrorClass)`, which only checks an existing
+instance and cannot reconstruct it from JSON. Handlers get decoded class values;
+manual `handle` calls accept their encoded representation.
 
 ## Import Patterns
 
@@ -1005,7 +968,7 @@ import { make as makeToolkit } from 'effect/unstable/ai/Toolkit';
 - [ ] Tool.Readonly annotation for read-only tools
 - [ ] Tool.Destructive annotation for mutating operations
 - [ ] Tool.Idempotent annotation for safe retries
-- [ ] Custom annotations via Tool.annotate
+- [ ] Custom annotations via the tool's `.annotate` method
 - [ ] Provider-defined tools for native provider features
 - [ ] Toolkit.make with all tools (preferred in v4) or Toolkit.merge for combining tool collections
 - [ ] Error handling with catchTag in handlers

@@ -24,19 +24,21 @@ Reference this for:
 
 ### The Schema Type
 
-Every schema in Effect has the type signature `Schema<Type, Encoded, Context>` where:
+Use `Schema.Schema<Type>` when only the decoded type matters, or
+`Schema.Codec<Type, Encoded, DecodingServices, EncodingServices>` to retain the
+full codec contract:
 
 - **Type**: The validated, decoded output type (what you get after successful decoding)
 - **Encoded**: The raw input type (what you provide for decoding)
-- **Context**: External dependencies required for encoding/decoding (often `never`)
+- **DecodingServices**: Services needed to decode (default `never`)
+- **EncodingServices**: Services needed to encode (default `never`)
 
 **Example:**
 
 ```typescript
 import { Schema } from 'effect';
 
-// Schema<number, string, never>
-//        ^Type  ^Encoded ^Context
+// Schema.Codec<number, string, never, never>
 const NumberFromString = Schema.NumberFromString;
 ```
 
@@ -123,7 +125,7 @@ const PositiveInt = Schema.Number.check(
 	Schema.isGreaterThan(0)
 );
 
-// Type: Schema<number, number, never>
+// Type: Schema.Codec<number, number, never, never>
 // Both Type and Encoded are `number`
 ```
 
@@ -404,8 +406,8 @@ Schema.String.pipe(
 );
 
 // Pre-built transformation schemas
-Schema.Trimmed; // Schema<string, string> — trimmed string
-Schema.NonEmptyString; // Schema<string, string> — non-empty
+Schema.Trimmed; // checks an already-trimmed string; does not trim input
+Schema.NonEmptyString; // checks a non-empty string
 ```
 
 ### Number Transformations
@@ -453,7 +455,7 @@ function split(separator: string) {
 		Schema.decodeTo(
 			Schema.Array(Schema.String),
 			SchemaTransformation.transform({
-				decode: (s) => s.split(separator) as ReadonlyArray<string>,
+				decode: (s): ReadonlyArray<string> => s.split(separator),
 				encode: (as) => as.join(separator)
 			})
 		)
@@ -462,6 +464,58 @@ function split(separator: string) {
 ```
 
 ## Custom Transformations
+
+### Schema-derived binary boundaries (rc.112)
+
+Use `SchemaBinary.toCodec(schema)` from `effect/unstable/encoding` for a compact
+`Uint8Array` representation. It derives the wire layout from the schema's
+**encoded side**, preserving transformations, checks, and decoding/encoding
+services. Use public Schema encode/decode adapters; `toCodecDirect` and the
+module's internal fast-path functions are not application APIs.
+
+<!-- typecheck -->
+```ts
+import { Effect } from 'effect';
+import * as Schema from 'effect/Schema';
+import { SchemaBinary } from 'effect/unstable/encoding';
+
+class Reading extends Schema.Class<Reading>('Reading')({
+	id: Schema.String,
+	value: Schema.NumberFromString
+}) {}
+
+const ReadingBinary = SchemaBinary.toCodec(Reading);
+const roundTrip = Effect.gen(function* () {
+	const bytes = yield* Schema.encodeEffect(ReadingBinary)(
+		new Reading({ id: 'sensor-1', value: 12 })
+	);
+	return yield* Schema.decodeUnknownEffect(ReadingBinary)(bytes);
+});
+```
+
+One codec call handles one complete frame. For arbitrary stream chunks, use
+`SchemaBinary.parser`, `encode` / `decode` Channels, or `duplex` (see
+`effect-stream`). Encoded bytes are arena-backed views; copy with `bytes.slice()`
+when independent ownership is required. Default mode supports compatible schema
+evolution; `{ fingerprint: true }` uses positional layouts and an 8-byte layout
+hash, requiring matching schema definitions. A fingerprint is a compatibility
+check, not authentication or encryption.
+
+The connection-scoped `encoder` / `parser` pair accepts `{ dictionary: true }`
+for repeated strings. Both peers must use the same schema/options and process
+frames in order; dictionary frames do not stand alone. This mode throws during
+construction if the binary layer cannot fully validate that schema itself.
+`parser.feed` lifts the synchronous parser into Effect; it does not make schema
+transformations asynchronous or add their services. Use codec adapters or
+`encode` / `decode` channels for async/service-dependent transformations. A parser
+is spent after failure; call `end` at EOF to detect an incomplete trailing frame.
+Use `maxFrameSize` to bound buffered frames. `SchemaBinary.fieldId` can assign
+stable IDs to fields for compatible evolution; changing established IDs is a
+wire-contract change.
+
+Use JSON codecs for JSON contracts and binary codecs only when the transport
+contract permits them. RPC selects a payload codec through `codecFor`; use
+`RpcSerialization.layerSchemaBinary()` instead of manually wrapping RPC envelopes.
 
 ### SchemaTransformation.transform — Simple Transformations
 
@@ -542,7 +596,7 @@ const OptionFromNonEmptyString = Schema.optionalKey(Schema.String).pipe(
 import { Effect, Schema } from 'effect';
 
 declare const self: Effect.Effect<unknown, unknown, unknown>;
-declare const schema: Schema.Schema<unknown, unknown, never>;
+declare const schema: Schema.Codec<unknown, unknown>;
 declare const toError: (e: unknown) => unknown;
 
 // Streamlined
@@ -748,9 +802,9 @@ const DogWithBreed3 = Schema.Struct({
 ```typescript
 import { Schema, SchemaTransformation } from 'effect';
 
-const ReadonlySetFromArray = <A, I, R>(
-	itemSchema: Schema.Schema<A, I, R>
-): Schema.Schema<ReadonlySet<A>, ReadonlyArray<I>, R> =>
+const ReadonlySetFromArray = <A, I, RD, RE>(
+	itemSchema: Schema.Codec<A, I, RD, RE>
+): Schema.Codec<ReadonlySet<A>, ReadonlyArray<I>, RD, RE> =>
 	Schema.Array(itemSchema).pipe(
 		Schema.decodeTo(
 			Schema.ReadonlySet(Schema.toType(itemSchema)),
@@ -762,7 +816,7 @@ const ReadonlySetFromArray = <A, I, R>(
 	);
 
 const schema = ReadonlySetFromArray(Schema.String);
-// Schema<ReadonlySet<string>, readonly string[], never>
+// Schema.Codec<ReadonlySet<string>, readonly string[], never, never>
 ```
 
 ### Multi-Stage Transformations
@@ -967,9 +1021,9 @@ When creating schemas, ensure:
 - `SchemaGetter` is imported from `effect/SchemaGetter` or `{ SchemaGetter } from "effect"`
 - `SchemaIssue` is imported from `effect/SchemaIssue` or `{ SchemaIssue } from "effect"`
 - `Struct` is imported from `{ Struct } from "effect"` for `mapFields` operations
-- Schema API signature: `Schema<Type, Encoded, Context>`
+- Type-only schema: `Schema.Schema<Type>`; full codec: `Schema.Codec<Type, Encoded, DecodingServices, EncodingServices>`
 - All schemas return `readonly` types by default
-- Use `Schema.revealCodec(schema)` to view any schema as `Schema<Type, Encoded, Context>`
+- Use `Schema.revealCodec(schema)` to expose its full `Schema.Codec` contract
 - Use `Schema.toType(schema)` to get the type-side schema (replaces v3 `Schema.typeSchema`)
 - Access struct fields with `.fields` property
 - Filters preserve schema type — `.check()` on a `Schema.Struct` returns a `Schema.Struct`

@@ -50,6 +50,7 @@ Choosing the right tool:
 | Cache one value, no key | `Effect.cached` / `cachedWithTTL` / `cachedInvalidateWithTTL` (section 10) |
 | Cache values by key | `Cache` |
 | Cached value owns resources (connection, file handle, subprocess) | `ScopedCache` |
+| Keyed resource retained until each caller's scope releases it | `RcMap` / `LayerMap` |
 | Batch + deduplicate request-shaped fetches | see the effect-batching skill (`RequestResolver.withCache` / `asCache`) |
 | Pool of N interchangeable resources checked out per use | `effect/Pool` (not keyed caching) |
 | Scope/finalizer fundamentals | see the effect-scope skill |
@@ -361,6 +362,37 @@ The full method surface (`get`, `getOption`, `getSuccess`, `set`, `has`, `invali
 ---
 
 ## 9. Services in Lookups (requireServicesAt)
+
+### Retain an existing keyed resource (rc.112)
+
+`RcMap.getOption(map, key)` atomically retains a cached entry for the caller's
+`Scope` before awaiting it. It returns `Option.none()` if the entry is missing or
+the map is closed and never starts a lookup for a missing key. An existing
+in-flight entry is awaited; cached/in-flight failures still fail with `E`.
+This is not a non-blocking success-only peek and does not turn failures into absence.
+
+Use `LayerMap.contextEffectOption(key)` for the same behavior over keyed layer
+contexts. Its service-class accessor additionally requires the LayerMap service.
+`has` followed by `get` is not an atomic substitute: the entry can disappear
+between calls and `get` may allocate a replacement. Keep the retained resource's
+use inside the caller scope. See `effect-scope` for `Pool.use` when resources are
+interchangeable rather than keyed.
+
+<!-- typecheck -->
+```ts
+import { Duration, Effect, Option, RcMap } from 'effect';
+
+const program = Effect.gen(function* () {
+	const resources = yield* RcMap.make({
+		lookup: (key: string) => Effect.succeed(`resource:${key}`),
+		idleTimeToLive: Duration.minutes(1)
+	});
+	const missing = yield* RcMap.getOption(resources, 'database');
+	yield* Effect.scoped(RcMap.get(resources, 'database'));
+	const retained = yield* RcMap.getOption(resources, 'database');
+	return { missing: Option.isNone(missing), retained };
+}).pipe(Effect.scoped);
+```
 
 Lookups can use services. `requireServicesAt` controls *where* the type system demands them:
 

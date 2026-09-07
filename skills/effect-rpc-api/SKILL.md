@@ -9,6 +9,13 @@ This skill covers the **contract layer**: the definitions that client and server
 
 ## Effect Source Reference
 
+In rc.112 schema encoding is selected by the transport's `codecFor`, rather
+than being fixed to canonical JSON for every protocol. Preserve the schemas and
+their decoding/encoding requirements in shared contracts; custom protocol
+implementations must supply `codecFor` (see `effect-rpc-client` /
+`effect-rpc-server`). Existing JSON, NDJSON, JSON-RPC, and MsgPack formats keep
+their wire representation; the new SchemaBinary transport has its own codecs.
+
 The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules are under `unstable` and move between betas.
 
 Key files:
@@ -20,7 +27,7 @@ Key files:
 - `packages/effect/src/unstable/rpc/RpcMessage.ts` — wire envelopes: `Request`, `Ack`, `Interrupt`, `Eof`, `Ping`, `ResponseChunk`, `ResponseExit`, `ExitEncoded`, `RequestId`
 - `packages/effect/src/unstable/rpc/RpcClientError.ts` — the transport error type referenced when typing shared client aliases
 - `packages/effect/src/unstable/rpc/index.ts` — public exports of the rpc namespace
-- `packages/platform-node/test/fixtures/rpc-schemas.ts` — the best real-world contract fixture: rpcs, streaming, middleware, deferred responses
+- `packages/platform/node/test/fixtures/rpc-schemas.ts` — the best real-world contract fixture: rpcs, streaming, middleware, deferred responses
 - `packages/effect/test/rpc/Rpc.test.ts` — `exitSchema`, custom defect schemas, `getStreamSchemas` semantics
 
 ## Core Model

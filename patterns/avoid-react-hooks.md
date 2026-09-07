@@ -3,7 +3,7 @@ action: context
 tool: (edit|write)
 event: after
 name: avoid-react-hooks
-description: React hooks (useState, useEffect, useReducer, etc.) should be avoided - use View Models with Effect Atom instead
+description: Review React hooks (useState, useEffect, useReducer, etc.) for state and effects better expressed with Effect Atom
 glob: '**/*.{ts,tsx}'
 detector: ast
 pattern:
@@ -29,45 +29,26 @@ pattern:
     - 'useInsertionEffect($$$)'
 level: high
 suggestSkills:
-    - effect-react-vm
+    - effect-atom-state
 ---
 
-# Avoid React Hooks - Use View Models
+# Review React Hooks - Prefer Effect Atom for Shared State
 
-```haskell
--- Transformation
-useState     :: a → (a, a → ())          -- scattered state, untestable
-useEffect    :: (() → ()) → [a] → ()     -- cleanup error-prone
+Keep shared state in atoms and application effects in typed Effect services.
+Components subscribe with `useAtomValue` and trigger actions with `useAtomSet`
+or `useAtom`. Organize atoms in ordinary state modules alongside the feature.
 
--- Instead: View Model pattern
-data VM = VM
-  { state$  :: Atom State               -- reactive state
-  , action  :: () → Effect ()           -- effectful actions
-  }
+| Hook usage | Effect Atom alternative |
+| --- | --- |
+| `useState` / `useReducer` for shared state | Writable `Atom.make` values |
+| `useMemo` for shared derived state | `Atom.map` or a derived `Atom.make` |
+| `useEffect` to fetch data | `Atom.runtime(layer).atom(effect)` |
+| Async action callbacks with manual loading state | `Atom.fn` or runtime actions with `AsyncResult` |
+| External subscriptions owned by an atom | `Atom.make` with `get.addFinalizer` |
+| URL search state | `Atom.searchParam` |
 
--- Component is pure renderer
-component :: VM → JSX
-component vm = useAtomValue (state$ vm)  -- only reads atoms
-```
+The detector is advisory: hooks for DOM refs, layout, React scheduling, stable
+IDs, or local component behavior may be appropriate. Review the hook's role
+before replacing it; atoms are not substitutes for React-specific lifecycle APIs.
 
-```haskell
--- Replacements
-useState      → vmAtom :: Atom a
-useEffect     → vmAction :: Effect ()
-useCallback   → derivedAtom :: Atom (a → b)
-useMemo       → derivedAtom :: Atom a
-useRef (DOM)  → pass from parent ∨ VM trigger
-useSearchParams → Atom.searchParam
-useEffect (cleanup) → Atom.make with get.addFinalizer
-
--- Architecture
-data Component = Component
-  { view :: VM → JSX           -- pure renderer
-  , vm   :: Layer VM           -- testable, injectable
-  }
-
--- Invoke skill for implementation
-invoke "react-vm"
-```
-
-React hooks scatter state across components. Use View Models: state in atoms, effects in actions, components as pure renderers.
+Load `effect-atom-state` for implementation guidance.

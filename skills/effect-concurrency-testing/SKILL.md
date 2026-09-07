@@ -45,7 +45,7 @@ it.effect('fiber polling with yieldNow', () =>
 
 		yield* latch.open;
 
-		expect(yield* fiber.await).toEqual(Exit.void);
+		expect(yield* Fiber.await(fiber)).toEqual(Exit.void);
 	})
 );
 ```
@@ -212,12 +212,12 @@ it.effect('should publish user created event', () =>
 					type: 'created',
 					userId: 'user-123'
 				});
-			})
+			}).pipe(
+				Effect.provide(UserServiceLive),
+				Effect.provide(Layer.succeed(EventBus, pubsub))
+			)
 		);
-	}).pipe(
-		Effect.provide(UserServiceLive),
-		Effect.provide(Layer.succeed(EventBus, pubsub))
-	)
+	})
 );
 ```
 
@@ -333,9 +333,7 @@ it.effect('subscriptions are interruptible', () =>
 
 		const result = yield* Fiber.await(fiber);
 
-		expect(Exit.isFailure(result) && Pull.isDoneCause(result.cause)).toBe(
-			true
-		);
+		expect(Exit.hasInterrupts(result)).toBe(true);
 	})
 );
 ```

@@ -7,6 +7,11 @@ description: Implement reactive state management with Effect Atom for React appl
 
 Effect Atom is a reactive state management library for Effect that seamlessly integrates with React.
 
+At rc.112, `@effect/atom-react` supports React `>=19.0.0 <20.0.0` (the peer range
+was relaxed). This does not add React 18 support. Keep the adapter aligned with
+the Effect release; core atoms still live in `effect/unstable/reactivity`, and
+React bindings live in `@effect/atom-react` (`packages/atom/react` upstream).
+
 ## Effect Source Reference
 
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.

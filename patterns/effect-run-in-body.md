@@ -44,7 +44,7 @@ good = do
 
 -- Entry points only
 main :: IO ()
-main = Effect.runMain program              -- ✓ application boundary
+main = BunRuntime.runMain program          -- ✓ application boundary (@effect/platform-bun)
 
 handler :: Request → IO Response
 handler req = Effect.runPromise (handle req)  -- ✓ API boundary

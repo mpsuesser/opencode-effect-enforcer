@@ -7,6 +7,7 @@ const INFRASTRUCTURE_TESTS = new Set([
   "agent-policy.test.ts",
   "all-patterns-covered.test.ts",
   "comment-string-false-positives.test.ts",
+  "documentation-types.test.ts",
   "pattern-enforcement.test.ts",
   "readme-inventory.test.ts",
   "skills-runtime.test.ts",
@@ -21,6 +22,6 @@ describe("pattern-to-test coverage", () => {
       .map((name) => name.replace(/\.test\.ts$/, ""))
       .toSorted()
     expect(testNames).toEqual(patternNames)
-    expect(patternNames).toHaveLength(46)
+    expect(patternNames).toHaveLength(45)
   })
 })

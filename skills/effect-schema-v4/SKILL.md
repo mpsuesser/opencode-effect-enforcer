@@ -20,6 +20,14 @@ Reference this for:
 
 ## 1. Key Renames (find-and-replace safe)
 
+### Current type model (rc.112)
+
+`Schema.Schema<T>` describes only the decoded type. Preserve wire types and
+services with `Schema.Codec<T, E, RD, RE>`: decoded Type, Encoded representation,
+DecodingServices, and EncodingServices. A three-argument `Schema.Schema<A, I, R>`
+is not a v4 type. Prefer inference or `S extends Schema.Constraint` in generic
+schema helpers so concrete schema operations are retained.
+
 | v3                            | v4                                  | Notes                                     |
 | ----------------------------- | ----------------------------------- | ----------------------------------------- |
 | `annotations(ann)`            | `annotate(ann)`                     |                                           |
@@ -374,7 +382,7 @@ const fallback = SchemaGetter.withDefault(Effect.succeed('viewer'));
 
 ### Later v4 Updates
 
-- `Schema.makeEffect(input, options?)` on schemas and schema-backed classes returns an `Effect` that fails directly with `SchemaIssue.Issue`, not `Schema.SchemaError`.
+- `schema.makeEffect(input, options?)` on schemas and schema-backed classes returns an `Effect` that fails directly with `SchemaIssue.Issue`, not `Schema.SchemaError`.
 - `Schema.resolveInto` was renamed to `Schema.resolveAnnotations`.
 - `Schema.resolveAnnotationsKey(schema)` returns key-level annotations.
 - `Schema.annotateEncoded({...})` annotates the encoded side of a transformed schema; use `Schema.annotate({...})` for the decoded Type side.
@@ -484,6 +492,40 @@ The input is `{ ast, occurrences, identifier }`; return a name to extract that c
 ### SchemaError Location
 
 The standalone `SchemaError` root module was removed. Parser adapters such as `Schema.decodeUnknownEffect` fail with `Schema.SchemaError`, which contains the structured `issue`; narrow unknown failures with `Schema.isSchemaError`. By contrast, schema/class `makeEffect` and constructor defaults fail directly with `SchemaIssue.Issue`.
+
+In rc.112, `SchemaError` skips stack-frame capture for lower construction cost.
+Use its `issue` and formatter/message for validation diagnostics; a captured
+parser-error stack is not a diagnostic contract. Synchronous parser optimizations
+do not change the choice between constructors, sync decoders, and Effect decoders.
+
+### Partial tagged-union matching (rc.112)
+
+`Schema.TaggedUnion(...)` and `Schema.Union([...]).pipe(Schema.toTaggedUnion(tag))`
+now expose `matchOrElse(value, cases, fallback)` and its curried
+`matchOrElse(cases, fallback)(value)` form. Use exhaustive `.match` for closed
+business decisions. Use `.matchOrElse` when all remaining cases genuinely share
+one behavior. The `toTaggedUnion` helper narrows the fallback to omitted variants;
+the direct `TaggedUnion` overload types its fallback as the full union.
+Neither matcher decodes unknown input. See `effect-pattern-matching` for a checked example.
+
+### JSON Schema import, conversion, and Standard Schema (rc.112)
+
+- `SchemaRepresentation.fromJsonSchemaDocument` rejects unsupported references,
+  validation keywords, object/array `const` or `enum` values, and intersections
+  it cannot represent faithfully. Do not discard the failing constraint to make
+  an import succeed.
+- A keyword such as `minLength` does not imply `type: 'string'`. Constraints beside
+  `const`, `enum`, and `$ref` are applied. Imported `oneOf` remains `oneOf` on export,
+  and tuple imports preserve `minItems` even when `prefixItems` alone is insufficient.
+- `JsonSchema` dialect conversion preserves custom keywords and representable
+  conditionals, contains, dependencies, identifiers, and tuples; it relocates
+  local references and throws for unsupported conversions. These synchronous
+  schema-tooling failures need an explicit `Effect.try` boundary when actionable.
+- Import vendored V1 interoperability types from `effect/StandardSchema`, for
+  example `StandardSchemaV1` and `StandardJSONSchemaV1`. Continue to adapt Effect
+  schemas with `Schema.toStandardSchemaV1`; the new module is not a schema builder.
+- Binary encoding is available from `effect/unstable/encoding` as `SchemaBinary`.
+  See `effect-schema-composition` for codecs and `effect-stream` for framing.
 
 ## 8. New Modules
 

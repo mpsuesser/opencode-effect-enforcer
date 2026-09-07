@@ -420,6 +420,19 @@ export class AiWriter extends Context.Service<
 
 ## Custom Error Wrapping
 
+In rc.112, `AiError.AuthenticationError` accepts an optional `description` and
+appends it after the kind-based remediation message. Anthropic, OpenAI,
+OpenAI-compatible, and OpenRouter adapters propagate provider error text from
+401/403 responses. Preserve this reason rather than replacing it with a generic
+authentication string. `AiError.buildErrorDescription` is available to adapter
+authors; inspect its signature before building custom provider mappings.
+Authentication failures generally require corrected credentials/permissions,
+not a blanket transient retry. Keep redacted credentials out of logs.
+
+OpenAI Responses additionally supports GPT-5.6+ explicit prompt cache breakpoints
+through `Prompt` metadata and `prompt_cache_options` model config; see
+`effect-ai-prompt` for the complete construction example.
+
 Wrap `AiError` into domain-specific tagged errors:
 
 ```typescript

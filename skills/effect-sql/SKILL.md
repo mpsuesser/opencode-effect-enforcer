@@ -606,6 +606,28 @@ const main = program.pipe(Effect.provide(DatabaseLayer));
 
 ### PgClient-Specific Features
 
+### Low-level PostgreSQL codecs (rc.112)
+
+`@effect/sql-pg` adds public `PgProtocol`, `PgTypes`, and `PgAuth` modules.
+These are building blocks for protocol adapters; `PgClient` still uses `pg`.
+
+- `PgProtocol`: PostgreSQL 3.0 frontend encoding and incremental backend-frame
+  parsing. Stateful parser failures are terminal and synchronous; lift a parser
+  boundary with `Effect.try` and preserve the protocol error.
+- `PgTypes`: binary scalar and one-dimensional array OID codecs returning typed
+  `Result` failures. Internal field-reader throwing fast paths are not the public
+  application API.
+- `PgAuth`: MD5 and SCRAM-SHA-256 authentication codecs with typed `Result`
+  failures. Treat authentication material as secrets.
+- Encoded frames/decoded byte fields are buffer views. Copy bytes that must
+  outlive the owning message. Read `packages/sql/pg/src/{PgProtocol,PgTypes,PgAuth}.ts`
+  for exact signatures before implementing an adapter.
+
+Driver releases also update production dependencies for D1, mysql2, and PGlite;
+keep the Effect-family package versions aligned when upgrading those adapters.
+
+### PgClient JSON and Notifications
+
 ```ts
 const pg = yield* PgClient;
 

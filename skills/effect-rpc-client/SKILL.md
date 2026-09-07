@@ -20,8 +20,8 @@ Key files:
 - `packages/effect/src/unstable/rpc/RpcWorker.ts` — `InitialMessage`, `layerInitialMessage`, `initialMessage`
 - `packages/effect/src/unstable/rpc/RpcMessage.ts` — wire vocabulary: `Request`, `Ack`, `Interrupt`, `Chunk`, `Exit`, `Defect`, `Ping`/`Pong`, `ClientProtocolError`, `RequestId`
 - `packages/effect/src/unstable/socket/Socket.ts` — `Socket` service, `layerWebSocket`, `WebSocketConstructor`
-- `packages/platform-node/test/RpcServer.test.ts` + `test/fixtures/rpc-e2e.ts` + `test/fixtures/rpc-schemas.ts` — the best end-to-end reference: every transport × serialization combination, headers, streams, interrupts, defects
-- `packages/platform-browser/test/RpcWorker.test.ts` + `test/fixtures/rpc-worker.ts` — worker transport end to end
+- `packages/platform/node/test/RpcServer.test.ts` + `test/fixtures/rpc-e2e.ts` + `test/fixtures/rpc-schemas.ts` — the best end-to-end reference: every transport × serialization combination, headers, streams, interrupts, defects
+- `packages/platform/browser/test/RpcWorker.test.ts` + `test/fixtures/rpc-worker.ts` — worker transport end to end
 
 ## Core Model
 
@@ -293,6 +293,13 @@ const TcpProtocolLive = RpcClient.layerProtocolSocket().pipe(
 
 Build your own with `RpcClient.Protocol.make((writeResponse, clientIds) => Effect<Omit<Service, 'run'>>)` — it buffers server responses per client until that client's `run` loop is installed. You rarely need this; prefer `RpcTest` for in-memory wiring (section 11).
 
+As of rc.112 the returned service must include `codecFor`, normally forwarded
+from the selected `RpcSerialization` service. It chooses the schema codec for
+RPC payloads/results while the protocol handles envelopes. JSON-compatible
+custom transports can use `codecFor: Schema.toCodecJson`. Preserve the schema's
+decoding and encoding service requirements; see `effect-rpc-server` for the
+full `RpcSerialization.CodecFor` contract.
+
 ---
 
 ## 5. Serialization — Pairing Codecs with Transports
@@ -303,7 +310,14 @@ Build your own with `RpcClient.Protocol.make((writeResponse, clientIds) => Effec
 |---|---|---|---|
 | `RpcSerialization.layerJson` | `application/json` | no | HTTP (response decoded once, as an array); WebSocket (each ws message is one frame already) |
 | `RpcSerialization.layerNdjson` | `application/ndjson` | yes (newline) | anything — the safe default; enables streaming over HTTP |
-| `RpcSerialization.layerMsgPack` | `application/msgpack` | yes (msgpack frames) | binary transports; smallest payloads; uses msgpackr `useRecords: true` |
+| `RpcSerialization.layerMsgPack` | `application/msgpack` | yes (msgpack frames) | binary framing with JSON-compatible schema codecs; msgpackr `useRecords: true` |
+| `RpcSerialization.layerSchemaBinary(options?)` | `application/vnd.effect.rpc+schema-binary` | yes | schema-derived binary framing and payload codecs; pair on both peers |
+
+`layerSchemaBinary({ maxFrameSize?, fingerprintPayloads? })` defaults to a
+16 MiB frame limit and no payload fingerprint. Envelopes are fingerprinted and
+dictionary-enabled; payload fingerprints opt into strict layout agreement.
+Existing built-in formats retain their wire encoding in rc.112. Workers use
+`Schema.toCodecJson` with structured clone without a serialization layer.
 | `RpcSerialization.layerJsonRpc({ contentType? })` | `application/json` | no | JSON-RPC 2.0 interop over HTTP/WebSocket; maps rpc tag ↔ `method`, supports batch arrays |
 | `RpcSerialization.layerNdJsonRpc({ contentType? })` | `application/json-rpc` | yes (newline) | JSON-RPC 2.0 over sockets |
 
@@ -413,7 +427,7 @@ const getUser = (id: string) =>
 Semantics to remember:
 
 - **`ClientProtocolError` fails everything in flight.** When a socket dies or a worker crashes, every pending request on that connection fails with the same `RpcClientError`. Requests are *not* replayed after reconnect — retry at the call site.
-- **Server defects are `Cause.Die`, not typed failures.** `Effect.catchTag` will not see them; use `Effect.sandbox`/`Effect.catchAllCause`. What survives the wire depends on the rpc's `defect` schema (see the effect-rpc-api skill).
+- **Server defects are `Cause.Die`, not typed failures.** `Effect.catchTag` will not see them; use `Effect.sandbox`/`Effect.catchCause`. What survives the wire depends on the rpc's `defect` schema (see the effect-rpc-api skill).
 - **Whole-connection defects** (server-side fatal defects when the server runs without `disableFatalDefects`) arrive as a `Defect` message and kill every in-flight request on the connection as `Cause.Die`.
 - `RpcTest.makeClient` clients have `E = never` — no transport error channel, only your rpc errors and middleware errors.
 
@@ -548,7 +562,7 @@ it.effect('GetUser', () =>
 
 Signature: `RpcTest.makeClient(group, options?: { flatten? })` with required context `Scope | Rpc.ToHandler<Rpcs> | Rpc.Middleware<Rpcs> | Rpc.MiddlewareClient<Rpcs>` — i.e. the handler layers, any *server* middleware layers, **and** any client middleware layers. Forgetting the client middleware layer is the classic confusing type error.
 
-The test client's `E` is `never`: transport errors cannot occur, so tests exercise only your declared errors, middleware errors, and defects. To also test serialization and transport semantics, build a real client+server pair against `NodeHttpServer.layerTest` exactly as `packages/platform-node/test/RpcServer.test.ts` does.
+The test client's `E` is `never`: transport errors cannot occur, so tests exercise only your declared errors, middleware errors, and defects. To also test serialization and transport semantics, build a real client+server pair against `NodeHttpServer.layerTest` exactly as `packages/platform/node/test/RpcServer.test.ts` does.
 
 ### `RpcClient.makeNoSerialization` (advanced)
 
@@ -656,7 +670,7 @@ const WorkerClientLive = UsersClient.layer.pipe(
 5. **Mismatched client/server serialization.** Both sides share one `RpcSerialization` choice; there is no negotiation. Garbled `RpcClientDefect: Error decoding ...` errors usually mean the codecs differ.
 6. **Reading mixed-case header names server-side.** `Headers.fromInput` lowercases keys: send `{ userId: '123' }`, read `headers.userid`. Same for `withHeaders` and middleware `Headers.set`.
 7. **Expecting `discard: true` to be error-free.** It only removes the rpc's *declared* error; `RpcClientError` and middleware errors remain, and over HTTP the POST round-trip is still awaited.
-8. **Catching server defects with `catchTag`.** Handler `Effect.die`s arrive as `Cause.Die`, not typed failures. Use `Effect.sandbox`/`Effect.catchAllCause`, and remember one server fatal defect can fail *all* in-flight requests on the connection.
+8. **Catching server defects with `catchTag`.** Handler `Effect.die`s arrive as `Cause.Die`, not typed failures. Use `Effect.sandbox`/`Effect.catchCause`, and remember one server fatal defect can fail *all* in-flight requests on the connection.
 9. **Assuming requests survive a reconnect.** A socket/worker failure fails every in-flight call with `RpcClientError`; after reconnect nothing is replayed. Add `Effect.retry` at call sites; `retryTransientErrors: true` only keeps requests pending across *connection-establishment* failures.
 10. **Passing `retryPolicy` to `layerProtocolSocket`.** The layer accepts `retryTransientErrors` and `onTransientError`, but not `retryPolicy`. For a custom reconnect schedule use `Layer.effect(RpcClient.Protocol)(RpcClient.makeProtocolSocket({ retryPolicy, retryTransientErrors, onTransientError }))`.
 11. **Treating a flattened client like an object client.** With `flatten: true` you call `client('GetUser', payload)`; `client.GetUser(payload)` is not a function. Pick one shape per client.

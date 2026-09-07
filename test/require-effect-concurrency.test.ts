@@ -15,7 +15,12 @@ testPattern({
     "Effect.validate(inputs, validateInput)",
     "Effect.validate(validateInput)",
     "Effect.validate(inputs, validateInput, { discard: true })",
-    "Effect.validate(validateInput, { discard: true })"
+    "Effect.validate(validateInput, { discard: true })",
+    "Effect.all(tasks, { concurrency: 'inherit' })",
+    'Effect.forEach(items, processItem, { concurrency: "inherit" })',
+    "Effect.forEach(processItem, { concurrency: 'inherit', discard: true })",
+    "Effect.validate(inputs, validateInput, { concurrency: 'inherit' })",
+    'Effect.validate(validateInput, { "concurrency": "inherit" })'
   ],
   shouldNotMatch: [
     "Effect.forEach(items, processItem, { concurrency: 1 })",
@@ -25,6 +30,7 @@ testPattern({
     "Effect.all(tasks, { concurrency: 1 })",
     'Effect.all(tasks, { concurrency: "unbounded" })',
     "Effect.all(tasks, { concurrency })",
+    'Effect.all(tasks, { concurrency: 2, label: "inherit" })',
     "Effect.validate(inputs, validateInput, { concurrency: 1 })",
     "Effect.validate(inputs, validateInput, { concurrency: 4, discard: true })",
     "Effect.validate(validateInput, { concurrency: 1 })",

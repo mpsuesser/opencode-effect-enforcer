@@ -6,6 +6,10 @@
 An opinionated OpenCode V2 plugin that gives coding agents current Effect v4
 guidance and reviews their TypeScript edits for common Effect anti-patterns.
 
+**Supported Effect version: `4.0.0-rc.112`.** See the
+[full rc.111 → rc.112 release notes and audit](docs/effect-4.0.0-rc.112.md)
+for upstream changes, companion-package notes, and repository migration details.
+
 ## Install
 
 Add the npm package to your global or project `opencode.jsonc`:
@@ -21,7 +25,7 @@ That is the complete installation. OpenCode resolves published package entries
 for you; there is no separate `npm install` step. Use the global config at
 `~/.config/opencode/opencode.jsonc` to enable it everywhere, or a project config
 to enable it only for that project. You can also pin a release, for example
-`"opencode-effect-enforcer@0.2.3"`.
+`"opencode-effect-enforcer@0.2.4"`.
 
 Start a new OpenCode session, then verify the plugin if needed:
 
@@ -57,12 +61,12 @@ Look for `opencode.effect-enforcer` with `state.status` set to `active`.
 
 ## What You Get
 
-- **54 focused skills** registered in OpenCode's native skill catalog, covering
+- **53 focused skills** registered in OpenCode's native skill catalog, covering
   Effect's core, platform, AI, RPC, SQL, frontend, and testing APIs.
 - **4 guidance documents** injected into model context so Effect-first
   boundaries, domain modeling, dependency design, and skill routing stay
   visible while the agent works.
-- **46 tested patterns** run after successful `write`, `edit`, `patch`, and
+- **45 tested patterns** run after successful `write`, `edit`, `patch`, and
   `apply_patch` calls, reporting only violations in newly added text.
 - **Advisory remediation** appended to the completed tool result so the model
   reviews and fixes valid findings without a detector blocking the underlying
@@ -81,7 +85,7 @@ available.
 - [Effect, and the Near-Inexpressible Majesty of Layers](guidance/post__effect-and-the-near-inexpressible-majesty-of-layers.md): Explains services, Layers, typed dependencies, and testable implementations.
 - [Parse, don't validate](guidance/post__parse-dont-validate.md): Shows how refined types preserve validation knowledge and make illegal states unrepresentable.
 
-### Skills (54)
+### Skills (53)
 
 #### Modeling And Core APIs
 
@@ -147,7 +151,6 @@ available.
 - [`effect-atom-state`](skills/effect-atom-state/SKILL.md): Manage reactive React state with Effect Atom.
 - [`effect-atom-rpc`](skills/effect-atom-rpc/SKILL.md): Build cached, invalidating, SSR-aware RPC atoms for React clients.
 - [`effect-react-composition`](skills/effect-react-composition/SKILL.md): Compose React components around explicit Effect Atom state and behavior.
-- [`effect-react-vm`](skills/effect-react-vm/SKILL.md): Implement testable View Models that bridge Effect services and React views.
 
 #### Configuration, Operations, And Testing
 
@@ -158,7 +161,7 @@ available.
 - [`effect-concurrency-testing`](skills/effect-concurrency-testing/SKILL.md): Test fibers, PubSub, Deferred, Latch, SubscriptionRef, and concurrent streams.
 - [`effect-incremental-migration`](skills/effect-incremental-migration/SKILL.md): Migrate Promise-based modules incrementally while preserving required compatibility.
 
-### Patterns (46)
+### Patterns (45)
 
 #### Types, Modeling, And Collections
 
@@ -217,8 +220,7 @@ available.
 
 #### React And Testing Conventions
 
-- [`avoid-react-hooks`](patterns/avoid-react-hooks.md): Directs React state and effects into Effect Atom View Models.
-- [`vm-in-wrong-file`](patterns/vm-in-wrong-file.md): Enforces dedicated `.vm.ts` files for View Model definitions.
+- [`avoid-react-hooks`](patterns/avoid-react-hooks.md): Reviews React state and effects for Effect Atom alternatives.
 - [`avoid-expect-in-if`](patterns/avoid-expect-in-if.md): Prevents conditional assertions that allow tests to pass without checking behavior.
 
 ## Per-Agent Opt-Out
@@ -283,8 +285,8 @@ The release tag must exactly match the package version, such as `v0.2.0` for
 `"version": "0.2.0"`.
 
 There is no generated `dist` tree. OpenCode imports the TypeScript entrypoint,
-and npm publishes the authoritative `src/`, `skills/`, `guidance/`, and
-`patterns/` directories directly.
+and npm publishes the authoritative `src/`, `skills/`, `guidance/`, `patterns/`,
+and `docs/` directories directly.
 
 ## Credits
 

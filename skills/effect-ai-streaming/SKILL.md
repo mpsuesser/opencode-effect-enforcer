@@ -81,34 +81,27 @@ Accumulate stream parts incrementally using mutable state for efficiency:
 import * as Stream from 'effect/Stream';
 import * as Effect from 'effect/Effect';
 import * as Prompt from 'effect/unstable/ai/Prompt';
+import * as Response from 'effect/unstable/ai/Response';
+import * as SubscriptionRef from 'effect/SubscriptionRef';
 
-const accumulated: Array<StreamPart> = [];
-let combined = Prompt.empty;
+const streamWithHistory = Stream.suspend(() => {
+	const accumulated: Array<Response.AnyPart> = [];
+	return stream.pipe(
+		Stream.mapArrayEffect(
+			Effect.fnUntraced(function* (parts) {
+				accumulated.push(...parts);
 
-stream.pipe(
-	Stream.mapChunksEffect(
-		Effect.fnUntraced(function* (chunk) {
-			const parts = Array.from(chunk);
-
-			// Append to mutable accumulator
-			accumulated.push(...parts);
-
-			// Fold the accumulated response so start/delta/end IDs are visible together
-			combined = Prompt.fromResponseParts(accumulated);
-
-			// Update history incrementally
-			yield* SubscriptionRef.set(
-				history,
-				Prompt.concat(checkpoint, combined)
-			);
-
-			return chunk;
-		})
-	)
-);
+				// Fold accumulated parts so start/delta/end IDs are visible together.
+				const combined = Prompt.fromResponseParts(accumulated);
+				yield* SubscriptionRef.set(history, Prompt.concat(checkpoint, combined));
+				return parts;
+			})
+		)
+	);
+});
 ```
 
-Key insight: `Stream.mapChunksEffect` enables side-effectful accumulation while preserving stream semantics.
+Key insight: `Stream.mapArrayEffect` enables side-effectful accumulation while preserving stream semantics. Its input/output batches are non-empty arrays, not v3 Chunks. Allocate mutable accumulators inside `Stream.suspend` so separate stream runs do not share history.
 
 ## Resource-Safe Streaming
 
@@ -121,19 +114,23 @@ import * as Stream from 'effect/Stream';
 
 const streamWithProtection = Stream.fromChannel(
 	Channel.acquireUseRelease(
-		// Acquire: Take semaphore, get checkpoint
-		semaphore.take(1).pipe(
-			Effect.zipRight(SubscriptionRef.get(history)),
-			Effect.map((hist) => Prompt.concat(hist, newPrompt)),
-			Effect.tap((checkpoint) => SubscriptionRef.set(history, checkpoint))
-		),
+		// Acquire only the permit so release covers checkpoint setup too.
+		semaphore.take(1),
 
-		// Use: Stream with accumulation
-		(checkpoint) =>
-			LanguageModel.streamText({ prompt: checkpoint }).pipe(
-				Stream.mapChunksEffect(accumulateAndUpdate),
-				Stream.toChannel
-			),
+		// Use: Prepare history, then stream with per-run accumulation.
+		() => Stream.unwrap(Effect.gen(function* () {
+			const checkpoint = Prompt.concat(yield* SubscriptionRef.get(history), newPrompt);
+			yield* SubscriptionRef.set(history, checkpoint);
+			const accumulated: Array<Response.AnyPart> = [];
+			return LanguageModel.streamText({ prompt: checkpoint }).pipe(
+				Stream.mapArrayEffect(Effect.fnUntraced(function* (parts) {
+					accumulated.push(...parts);
+					yield* SubscriptionRef.set(history,
+						Prompt.concat(checkpoint, Prompt.fromResponseParts(accumulated)));
+					return parts;
+				}))
+			);
+		})).pipe(Stream.toChannel),
 
 		// Release: Always release semaphore
 		() => semaphore.release(1)
@@ -149,6 +146,9 @@ Resource acquisition order:
 4. Update history with checkpoint
 5. Stream response (with incremental updates)
 6. Release semaphore (guaranteed via `acquireUseRelease`)
+
+Keep steps 2–5 in the use phase. If checkpoint setup fails after acquisition,
+the finalizer must already own the permit.
 
 ## Consumption Patterns
 
@@ -173,7 +173,7 @@ stream.pipe(Stream.tap(logPart), Stream.runDrain);
 
 // Get final accumulated value
 stream.pipe(
-	Stream.runFold(initialState, (acc, part) => merge(acc, part)),
+	Stream.runFold(() => initialState, (acc, part) => merge(acc, part)),
 	Effect.map(Option.some)
 );
 ```
@@ -183,28 +183,21 @@ stream.pipe(
 Incremental merge strategy for conversation history:
 
 ```typescript
-Prompt.concat :: Prompt → Prompt → Prompt
-Prompt.fromResponseParts :: Array<StreamPart> → Prompt
+// Prompt.concat: (Prompt, RawInput) → Prompt
+// Prompt.fromResponseParts: ReadonlyArray<Response.AnyPart> → Prompt
 
-// Pattern: checkpoint + accumulated response fold
-const accumulated: Array<StreamPart> = []
-let combined = Prompt.empty
+// Pattern: checkpoint + accumulated response fold, scoped to each stream run.
+const streamWithHistory = Stream.suspend(() => {
+  const accumulated: Array<Response.AnyPart> = [];
+  return stream.pipe(Stream.mapArrayEffect(Effect.fnUntraced(function* (parts) {
+    accumulated.push(...parts);
 
-Stream.mapChunksEffect(function* (chunk) {
-  const parts = Array.from(chunk)
-  accumulated.push(...parts)
-
-  // Fold accumulated parts, not only this chunk, so start/delta/end IDs align
-  combined = Prompt.fromResponseParts(accumulated)
-
-  // Update history: base checkpoint + accumulated response
-  yield* SubscriptionRef.set(
-    history,
-    Prompt.concat(filteredCheckpoint, combined)
-  )
-
-  return chunk
-})
+    // Fold accumulated parts, not only this batch, so start/delta/end IDs align.
+    const combined = Prompt.fromResponseParts(accumulated);
+    yield* SubscriptionRef.set(history, Prompt.concat(filteredCheckpoint, combined));
+    return parts;
+  })));
+});
 ```
 
 Why checkpoint-based merging:
@@ -224,11 +217,13 @@ Why checkpoint-based merging:
 
 ## Complete Example
 
+<!-- typecheck -->
 ```typescript
 import * as Prompt from 'effect/unstable/ai/Prompt';
 import * as Response from 'effect/unstable/ai/Response';
 import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
 import * as Stream from 'effect/Stream';
+import * as Channel from 'effect/Channel';
 import * as Effect from 'effect/Effect';
 import * as SubscriptionRef from 'effect/SubscriptionRef';
 import * as Semaphore from 'effect/Semaphore';
@@ -241,46 +236,21 @@ const Chat = Effect.gen(function* () {
 	const streamText = (prompt: string) =>
 		Stream.fromChannel(
 			Channel.acquireUseRelease(
-				// Acquire
-				semaphore.take(1).pipe(
-					Effect.zipRight(SubscriptionRef.get(history)),
-					Effect.map((hist) =>
-						Prompt.concat(hist, Prompt.make(prompt))
-					),
-					Effect.tap((checkpoint) => {
-						combined = Prompt.empty;
-						return SubscriptionRef.set(history, checkpoint);
-					})
-				),
-
-				// Use
-				(checkpoint) => {
-					let combined = Prompt.empty;
-					const accumulated: Array<Response.StreamPart> = [];
-
-					return LanguageModel.streamText({
-						prompt: checkpoint
-					}).pipe(
-						Stream.mapChunksEffect(
-							Effect.fnUntraced(function* (chunk) {
-								const parts = Array.from(chunk);
-								accumulated.push(...parts);
-
-								combined = Prompt.fromResponseParts(accumulated);
-
-								yield* SubscriptionRef.set(
-									history,
-									Prompt.concat(checkpoint, combined)
-								);
-
-								return chunk;
-							})
-						),
-						Stream.toChannel
+				// Acquire only the permit; all following work is covered by release.
+				semaphore.take(1),
+				() => Stream.unwrap(Effect.gen(function* () {
+					const checkpoint = Prompt.concat(yield* SubscriptionRef.get(history), prompt);
+					yield* SubscriptionRef.set(history, checkpoint);
+					const accumulated: Array<Response.AnyPart> = [];
+					return LanguageModel.streamText({ prompt: checkpoint }).pipe(
+						Stream.mapArrayEffect(Effect.fnUntraced(function* (parts) {
+							accumulated.push(...parts);
+							yield* SubscriptionRef.set(history,
+								Prompt.concat(checkpoint, Prompt.fromResponseParts(accumulated)));
+							return parts;
+						}))
 					);
-				},
-
-				// Release
+				})).pipe(Stream.toChannel),
 				() => semaphore.release(1)
 			)
 		);
@@ -288,20 +258,23 @@ const Chat = Effect.gen(function* () {
 	return { streamText };
 });
 
-// Consume stream
-chat.streamText('Hello').pipe(
+// Consume with a LanguageModel layer provided by the application.
+const consume = Effect.gen(function* () {
+	const chat = yield* Chat;
+	yield* chat.streamText('Hello').pipe(
 	Stream.runForEach((part) =>
 		Match.value(part).pipe(
 			Match.when({ type: 'text-delta' }, ({ delta }) =>
-				Effect.sync(() => console.log(delta))
+				Effect.logInfo(delta)
 			),
 			Match.when({ type: 'finish' }, ({ usage }) =>
-				Effect.sync(() => console.log(usage))
+				Effect.logDebug(usage)
 			),
 			Match.orElse(() => Effect.void)
 		)
 	)
-);
+	);
+});
 ```
 
 ## Anti-Patterns
@@ -335,8 +308,8 @@ Stream.map((chunk) => {
   return chunk
 })
 
-// ✓ Use Stream.mapChunksEffect
-Stream.mapChunksEffect(Effect.fnUntraced(function* (chunk) {
+// ✓ Use Stream.mapArrayEffect
+Stream.mapArrayEffect(Effect.fnUntraced(function* (chunk) {
   accumulated.push(...chunk)
   yield* updateHistory()
   return chunk
@@ -382,7 +355,7 @@ Set `preventFallbackOnPartialStream: true` when a provider failure after emitted
 
 - [ ] Use start/delta/end protocol for streaming content
 - [ ] Match stream parts with `Match.when({ type: ... })` or direct `part.type` checks (NOT `Match.tag` — parts use `type`, not `_tag`)
-- [ ] Accumulate using Stream.mapChunksEffect (not Stream.map)
+- [ ] Accumulate using Stream.mapArrayEffect (not a side-effecting Stream.map)
 - [ ] Use SubscriptionRef for reactive history updates
 - [ ] Protect concurrent streams with Semaphore
 - [ ] Use Channel.acquireUseRelease for resource safety

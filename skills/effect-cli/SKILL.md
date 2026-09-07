@@ -201,19 +201,38 @@ Hidden flags parse normally, but generated help, shell completions, and typo sug
 
 Bare boolean flags are required. `--verbose` produces `true`, `--no-verbose` produces `false`, and omission produces `CliError.MissingOption`. Add `Flag.withDefault(false)` for ordinary opt-in switch behavior, or use `Flag.optional` / a config or prompt fallback when absence has separate meaning.
 
-### Prompt Defaults and Prefixes
+### Prompt Defaults and Themes
 
+<!-- typecheck -->
 ```typescript
+import { Effect } from 'effect';
 import { Prompt } from 'effect/unstable/cli';
 
 Prompt.integer({ message: 'Count', default: 42 });
 Prompt.file({ message: 'Pick file', default: '/workspace/config.json' });
 
-// The default prefix is "?"; an empty string omits it.
-Prompt.text({ message: 'Name', prefix: '>' });
+// A local override merges over the context theme.
+const name = Prompt.text({ message: 'Name', theme: { prefix: '>' } });
+
+// Provide once to theme all prompts in a command or application.
+const themed = name.pipe(
+	Effect.provideService(Prompt.Theme, Prompt.makeTheme({ tick: '✓' }))
+);
 ```
 
 Integer prompt defaults are editable and Enter submits the default if unchanged. `Prompt.file` resolves/selects the default as the initial path.
+
+In rc.112, per-prompt `prefix` is replaced by `theme?: Partial<Prompt.Theme>`.
+`Prompt.Theme` is a context reference with platform defaults; `Prompt.makeTheme`
+builds a complete theme. Local fields override the context theme. Theme fields
+include prompt symbols, `passwordMask`, and ANSI color values. The default
+prefix is `?`; `theme: { prefix: '' }` omits it.
+
+`autoComplete` and `file` now insert `j`/`k` into filter text. Navigate with arrow
+keys (or Ctrl-P/Ctrl-K for up, Ctrl-N for down). Wizard command output redacts
+password prompt values. Completion generators preserve quoted/spaced/Unicode
+choices across Bash (including 3.2), Fish, and Zsh; let the generator escape
+choice values rather than pre-escaping your domain values.
 
 ## Commands
 

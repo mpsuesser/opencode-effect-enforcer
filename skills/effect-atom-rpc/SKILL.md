@@ -18,7 +18,14 @@ You are an Effect TypeScript expert specializing in `effect/unstable/reactivity/
 Use this skill when building React (or Atom-based) frontends that consume an existing `RpcGroup`.
 
 For the underlying RPC definitions, see the `effect-rpc-cluster` skill.
-For Atom fundamentals (`Atom.make`, `family`, `keepAlive`, `AsyncResult`, hydration), see the `effect-atom-state` and `effect-react-vm` skills.
+For Atom fundamentals (`Atom.make`, `family`, `keepAlive`, `AsyncResult`, hydration), see the `effect-atom-state` skill.
+
+The underlying RPC protocols require `codecFor` in rc.112. Built-in protocol
+layers supply it; forward it when implementing a custom transport. You can pair
+`RpcSerialization.layerSchemaBinary` on client/server without changing query or
+mutation call sites; see `effect-rpc-client` for frame limits and compatibility.
+Workflow proxy discard RPCs now return execution IDs, so their mutation success
+type is `string`. This is distinct from the client's `{ discard: true }` option.
 
 ## Effect Source Reference
 
@@ -485,4 +492,4 @@ The `query`/`mutation` arguments differ (you pass `groupName, endpointName, requ
 - Use `AsyncResult.builder(...).onWaiting(...).onError(...).onSuccess(...)` (or `AsyncResult.matchWithWaiting`) to render — never check `.waiting` and `.error` ad-hoc. Reserve `.onFailure((cause) => ...)` for whole-`Cause` fallbacks after typed error branches.
 - For protocol layers that depend on auth tokens or other reactive state, use the `(get) => Layer` form of `protocol` so the client rebuilds when those atoms change.
 - For typed error recovery, handle declared RPC errors, RPC middleware wire errors, and `RpcClientError`; branch on `_tag` only when the relevant errors are tagged.
-- Cross-link to `effect-atom-state` and `effect-react-vm` skills for atom-side patterns; this skill covers only the RPC bridge.
+- Cross-link to `effect-atom-state` for atom-side patterns; this skill covers only the RPC bridge.

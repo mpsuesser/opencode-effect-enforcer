@@ -1,6 +1,6 @@
 ---
 name: effect-pattern-matching
-description: Master Effect pattern matching using Data.TaggedEnum, $match, $is, Match.typeTags, and Effect.match. Avoid manual _tag checks and Effect.result patterns. Use this skill when working with discriminated unions, ADTs, or conditional logic based on tagged types.
+description: Match schema tagged unions with match/matchOrElse and guards, trusted Data.TaggedEnum values with $match/$is, and Effect outcomes with Effect.match. Use for discriminated unions, ADTs, or conditional logic based on tagged types.
 ---
 
 # Effect Pattern Matching Skill
@@ -28,9 +28,44 @@ Reference this for:
 - Declarative, not imperative
 - Pipeline-friendly composition
 
-## Pattern 1: Data.TaggedEnum for ADTs
+## Schema-First Matching (rc.112)
 
-Use `Data.TaggedEnum` instead of manual tagged unions.
+For domain/wire models, prefer class variants combined with
+`Schema.Union([...]).pipe(Schema.toTaggedUnion('kind'))`. Use `.match` for
+exhaustiveness, `.guards` for narrowing decoded values, and `.matchOrElse` for
+intentional partial matching. Direct `Schema.TaggedUnion` creates canonical
+`_tag` object variants. Both expose data-first and data-last `matchOrElse` forms;
+the `toTaggedUnion` fallback excludes handled variants, while direct
+`Schema.TaggedUnion.matchOrElse` types its fallback as the full union.
+
+<!-- typecheck -->
+```typescript
+import * as Schema from 'effect/Schema';
+
+const State = Schema.TaggedUnion({
+	Loading: {},
+	Ready: { data: Schema.Array(Schema.String) },
+	Failed: { message: Schema.String }
+});
+type State = typeof State.Type;
+
+const getData = State.matchOrElse({ Ready: (state) => state.data }, () => []);
+const label = State.match({
+	Loading: () => 'Loading',
+	Ready: ({ data }) => `${data.length} items`,
+	Failed: ({ message }) => message
+});
+```
+
+TypeScript correctly narrows literal discriminator checks. Prefer these helpers
+for exhaustive, reusable branching, not because manual checks cannot narrow.
+For the full class-based lifecycle example see `effect-domain-modeling`.
+
+## Pattern 1: Data.TaggedEnum for Trusted ADTs
+
+Use `Data.TaggedEnum` for trusted, non-schema ADTs. It supplies constructors and
+tag checks but does not parse unknown input; avoid a parallel Data model for an
+existing schema union.
 
 ### The Problem: Manual Tagged Unions
 
@@ -415,14 +450,12 @@ type LoadState = Data.TaggedEnum<{
 }>;
 const LoadState = Data.taggedEnum<LoadState>();
 
-const getData = (state: LoadState): string[] =>
-	pipe(
-		state,
-		// Type guard refines to Ready
-		LoadState.$is('Ready'),
-		// Now can access .data safely
-		(ready) => (ready ? ready.data : [])
-	);
+const getData = LoadState.$match({
+	Loading: () => [],
+	Ready: ({ data }) => data,
+	Error: () => []
+});
+// A guard returns boolean; piping through $is would lose the original value.
 ```
 
 ## Pattern 5: Use Option.match Instead of \_tag Checks

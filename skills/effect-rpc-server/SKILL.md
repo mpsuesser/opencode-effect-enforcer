@@ -22,8 +22,8 @@ Key files:
 - `packages/effect/src/unstable/rpc/RpcWorker.ts` — `InitialMessage` for worker transports
 - `packages/effect/src/unstable/rpc/RpcTest.ts` — in-process test client
 - `packages/effect/src/unstable/rpc/RpcSchema.ts` — `ClientAbort` cause annotation, stream schema markers
-- `packages/platform-node/test/RpcServer.test.ts` + `test/fixtures/rpc-{schemas,e2e}.ts` — the best end-to-end reference for real wiring across http/ws/tcp transports and every serialization
-- `packages/platform-browser/test/fixtures/rpc-worker.ts` — minimal worker-side server entrypoint
+- `packages/platform/node/test/RpcServer.test.ts` + `test/fixtures/rpc-{schemas,e2e}.ts` — the best end-to-end reference for real wiring across http/ws/tcp transports and every serialization
+- `packages/platform/browser/test/fixtures/rpc-worker.ts` — minimal worker-side server entrypoint
 
 ## Core Model
 
@@ -349,7 +349,33 @@ Provide exactly one `RpcSerialization` layer. The load-bearing property is `incl
 | `RpcSerialization.layerNdjson` | `application/ndjson` | yes | newline-delimited JSON |
 | `RpcSerialization.layerJsonRpc({ contentType? })` | `application/json` | no | JSON-RPC 2.0 interop |
 | `RpcSerialization.layerNdJsonRpc({ contentType? })` | `application/json-rpc` | yes | JSON-RPC 2.0, newline-framed |
-| `RpcSerialization.layerMsgPack` | `application/msgpack` | yes | binary, smallest; msgpackr `useRecords: true` |
+| `RpcSerialization.layerMsgPack` | `application/msgpack` | yes | msgpackr `useRecords: true`; schema payloads still use JSON codecs |
+| `RpcSerialization.layerSchemaBinary(options?)` | `application/vnd.effect.rpc+schema-binary` | yes | schema-derived binary payloads and envelopes |
+
+### Schema-aware serialization (rc.112)
+
+`RpcSerialization.RpcSerialization`, `RpcClient.Protocol`, and
+`RpcServer.Protocol` now require `codecFor: RpcSerialization.CodecFor`:
+
+```ts
+type CodecFor = <S extends Schema.Top>(schema: S) =>
+	Schema.Codec<S['Type'], unknown, S['DecodingServices'], S['EncodingServices']>;
+```
+
+Forward the selected serialization's `codecFor` when implementing a protocol.
+This selects codecs for payloads, successes, errors, defects, and stream elements;
+envelope framing remains the serialization's responsibility. Existing JSON,
+NDJSON, JSON-RPC, and MsgPack wire formats keep their JSON-compatible schema
+codecs. Workers supply `Schema.toCodecJson` themselves over structured clone and
+still need no serialization layer. Cluster network traffic follows the protocol
+codec; cluster persistence continues to use JSON.
+
+`layerSchemaBinary({ maxFrameSize?, fingerprintPayloads? })` must be selected on
+both peers. The default maximum frame size is 16 MiB. Envelopes use fingerprints
+and a connection-local string dictionary. Payload fingerprints default to `false`
+to allow compatible schema evolution; enable them for strict layout agreement.
+This is an Effect RPC format, not generic MsgPack or JSON-RPC interoperability.
+See `effect-schema-composition` for binary layout/ownership constraints.
 
 Rules, verified against the protocol implementations and the e2e matrix:
 
@@ -608,7 +634,7 @@ it.effect('GetUser', () =>
 
 ### Transport integration tests
 
-For exercising a real transport in-process, use `NodeHttpServer.layerTest` (provides both `HttpServer` and `HttpClient` on a random port) under your normal server+client layers — `packages/platform-node/test/RpcServer.test.ts` is the template; it runs one shared e2e suite against http/ws/tcp with the serializations each transport supports (plain json only over ws).
+For exercising a real transport in-process, use `NodeHttpServer.layerTest` (provides both `HttpServer` and `HttpClient` on a random port) under your normal server+client layers — `packages/platform/node/test/RpcServer.test.ts` is the template. Framed formats support byte streams; unframed HTTP buffers the response. Verify the selected transport/serialization pair rather than assuming every pairing streams.
 
 ### Unit-testing one handler
 
@@ -628,6 +654,7 @@ const myProtocol = RpcServer.Protocol.make((writeRequest) =>
 		const disconnects = yield* Queue.make<number>();
 		// wire your transport: on inbound data → writeRequest(clientId, message)
 		return {
+			codecFor: Schema.toCodecJson, // or the selected serialization.codecFor
 			disconnects,
 			send: (clientId, response, _transferables) => sendToTransport(clientId, response),
 			end: (clientId) => Effect.void,
@@ -752,7 +779,7 @@ const ServerLayer = RpcServer.layer(StoreRpcs, { concurrency: 1 }).pipe(
 2. **Forgetting `protocol: 'http'` on `layerHttp`.** The default is `'websocket'` — your `POST /rpc` curl returns 404 and only a `GET` upgrade route exists. Also note `layerHttp` takes `{ group, path, ... }` as one options bag, while `layer(group, options)` takes the group positionally.
 3. **Providing handlers/middleware but no `Protocol` or `RpcSerialization`.** `RpcServer.layer` requires all of: handler layer(s), middleware implementation layers, a `layerProtocol*`, and (for non-worker protocols) a `RpcSerialization.layer*`. Missing ones surface as unresolved layer requirements.
 4. **`layerJson` on a raw TCP socket server.** No framing — decode breaks when messages span chunks. Sockets need `layerNdjson`, `layerNdJsonRpc()`, or `layerMsgPack`. (WebSocket is fine with `layerJson` — ws frames messages itself.)
-5. **Streaming rpcs over `layerProtocolHttp` + `layerJson` and wondering why chunks arrive all at once.** Unframed HTTP buffers the whole response until every request in the call finishes. Use a framed serialization to get a chunked streaming response, and remember HTTP has no acks → no backpressure either way.
+5. **Streaming rpcs over `layerProtocolHttp` + `layerJson` and wondering why chunks arrive all at once.** Unframed HTTP buffers the whole response until every request in the call finishes. Framed HTTP streams incrementally with a bounded response queue (`streamBufferSize`, default 16). HTTP has no RPC acknowledgment protocol, but the bounded queue still backpressures producers; full-duplex transports additionally support RPC acks.
 6. **Leaving `disableFatalDefects: false` in production.** One handler `die` then nukes every in-flight request on that connection with a connection-level defect. Set `true` to confine defects to the failing request.
 7. **Assuming `concurrency` is per-client.** It is one semaphore per server instance shared by all clients. Use `Rpc.fork` to exempt cheap read handlers instead of raising the global limit.
 8. **Treating `Rpc.fork`/`Rpc.uninterruptible` as rpc options.** They wrap the handler's *returned* Effect/Stream: `db.get(id).pipe(Rpc.fork)`. There is no `{ fork: true }` key on `Rpc.make`.

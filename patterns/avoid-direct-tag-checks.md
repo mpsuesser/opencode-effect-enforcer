@@ -21,7 +21,7 @@ suggestSkills:
 ```haskell
 -- Transformation
 directCheck :: Event → Bool
-directCheck e = e._tag == "FactRecorded"   -- fragile, poor narrowing
+directCheck e = e._tag == "FactRecorded"   -- narrows, but not exhaustive
 
 -- Instead
 $is   :: Tag → Event → Bool                -- from TaggedEnum
@@ -51,4 +51,10 @@ isFactRecorded = $is "FactRecorded"
 -- Refactoring-safe: rename tag in one place
 ```
 
-Direct `_tag` checks don't narrow types correctly. Use `$is` for predicates or `$match` for exhaustive pattern matching via `Data.taggedEnum`.
+TypeScript correctly narrows literal `_tag` checks. Prefer exported guards and
+matching helpers for consistent semantics and exhaustiveness as variants evolve.
+For schema-first models use union `.guards`, `.match`, or `Schema.is`; class
+variants can also use `instanceof`. `Schema.toTaggedUnion` supports discriminator
+keys beyond `_tag`. In rc.112, `.matchOrElse` adds partial matching with a typed
+fallback. For trusted `Data.taggedEnum` values use `$is` / `$match`; `$is` checks
+only the tag and is not structural validation of unknown input.

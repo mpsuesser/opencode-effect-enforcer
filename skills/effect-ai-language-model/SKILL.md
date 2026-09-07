@@ -226,12 +226,12 @@ Streaming text, reasoning, and tool parameters use matching `id` values across s
 const collectText = streamText.pipe(
 	Stream.filter((part) => part.type === 'text-delta'),
 	Stream.map((part) => part.delta),
-	Stream.runFold('', (acc, delta) => acc + delta)
+	Stream.runFold(() => '', (acc, delta) => acc + delta)
 );
 
 // Process chunks efficiently
 const processChunks = streamText.pipe(
-	Stream.mapChunksEffect((chunk) =>
+	Stream.mapArrayEffect((chunk) =>
 		Effect.gen(function* () {
 			const parts = Array.from(chunk);
 			// Process batch of parts
@@ -241,20 +241,14 @@ const processChunks = streamText.pipe(
 	)
 );
 
-// Aggregate response with side effects
-let combined: Array<StreamPart> = [];
-const aggregated = streamText.pipe(
-	Stream.mapChunks((chunk) => {
-		combined = [...combined, ...chunk];
-		return chunk;
-	}),
-	Stream.ensuring(
-		Effect.sync(() => {
-			// Finalization logic with full response
-			console.log('Total parts:', combined.length);
-		})
-	)
-);
+// Allocate per stream run; keep side effects in tap/mapArrayEffect.
+const aggregated = Stream.suspend(() => {
+	let count = 0;
+	return streamText.pipe(
+		Stream.tap(() => Effect.sync(() => { count += 1; })),
+		Stream.ensuring(Effect.suspend(() => Effect.logDebug('Total parts:', count)))
+	);
+});
 ```
 
 ## toolChoice Options

@@ -36,9 +36,9 @@ Key files:
 - `packages/effect/src/unstable/workflow/WorkflowProxy.ts` + `WorkflowProxyServer.ts` — workflow ↔ RPC/HTTP bridge
 - `packages/effect/src/unstable/cluster/ClusterWorkflowEngine.ts` — production workflow engine backed by sharding + storage
 - `packages/effect/src/unstable/reactivity/AtomRpc.ts` — reactive RPC client for Atom UIs (see also `effect-atom-rpc` skill)
-- `packages/platform-node/src/NodeClusterHttp.ts` / `NodeClusterSocket.ts` — Node "all-in-one" cluster layers
-- `packages/platform-bun/src/BunClusterHttp.ts` / `BunClusterSocket.ts` — Bun equivalents
-- `packages/platform-node/test/RpcServer.test.ts` + `test/fixtures/rpc-{schemas,e2e}.ts` — best end-to-end reference for real RPC wiring
+- `packages/platform/node/src/NodeClusterHttp.ts` / `NodeClusterSocket.ts` — Node "all-in-one" cluster layers
+- `packages/platform/bun/src/BunClusterHttp.ts` / `BunClusterSocket.ts` — Bun equivalents
+- `packages/platform/node/test/RpcServer.test.ts` + `test/fixtures/rpc-{schemas,e2e}.ts` — best end-to-end reference for real RPC wiring
 - `packages/effect/test/cluster/TestEntity.ts` + `test/cluster/Entity.test.ts` — best reference for Entity + makeTestClient
 
 ## Imports
@@ -606,7 +606,10 @@ client.Subscribe({ topic: 't' }, {
 });
 ```
 
-`discard: true` removes the error channel — the request is sent and acknowledged; the result and any failure are discarded. Use for fire-and-forget commands (especially against persistent entities).
+`discard: true` skips response decoding and removes response-side failures;
+transport and required client-middleware failures can still occur. A successful
+send is not proof that the server completed the operation. Cluster persistent
+messages additionally have their documented storage/delivery outcomes.
 
 `asQueue: true` is useful when you need finer control than a `Stream` gives you — e.g., you want to take only one chunk, then drop it. The end-of-stream signal is `Cause.Done` in the queue's error channel.
 
@@ -685,15 +688,21 @@ const ConnectionHooksLayer = Layer.succeed(RpcClient.ConnectionHooks, {
 
 ### `RpcSchema.ClientAbort`
 
-When a client interrupts a streaming subscription, the server-side handler's `onInterrupt` finalizer sees a `Cause` carrying the `ClientAbort` annotation. Use it to distinguish client cancel from server shutdown:
+When a client interrupts a subscription, inspect interrupt reasons in the exit
+cause for the `ClientAbort` annotation. `onInterrupt` receives interruptor IDs,
+not a Cause; use `onExit` to distinguish client cancel from server shutdown:
 
+<!-- typecheck -->
 ```ts
 import { RpcSchema } from 'effect/unstable/rpc';
-import { Cause, Context } from 'effect';
+import { Cause, Effect, Exit, Stream } from 'effect';
+import * as Arr from 'effect/Array';
 
-const subscribeHandler = stream.pipe(
-	Effect.onInterrupt((cause) => {
-		const isClientAbort = Context.has(cause, RpcSchema.ClientAbort);
+declare const stream: Stream.Stream<string>;
+const subscribeHandler = stream.pipe(Stream.runDrain,
+	Effect.onExit((exit) => {
+		const isClientAbort = Exit.isFailure(exit) && Arr.some(exit.cause.reasons, (reason) =>
+			Cause.isInterruptReason(reason) && reason.annotations.has(RpcSchema.ClientAbort.key));
 		return Effect.logInfo('subscribe ended', { isClientAbort });
 	})
 );
@@ -782,10 +791,17 @@ The choice of serialization is load-bearing because of *framing*. Some transport
 | Layer | Content-Type | Framed? | Use for | Notes |
 |---|---|---|---|---|
 | `RpcSerialization.layerJson` | `application/json` | no | `layerProtocolHttp` | Default JSON over request/response |
-| `RpcSerialization.layerNdjson` | `application/ndjson` | yes (newline) | `layerProtocolWebsocket`, sockets, http+stream | Newline-delimited JSON; required for streaming |
+| `RpcSerialization.layerNdjson` | `application/ndjson` | yes (newline) | `layerProtocolWebsocket`, sockets, http+stream | Newline-delimited JSON; one of several streaming formats |
 | `RpcSerialization.layerJsonRpc()` | `application/json` (configurable) | no | JSON-RPC 2.0 interop | Maps `_tag` to `method`; preserves batched arrays |
 | `RpcSerialization.layerNdJsonRpc()` | `application/json-rpc` (configurable) | yes (newline) | JSON-RPC 2.0 over sockets | |
-| `RpcSerialization.layerMsgPack` | `application/msgpack` | yes (msgpack frames) | binary transports | Smallest wire size; native binary; uses `useRecords: true` |
+| `RpcSerialization.layerMsgPack` | `application/msgpack` | yes (msgpack frames) | binary transports | JSON-compatible schema codecs; uses `useRecords: true` |
+| `RpcSerialization.layerSchemaBinary(options?)` | `application/vnd.effect.rpc+schema-binary` | yes | binary transports, framed HTTP | schema-aware binary payloads and envelopes |
+
+In rc.112 serializations and both protocol services require `codecFor`.
+Custom protocols forward it from the serialization; custom JSON-compatible
+protocols can use `Schema.toCodecJson`. Cluster network codecs now follow the
+transport while persistent message storage remains JSON. See `effect-rpc-server`
+for the complete contract, binary options, and compatibility constraints.
 
 `RpcSerialization.makeMsgPack(options?)` lets you customize msgpackr (`useRecords`, `useFloat32`, etc.).
 
@@ -793,7 +809,7 @@ Picking the wrong one is a real bug:
 
 - `layerJson` over a websocket → no framing → the first chunk past the first message is misinterpreted
 - `layerMsgPack` against a JSON-only HTTP client → garbled responses
-- `layerNdjson` against `layerProtocolHttp` → works, but framing is wasted; clients have to wait for the response to end
+- `layerNdjson` against `layerProtocolHttp` → streams incrementally through a bounded response queue (default 16), without RPC acks
 
 ## Testing — `RpcTest.makeClient`
 
@@ -1347,6 +1363,15 @@ The generated **RPC** payload wraps the original payload as `{ entityId: string,
 
 As of beta.106, `EventLogEncryption.encrypt` returns `{ iv, encryptedEntry }` for every input entry, and `EventLogMessage.WriteEntries.encryptedEntries` carries `{ entryId, iv, encryptedEntry }` values. A fresh AES-GCM IV is generated per entry. This changes the encrypted replication wire format: upgrade encrypted event-log clients and servers together rather than performing a mixed-version rolling deployment.
 
+In rc.112, `EventJournal.withRemoteUncommited` (spelling intentional) receives a
+non-empty readonly entry array in its callback and returns `Effect<Option<A>, ...>`.
+No pending entries means `None` and the callback is not invoked; `Some(result)`
+means it ran. Update adapters/tests that assumed every flush calls the writer.
+EventLog retries transient remote write failures with exponential backoff from
+200 ms (factor 1.5), capped at 10 seconds, so pending local entries synchronize
+after recovery. Preserve journal acknowledgment/idempotency semantics in custom
+remotes rather than adding an independent retry loop.
+
 ### `WorkflowProxy` — workflow → RPC / HTTP
 
 ```ts
@@ -1371,6 +1396,11 @@ class Api extends HttpApi.make('api')
 To namespace the generated rpcs, pass `prefix` as the **second** argument: `WorkflowProxy.toRpcGroup(myWorkflows, { prefix: 'wf.' })`. The server handlers must use the same prefix: `WorkflowProxyServer.layerRpcHandlers(myWorkflows, { prefix: 'wf.' })`.
 
 These proxies are how you give a frontend or an external system a typed RPC/HTTP surface that drives durable workflows, without leaking workflow-engine internals.
+
+In rc.112 workflow discard endpoints return a `Schema.String` execution ID
+instead of `void`, for both RPC and HTTP. Call the generated `<Name>Discard` RPC
+normally to receive it; passing the RPC client's `{ discard: true }` option
+discards even that ID. Entity discard endpoints keep their separate contract.
 
 ## Cluster + workflow integration — `ClusterWorkflowEngine`
 
@@ -1620,4 +1650,4 @@ const usersByName = Effect.gen(function*() {
 - For production cluster, use `NodeClusterSocket.layer` / `NodeClusterHttp.layer` (or the Bun equivalents) unless you specifically need to assemble layers manually.
 - Size `maxResidentEntities` and `unprocessedMessageBatchSize` deliberately for the runner's memory and storage throughput.
 - Match transport ↔ serialization: HTTP → `layerJson`; sockets/websocket/streaming → `layerNdjson` or `layerMsgPack`.
-- Pattern-match on `client.GetUser(...).pipe(Effect.catchTag('UserNotFound', ...), Effect.catchFilter(...))` for typed recovery; reserve broad `Effect.catchAll` for the runtime boundary.
+- Pattern-match on `client.GetUser(...).pipe(Effect.catchTag('UserNotFound', ...), Effect.catchFilter(...))` for typed recovery; reserve broad `Effect.catch` for an explicit boundary recovery policy.

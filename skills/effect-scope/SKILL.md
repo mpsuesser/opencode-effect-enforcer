@@ -305,6 +305,11 @@ Close semantics (from `internal/effect.ts` `scopeCloseFinalizers`):
 - The scope transitions to `Closed` *before* finalizers run, so finalizers registered from inside finalizers execute immediately.
 - You can inspect `scope.state._tag` (`'Empty' | 'Open' | 'Closed'`) and `scope.strategy` directly.
 
+In rc.112, `Scope.State.Open` stores `finalizerKey` / `finalizer` inline and
+allocates its optional `finalizers` map only for additional entries. Avoid
+constructing or mutating that representation; use `Scope.addFinalizer*` and
+`Scope.close`. LIFO order and failure-preserving cleanup still apply.
+
 Manual scopes are warranted when a resource's lifetime does not align with any effect's lexical extent — for example a connection cached between requests, a resource handed off to another fiber, or interop with non-Effect lifecycle callbacks (`Scope.makeUnsafe` + `Scope.closeUnsafe` from a `dispose()` method).
 
 ---
@@ -493,6 +498,31 @@ Semantics (verified in `ScopedRef.ts` and its tests):
 - `ScopedRef.set` is dual: `ref.pipe(ScopedRef.set(acquire))` also works.
 
 For keyed collections of scoped resources, see `LayerMap` (`ai-docs/src/01_effect/04_resources/30_layer-map.ts`); for capacity-managed pools, see `Pool` (`packages/effect/src/Pool.ts` — `Pool.make` returns a scoped pool whose `Pool.get(pool)` is itself scoped per item). `ScopedCache` is covered by the `effect-cache` skill.
+
+### Callback-scoped pool checkout (rc.112)
+
+Prefer `Pool.use(pool, use)` when one callback owns the entire borrow. It returns
+the item on success, failure, or interruption without adding `Scope` to the
+caller's requirements. Pool construction still needs an owning scope. Use
+`Pool.get` when the caller deliberately owns a longer checkout scope.
+
+<!-- typecheck -->
+```ts
+import { Effect, Pool } from 'effect';
+
+const program = Effect.gen(function* () {
+	const pool = yield* Pool.make({
+		acquire: Effect.succeed('connection'),
+		size: 2
+	});
+	return yield* Pool.use(pool, (connection) => Effect.succeed(connection.length));
+}).pipe(Effect.scoped);
+```
+
+`Effect.scoped(Pool.get(pool))` releases the checkout before the returned item is
+used outside that effect. Put the use inside the scope or use `Pool.use`.
+`Pool.State` / `Pool.PoolItem` changed in rc.112 (incremental usage and intrusive
+FIFO tracking); use the public checkout/invalidation APIs rather than their fields.
 
 ---
 

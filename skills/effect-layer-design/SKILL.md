@@ -554,69 +554,35 @@ const services = Layer.mergeAll(UserServiceLayer, OrderServiceLayer).pipe(
 
 If downstream code does not need the dependency, use `Layer.provide` and keep it hidden. Do not preserve every intermediate service by default.
 
-## Pattern: SynchronizedRef + Deferred State Machine
+## Pattern: Share Work With a Cache
 
-For services that need atomic state transitions with concurrent callers, use `SynchronizedRef.modifyEffect` combined with `Deferred` for result sharing:
+For lazy one-shot result sharing, allocate `Effect.cached(work)` once inside the
+service's layer. It shares in-flight work and the completed result (including
+failure). Do not reallocate the cache on each method call.
 
+<!-- typecheck -->
 ```typescript
-import { Deferred, Effect, Fiber, Scope, SynchronizedRef } from 'effect';
+import { Context, Effect, Layer } from 'effect';
 
-type State<A, E> =
-	| { readonly _tag: 'Idle' }
-	| {
-			readonly _tag: 'Running';
-			readonly done: Deferred.Deferred<A, E>;
-			readonly fiber: Fiber.Fiber<A, E>;
-	  }
-	| { readonly _tag: 'Pending'; readonly done: Deferred.Deferred<A, E> };
+class Settings extends Context.Service<Settings, {
+	readonly load: Effect.Effect<string>;
+}>()('app/Settings') {}
 
-const make = <A, E>(scope: Scope.Scope) => {
-	const ref = SynchronizedRef.makeUnsafe<State<A, E>>({ _tag: 'Idle' });
-
-	const run = (work: Effect.Effect<A, E>) =>
-		SynchronizedRef.modifyEffect(
-			ref,
-			Effect.fnUntraced(function* (state) {
-				switch (state._tag) {
-					case 'Running':
-						// Already running — share the existing result
-						return [Deferred.await(state.done), state];
-					case 'Idle': {
-						// Start new work
-						const done = yield* Deferred.make<A, E>();
-						const fiber = yield* Effect.forkIn(
-							work.pipe(Effect.intoDeferred(done)),
-							scope
-						);
-						return [
-							Deferred.await(done),
-							{ _tag: 'Running' as const, done, fiber }
-						];
-					}
-					case 'Pending': {
-						// Queued — share the pending result
-						return [Deferred.await(state.done), state];
-					}
-				}
-			})
-		).pipe(Effect.flatten);
-
-	return { run };
-};
+const layer = Layer.effect(Settings, Effect.gen(function* () {
+	const load = yield* Effect.cached(Effect.succeed('settings'));
+	return Settings.of({ load });
+}));
 ```
 
-Key properties:
+For refresh use `Effect.cachedInvalidateWithTTL(work, Duration.infinity)` and
+expose the returned invalidation effect. For keyed retention use `Cache`,
+`ScopedCache`, `RcMap`, or `LayerMap` according to resource lifetime (see
+`effect-cache`). `LayerMap.contextEffectOption` in rc.112 atomically retains an
+already-cached layer context without allocating a missing key.
 
-- **`SynchronizedRef.modifyEffect`** — atomically reads state, runs an effect, and updates state in one operation. No other caller can interleave.
-- **`Deferred`** — shares the result of in-flight work with concurrent callers who arrive while it's running.
-- **`Effect.forkIn(work, scope)`** — ties the worker fiber to the service scope, not the calling fiber.
-- The state machine pattern ensures at most one concurrent execution of `work`, with all callers sharing the same result.
-
-Use this pattern when:
-
-- Multiple concurrent callers may trigger the same expensive operation
-- Only one execution should run at a time
-- All callers should receive the same result
+When the requirement is a restartable worker, latest-wins scheduling, or queued
+state transitions, use a dedicated coordinator with explicit states and a
+supervised fiber lifetime (see `effect-fiber`). A cache is not a job scheduler.
 
 ## Naming Convention
 

@@ -53,7 +53,7 @@ Layer.mergeAll(
 )
 ```
 
-Every server runner now requires a non-empty `protocols` option. Put the preferred fallback revision first; an exact initialization offer is selected when present, otherwise the first adapter is used where the transport permits fallback. Streamable HTTP rejects an explicit unsupported `MCP-Protocol-Version` header with `400`.
+Every server runner requires a non-empty `protocols` option. Put the preferred fallback revision first; an exact initialization offer is selected when present, otherwise the first adapter is used where the transport permits fallback. In rc.112, `initialize` negotiates from its body even if the client sends an unsupported default `MCP-Protocol-Version` header. The header is checked only on subsequent requests; unsupported explicit versions there still return `400`. Do not reject the initialization request in custom middleware before body negotiation.
 
 ## Protocol Revisions
 

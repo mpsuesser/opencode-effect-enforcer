@@ -14,12 +14,17 @@ Browse and read files there directly to look up APIs, types, and implementations
 
 Reference this for:
 
-- Testing utilities: `packages/effect/src/Testing.ts`
+- Testing utilities: `packages/effect/src/testing/`
 - @effect/vitest source: `packages/vitest/`
 - Migration guide: `MIGRATION.md`
 - Effect source: `packages/effect/src/`
 
 ## Framework Selection
+
+Keep `@effect/vitest` aligned with the Effect release. The rc.112 adapter's
+Vitest peer range is `>=4.1.0 <5.0.0`; do not install it into a Vitest 3 project
+without migrating that project's test framework. Plain compiler/inventory tests
+can keep using their existing Vitest runner without the adapter.
 
 **CRITICAL**: Choose the correct testing framework based on the code being tested.
 
@@ -168,13 +173,13 @@ import {
 	assertFalse,
 	assertSome, // For Option.Some
 	assertNone, // For Option.None
-	assertSuccess, // For Either.Right / Exit.Success
-	assertFailure // For Either.Left / Exit.Failure
+	assertSuccess, // For Result.Success / Exit.Success
+	assertFailure // For Result.Failure / Exit.Failure
 } from '@effect/vitest/utils';
-import { Effect, Option, Either } from 'effect';
+import { Effect, Option, Result } from 'effect';
 
 declare const someOptionalEffect: Effect.Effect<Option.Option<number>>;
-declare const someEitherEffect: Effect.Effect<Either.Either<number, Error>>;
+declare const someResultEffect: Effect.Effect<Result.Result<number, Error>>;
 declare const expectedValue: number;
 
 it.effect('with effect assertions', () =>
@@ -182,8 +187,8 @@ it.effect('with effect assertions', () =>
 		const option = yield* someOptionalEffect;
 		assertSome(option, expectedValue);
 
-		const either = yield* someEitherEffect;
-		assertSuccess(either, expectedValue);
+		const result = yield* someResultEffect;
+		assertSuccess(result, expectedValue);
 	})
 );
 ```
@@ -223,7 +228,10 @@ const TestUserService = Layer.mock(UserService)({
 });
 ```
 
-`Layer.mock(Service)({...})` is shorthand for `Layer.succeed(Service, Service.of({...}))` — use whichever reads more clearly in context.
+`Layer.mock` accepts a partial implementation and supplies defecting stubs for
+omitted methods. It is not equivalent to a complete, compiler-checked
+`Layer.succeed(Service, Service.of({...}))`. Prefer complete fakes for reusable
+test services; use partial mocks only when omitted operations should defect.
 
 ### First-Class Controllable Test Services
 
@@ -809,7 +817,7 @@ import { Effect, Logger } from 'effect';
 it.effect('logs visible', () =>
 	Effect.gen(function* () {
 		yield* Effect.log('This will appear');
-	}).pipe(Effect.provide(Logger.pretty))
+	}).pipe(Effect.provide(Logger.layer([Logger.consolePretty()])))
 );
 
 // Use it.live only when the live console itself is under test.
@@ -857,23 +865,23 @@ describe('UserService', () => {
 });
 ```
 
-### Testing STM Operations
+### Testing Transactions
+
+In v4, transactional collections use `TxRef` and `Effect.tx`; there is no
+separate `STM` effect type or `STM.commit`. Test rollback as well as success:
 
 ```typescript
 import { it, expect } from '@effect/vitest';
-import { Effect, STM, TRef } from 'effect';
+import { Effect, TxRef } from 'effect';
 
-it.effect('should handle concurrent updates', () =>
+it.effect('rolls back a failed transaction', () =>
 	Effect.gen(function* () {
-		const counter = yield* TRef.make(0);
-
-		const increment = STM.updateAndGet(counter, (n) => n + 1);
-
-		yield* STM.commit(increment);
-		yield* STM.commit(increment);
-
-		const final = yield* STM.commit(TRef.get(counter));
-		expect(final).toBe(2);
+		const counter = yield* TxRef.make(0);
+		yield* Effect.gen(function* () {
+			yield* TxRef.set(counter, 1);
+			return yield* Effect.fail('cancel');
+		}).pipe(Effect.tx, Effect.flip);
+		expect(yield* TxRef.get(counter)).toBe(0);
 	})
 );
 ```
@@ -882,14 +890,14 @@ it.effect('should handle concurrent updates', () =>
 
 ```typescript
 import { it, expect } from '@effect/vitest';
-import { Effect, STM } from 'effect';
+import { Effect } from 'effect';
 
 declare const GCounter: {
 	make: (id: string) => Effect.Effect<unknown>;
-	increment: (counter: unknown, value: number) => STM.STM<void>;
-	query: (counter: unknown) => STM.STM<unknown>;
-	merge: (counter: unknown, state: unknown) => STM.STM<void>;
-	value: (counter: unknown) => STM.STM<number>;
+	increment: (counter: unknown, value: number) => Effect.Effect<void>;
+	query: (counter: unknown) => Effect.Effect<unknown>;
+	merge: (counter: unknown, state: unknown) => Effect.Effect<void>;
+	value: (counter: unknown) => Effect.Effect<number>;
 };
 
 declare const ReplicaId: (id: string) => string;
@@ -899,13 +907,13 @@ it.effect('should merge states correctly', () =>
 		const counter1 = yield* GCounter.make(ReplicaId('replica-1'));
 		const counter2 = yield* GCounter.make(ReplicaId('replica-2'));
 
-		yield* STM.commit(GCounter.increment(counter1, 10));
-		yield* STM.commit(GCounter.increment(counter2, 20));
+		yield* Effect.tx(GCounter.increment(counter1, 10));
+		yield* Effect.tx(GCounter.increment(counter2, 20));
 
-		const state2 = yield* STM.commit(GCounter.query(counter2));
-		yield* STM.commit(GCounter.merge(counter1, state2));
+		const state2 = yield* Effect.tx(GCounter.query(counter2));
+		yield* Effect.tx(GCounter.merge(counter1, state2));
 
-		const result = yield* STM.commit(GCounter.value(counter1));
+		const result = yield* Effect.tx(GCounter.value(counter1));
 		expect(result).toBe(30);
 	})
 );

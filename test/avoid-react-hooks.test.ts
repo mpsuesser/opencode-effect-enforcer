@@ -24,7 +24,7 @@ testPattern({
   ],
   shouldNotMatch: [
     "const state = Atom.make(0)",
-    "const vm = ViewModel.make()",
+    "const runtime = Atom.runtime(AppLayer)",
     "useAtomValue(stateAtom)",
     "const value = Atom.get(atom)",
     "Effect.gen(function* () {})",

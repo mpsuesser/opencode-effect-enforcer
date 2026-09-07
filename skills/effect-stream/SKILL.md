@@ -355,13 +355,44 @@ stream.pipe(
 
 ---
 
-## 4. Encoding & Decoding (NDJSON / Msgpack)
+## 4. Encoding & Decoding (NDJSON / Msgpack / SchemaBinary)
 
 Use `Stream.pipeThroughChannel` with codec channels from `effect/unstable/encoding`.
 
 ```ts
 import { Ndjson, Msgpack } from 'effect/unstable/encoding';
 ```
+
+### Schema-derived binary frames (rc.112)
+
+<!-- typecheck -->
+```ts
+import { Stream } from 'effect';
+import * as Schema from 'effect/Schema';
+import { SchemaBinary } from 'effect/unstable/encoding';
+
+class Reading extends Schema.Class<Reading>('Reading')({
+	id: Schema.String,
+	value: Schema.Number
+}) {}
+
+const roundTrip = Stream.make(new Reading({ id: 'sensor-1', value: 21 })).pipe(
+	Stream.pipeThroughChannel(SchemaBinary.encode(Reading)()),
+	Stream.pipeThroughChannel(SchemaBinary.decode(Reading, { maxFrameSize: 1024 })()),
+	Stream.runCollect
+);
+```
+
+`encode(schema)()` and `decode(schema)()` are channel factories; use them with
+`Stream.pipeThroughChannel`. Input chunks can split or concatenate frames.
+The decoder retains completed values before a later failure and fails with
+`Schema.SchemaError` on an incomplete final frame. Decoding/encoding services
+from schema transformations remain in the channel requirements. `maxFrameSize`
+limits decoding only. Keep paired schemas/options compatible, and copy any
+arena-backed encoded bytes that must survive later writes. For synchronous
+framing/dictionaries use `SchemaBinary.encoder` and `parser`; `duplex` adapts a
+bidirectional channel. See `effect-schema-composition` for codec layout,
+fingerprints, and ownership. Use `RpcSerialization.layerSchemaBinary` for RPC.
 
 ### Text decoding (split multi-byte characters)
 

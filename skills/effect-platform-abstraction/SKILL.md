@@ -16,7 +16,7 @@ Reference this for:
 - Path source: `packages/effect/src/Path.ts`
 - Crypto source: `packages/effect/src/Crypto.ts`
 - Socket source: `packages/effect/src/unstable/socket/`
-- Platform layers: `packages/platform-node/`, `packages/platform-bun/`, and `packages/platform-browser/`
+- Platform layers: `packages/platform/node/`, `packages/platform/bun/`, and `packages/platform/browser/`
 - Migration guide: `MIGRATION.md`
 - Effect source: `packages/effect/src/`
 

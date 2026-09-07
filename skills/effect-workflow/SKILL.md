@@ -125,6 +125,12 @@ yield* SendEmail.resume(executionId);
 
 ### Deterministic Execution ID
 
+As of rc.112, generated `WorkflowProxy.toRpcGroup` `<Name>Discard` RPCs and
+`WorkflowProxy.toHttpApiGroup` discard HTTP endpoints also return the execution
+ID (`Schema.String`). Consumers can persist that ID to poll/resume the workflow.
+Update generated client response types and tests that expected `void`; ordinary
+RPC `discard: true` call options still discard the response and cannot return it.
+
 The execution ID is computed as a hash of `"${name}-${idempotencyKey(payload)}"`. This means executing the same workflow with the same payload is idempotent — it returns the existing execution rather than starting a new one.
 
 ```ts

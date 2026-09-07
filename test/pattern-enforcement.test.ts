@@ -30,7 +30,7 @@ const temporaryPattern = async (content: string) => {
 
 describe("pattern feedback policy", () => {
   it("loads all patterns as post-write advisory feedback", async () => {
-    expect(await patterns).toHaveLength(46)
+    expect(await patterns).toHaveLength(45)
     expect((await patterns).every((pattern) => pattern.event === "after")).toBe(true)
   })
 
