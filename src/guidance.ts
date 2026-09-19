@@ -60,7 +60,6 @@ export const withPluginPolicy = (guidance: string): string =>
   [
     guidance,
     "OpenCode Effect Enforcer policy:",
-    "- The bundled effect-* skills are available through OpenCode's skill tool. Load at least four relevant skills before planning or writing Effect code.",
     "- Treat post-write pattern feedback as an immediate review request. Fix valid findings before continuing.",
     "- Pattern findings are advisory: explain intentional exceptions or false positives instead of changing correct code."
   ].join("\n\n---\n\n")
