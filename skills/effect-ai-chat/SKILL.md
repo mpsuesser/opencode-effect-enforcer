@@ -231,7 +231,7 @@ const program = Effect.gen(function* () {
 		timeToLive: '1 hour' // optional TTL
 	});
 
-	// chat is a `Chat.Persisted` — same API as Chat.Service but auto-saves
+	// chat is a `Chat.Persisted` — same API as Chat.Chat but auto-saves
 	const response = yield* chat
 		.generateText({
 			prompt: 'Hello!'
@@ -245,7 +245,7 @@ const program = Effect.gen(function* () {
 });
 ```
 
-The `Persisted` interface extends `Chat.Service` with:
+The `Persisted` interface extends `Chat.Chat` with:
 
 - `id: string` — the chat identifier in the store
 - `save: Effect<void, AiError | PersistenceError>` — manual save trigger

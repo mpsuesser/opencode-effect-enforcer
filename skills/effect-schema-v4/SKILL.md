@@ -20,7 +20,7 @@ Reference this for:
 
 ## 1. Key Renames (find-and-replace safe)
 
-### Current type model (rc.112)
+### Type model
 
 `Schema.Schema<T>` describes only the decoded type. Preserve wire types and
 services with `Schema.Codec<T, E, RD, RE>`: decoded Type, Encoded representation,
@@ -35,13 +35,13 @@ schema helpers so concrete schema operations are retained.
 | `typeSchema(schema)`          | `toType(schema)`                    |                                           |
 | `asSchema(schema)`            | `revealCodec(schema)`               |                                           |
 | `equivalence()`               | `toEquivalence()`                   |                                           |
-| `arbitrary()`                 | `toArbitrary()`                     | Returns a factory that accepts the `fast-check` module |
+| `arbitrary()`                 | `Arbitrary.schema(schema)`          | Native `effect/unstable/arbitrary`; fast-check bridge removed |
 | `pretty()`                    | `toFormatter()`                     |                                           |
-| `parseJson()`                 | `fromJsonString(Schema.Unknown)`    | `UnknownFromJsonString` is internal as of beta.103 |
+| `parseJson()`                 | `fromJsonString(Schema.Unknown)`    | Public unknown-JSON codec |
 | `parseJson(schema)`           | `fromJsonString(schema)`            | With-schema version                       |
-| `TaggedErrorClass`            | `TaggedError`                       | Renamed in beta.104                       |
-| `ErrorClass`                  | `Error`                             | Renamed in beta.104                       |
-| `Error` (instance schema)     | `ErrorInstance`                     | Renamed in beta.104                       |
+| `TaggedErrorClass`            | `TaggedError`                       | Tagged error constructor |
+| `ErrorClass`                  | `Error`                             | Error constructor |
+| `Error` (instance schema)     | `ErrorInstance`                     | Error instance schema |
 | `BigIntFromSelf`              | `BigInt`                            |                                           |
 | `SymbolFromSelf`              | `Symbol`                            |                                           |
 | `URLFromSelf`                 | `URL`                               |                                           |
@@ -66,7 +66,7 @@ schema helpers so concrete schema operations are retained.
 | `standardSchemaV1`            | `toStandardSchemaV1`                |                                           |
 | `nonEmptyString`              | `isNonEmpty()`                      | Now used with `.check()`                  |
 | `disableValidation`           | `disableChecks`                     | In `MakeOptions` for Class constructors   |
-| standalone `SchemaError` module | `Schema.SchemaError`              | The root `SchemaError` namespace export was removed in rc.108; use `Schema.isSchemaError` to narrow |
+| standalone `SchemaError` module | `Schema.SchemaError`              | Use `Schema.isSchemaError` to narrow |
 
 ### Parser/Codec Function Renames
 
@@ -161,7 +161,7 @@ const isNegative = Schema.isLessThan(0);
 const isNonPositive = Schema.isLessThanOrEqualTo(0);
 ```
 
-For the common non-negative safe-integer domain, use the canonical `Schema.Natural` added in beta.102 instead of composing checks manually.
+For the non-negative safe-integer domain, use `Schema.Natural`.
 
 ### Custom Filters
 
@@ -252,7 +252,7 @@ import {
 
 const NumberFromString = Schema.String.pipe(
 	Schema.decodeTo(Schema.Number, {
-		decode: SchemaGetter.transformOrFail((s) =>
+		decode: SchemaGetter.transformEffect((s) =>
 			Option.match(Number.parse(s), {
 				onNone: () =>
 					Effect.fail(
@@ -386,8 +386,8 @@ const fallback = SchemaGetter.withDefault(Effect.succeed('viewer'));
 - `Schema.resolveInto` was renamed to `Schema.resolveAnnotations`.
 - `Schema.resolveAnnotationsKey(schema)` returns key-level annotations.
 - `Schema.annotateEncoded({...})` annotates the encoded side of a transformed schema; use `Schema.annotate({...})` for the decoded Type side.
-- Schemas are directly extendable as classes; `Schema.asClass` was removed in beta.102.
-- `Schema.toArbitrary(schema)` returns a factory that must be called with the `fast-check` module; `Schema.toArbitraryLazy` and arbitrary derivation reports were removed in beta.106.
+- Schemas are directly extendable as classes.
+- Derive native generators with `Arbitrary.schema(schema)` from `effect/unstable/arbitrary`. See `effect-testing` for sampling, bounded generation, shrinking, and replay.
 - New built-in schemas:
     - `Schema.DateFromString`
     - `Schema.BigIntFromString`
@@ -404,7 +404,7 @@ const fallback = SchemaGetter.withDefault(Effect.succeed('viewer'));
 
 ```ts
 import { Effect, Schema } from 'effect';
-import * as FastCheck from 'fast-check';
+import { Arbitrary } from 'effect/unstable/arbitrary';
 
 class UserName extends Schema.NonEmptyString {
 	static readonly decodeUnknownSync = Schema.decodeUnknownSync(this);
@@ -428,8 +428,7 @@ const duration = Schema.DurationFromString;
 
 const parsed = Schema.String.makeEffect('alice');
 
-const makeNameArbitrary = Schema.toArbitrary(Schema.NonEmptyString);
-const nameArbitrary = makeNameArbitrary(FastCheck);
+const nameArbitrary = Arbitrary.schema(Schema.NonEmptyString);
 ```
 
 ### Graph Schemas
@@ -493,12 +492,12 @@ The input is `{ ast, occurrences, identifier }`; return a name to extract that c
 
 The standalone `SchemaError` root module was removed. Parser adapters such as `Schema.decodeUnknownEffect` fail with `Schema.SchemaError`, which contains the structured `issue`; narrow unknown failures with `Schema.isSchemaError`. By contrast, schema/class `makeEffect` and constructor defaults fail directly with `SchemaIssue.Issue`.
 
-In rc.112, `SchemaError` skips stack-frame capture for lower construction cost.
+`SchemaError` skips stack-frame capture for lower construction cost.
 Use its `issue` and formatter/message for validation diagnostics; a captured
 parser-error stack is not a diagnostic contract. Synchronous parser optimizations
 do not change the choice between constructors, sync decoders, and Effect decoders.
 
-### Partial tagged-union matching (rc.112)
+### Partial tagged-union matching
 
 `Schema.TaggedUnion(...)` and `Schema.Union([...]).pipe(Schema.toTaggedUnion(tag))`
 now expose `matchOrElse(value, cases, fallback)` and its curried
@@ -508,7 +507,7 @@ one behavior. The `toTaggedUnion` helper narrows the fallback to omitted variant
 the direct `TaggedUnion` overload types its fallback as the full union.
 Neither matcher decodes unknown input. See `effect-pattern-matching` for a checked example.
 
-### JSON Schema import, conversion, and Standard Schema (rc.112)
+### JSON Schema import, conversion, and Standard Schema
 
 - `SchemaRepresentation.fromJsonSchemaDocument` rejects unsupported references,
   validation keywords, object/array `const` or `enum` values, and intersections
@@ -526,6 +525,50 @@ Neither matcher decodes unknown input. See `effect-pattern-matching` for a check
   schemas with `Schema.toStandardSchemaV1`; the new module is not a schema builder.
 - Binary encoding is available from `effect/unstable/encoding` as `SchemaBinary`.
   See `effect-schema-composition` for codecs and `effect-stream` for framing.
+
+## Parsing and compilation contracts
+
+- Pass parse options to decoder, encoder, or constructor adapters. `parseOptions`
+  annotations no longer affect parsing, and operation options apply throughout
+  the complete parse. `propertyOrder` is removed; order presentation explicitly.
+- `onExcessProperty` supports `"ignore"` and `"error"`. Model retained extra fields
+  with `Schema.Record` or `Schema.StructWithRest`, rather than unvalidated preserve.
+- Parsing concurrency applies to product children (arrays, tuples, fields, record
+  entries), defaults to sequential, and applies independently at each nesting.
+  Union candidates remain sequential. Concurrent transformed record-key collisions
+  retain the value that finishes last.
+- Declared fields may be inherited and are copied to own output properties;
+  dynamic record keys remain own-only and `__proto__` remains own-only. Enforce
+  ownership at the boundary when the protocol requires own declared fields.
+- Class `make`, `makeOption`, and `makeEffect` preserve existing instances. Use
+  `new MyClass(fields)` for a distinct instance. Class equivalence now compares
+  declared fields, excluding unrelated runtime properties.
+- `TemplateLiteral` rejects encoded/transformed parts, even in nested templates
+  or unions. Use `TemplateLiteralParser` for transformed tuple parts and provide
+  their decoding/encoding services. Its encoded projection validates the template.
+- JSON Schema generation uses `onExcessProperty`, replacing its former
+  `additionalProperties` option; generated objects are open by default. Schema-valued
+  extra properties belong in Record/StructWithRest. `Enum` rejects non-finite
+  members; `isMultipleOf` rejects zero/non-finite divisors and normalizes negatives.
+- Built-in revivers live in `SchemaRepresentation`; constructors are
+  `makeReviverDeclaration`, `makeReviverFilter`, and `makeReviverFilterGroup`.
+  `toEncoderXml` fails directly with `SchemaIssue.Issue`.
+- For tooling, use `SchemaAST.AST` and named instance interfaces rather than
+  `SchemaAST.Base` or constructor prototype types. Union mode is
+  `ast.options?.mode` (default `anyOf`); migrate persisted representation documents.
+  `SchemaAST.Context.constructorDefault` holds an Effect directly, not a Link.
+- JSON Schema imports support `{ not: {} }` and closed single-pattern records
+  with `patterns: "apply"`. Open patterned objects and references beneath a nested
+  `$id` are rejected; flatten references or explicitly choose to ignore constraints.
+
+Experimental JIT/AOT compilation uses the existing `SchemaParser` APIs. Opt in
+globally with `effect/unstable/schema/SchemaJITCompiler/enable` or selectively with
+`SchemaJITCompiler.enable(ast)`. AOT's `SchemaAOTCompiler/Build` discovers direct
+schema exports from explicit loaders and writes a self-installing module via
+FileSystem/Path. Choose prepared operations explicitly: omitted operations use
+the interpreter, and detailed effectful parsing remains the fallback. Keep the
+interpreter as the default unless measured performance warrants compilation;
+use AOT where dynamic function construction is unavailable.
 
 ## 8. New Modules
 
@@ -563,16 +606,28 @@ const DurationFromString = Schema.String.pipe(
 
 ### SchemaGetter
 
-Single-direction transform primitives. A `Getter<T, E, R>` is `Option<E> → Effect<Option<T>, Issue, R>`. Key exports:
+Single-direction transform primitives. `Getter<T, E, R>` is a tagged
+union of synchronous, optional, and effectful transformations. Interpret one with
+`SchemaGetter.run(getter, option)` to obtain `Effect<Option<T>, Issue, R>`.
+Getter values expose only `pipe`; use standalone dual `map`, `compose`, and `run`.
+Key exports:
 
 - `transform(fn)` — pure map over present values
-- `transformOrFail(fn)` — fallible map returning `Effect`
+- `transformEffect(fn)` — fallible map of a present value returning `Effect`
+- `transformOptionalEffect(fn)` — effectful map that handles missing values too
 - `transformOptional(fn)` — full `Option<E> → Option<T>` control (for optional field transforms)
 - `passthrough()` — identity getter
 - `withDefault(effect)` — provide a default `Effect` for missing values
 - `required()` — fail if value is missing
 - `checkEffect(fn)` — effectful validation
 - `String()`, `Number()`, `Boolean()`, `BigInt()`, `Date()` — coercion getters
+
+Use `transformOptionalEffect` instead of constructing a Getter directly.
+Use `transformEffect` / `transformOptionalEffect` instead of `onSome` / `onNone`.
+`SchemaGetter.forbiddenEncoding` is the encode getter for a decode-only codec.
+For transformation pairs, use `SchemaTransformation.makeTransformation` and
+the standalone dual `composeTransformation(first, second)`; transformations and
+middleware support `.pipe`.
 
 ```ts
 import { Schema, SchemaGetter } from 'effect';
@@ -680,7 +735,7 @@ class Cat extends Schema.TaggedClass<Cat>()('Cat', {
 
 ## 10. TaggedError
 
-`Schema.TaggedErrorClass` was renamed to `Schema.TaggedError` in beta.104. The constructor pattern is unchanged:
+Define yieldable tagged errors with `Schema.TaggedError`:
 
 ```ts
 import { Effect, Schema } from 'effect';

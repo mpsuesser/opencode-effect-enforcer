@@ -18,7 +18,7 @@ Key files:
 - `packages/effect/src/unstable/rpc/RpcServer.ts` — `make`, `layer`, `layerHttp`, every `layerProtocol*` and `toHttpEffect*`
 - `packages/effect/src/unstable/rpc/RpcClient.ts` — `make`, `Protocol`, every `layerProtocol*`, `withHeaders`, `CurrentHeaders`, `ConnectionHooks`
 - `packages/effect/src/unstable/rpc/RpcMiddleware.ts` — `Service` constructor, `layerClient`
-- `packages/effect/src/unstable/rpc/RpcSerialization.ts` — json/ndjson/jsonRpc/ndJsonRpc/msgPack codecs and their layers
+- `packages/effect/src/unstable/rpc/RpcSerialization.ts` — JSON/NDJSON/JSON-RPC/SchemaBinary codecs and layers
 - `packages/effect/src/unstable/rpc/RpcTest.ts` — in-process test client
 - `packages/effect/src/unstable/rpc/RpcWorker.ts` — `InitialMessage` for worker transports
 - `packages/effect/src/unstable/rpc/RpcSchema.ts` — `Stream` schema marker, `ClientAbort` cause annotation
@@ -99,7 +99,7 @@ import { BunClusterHttp, BunClusterSocket } from '@effect/platform-bun';
 ## Architecture at a Glance
 
 ```
-                   wire format (json | ndjson | msgpack | jsonRpc | ndJsonRpc)
+                   wire format (json | ndjson | schema-binary | jsonRpc | ndJsonRpc)
                                           │
        ┌──────────────┐        Protocol   │   Protocol         ┌──────────────┐
        │  RpcClient   │  ───────────────► │ ◄───────────────── │  RpcServer   │
@@ -794,21 +794,24 @@ The choice of serialization is load-bearing because of *framing*. Some transport
 | `RpcSerialization.layerNdjson` | `application/ndjson` | yes (newline) | `layerProtocolWebsocket`, sockets, http+stream | Newline-delimited JSON; one of several streaming formats |
 | `RpcSerialization.layerJsonRpc()` | `application/json` (configurable) | no | JSON-RPC 2.0 interop | Maps `_tag` to `method`; preserves batched arrays |
 | `RpcSerialization.layerNdJsonRpc()` | `application/json-rpc` (configurable) | yes (newline) | JSON-RPC 2.0 over sockets | |
-| `RpcSerialization.layerMsgPack` | `application/msgpack` | yes (msgpack frames) | binary transports | JSON-compatible schema codecs; uses `useRecords: true` |
 | `RpcSerialization.layerSchemaBinary(options?)` | `application/vnd.effect.rpc+schema-binary` | yes | binary transports, framed HTTP | schema-aware binary payloads and envelopes |
 
-In rc.112 serializations and both protocol services require `codecFor`.
+Serializations and both protocol services require `codecFor`.
 Custom protocols forward it from the serialization; custom JSON-compatible
 protocols can use `Schema.toCodecJson`. Cluster network codecs now follow the
 transport while persistent message storage remains JSON. See `effect-rpc-server`
 for the complete contract, binary options, and compatibility constraints.
 
-`RpcSerialization.makeMsgPack(options?)` lets you customize msgpackr (`useRecords`, `useFloat32`, etc.).
+SchemaBinary is the default cluster network serialization. Select NDJSON explicitly
+for JSON transport. Event-log persistence and remote messages also use SchemaBinary;
+coordinate persisted-data and peer format changes. Cluster message storage uses
+its own JSON codecs: when a reply cannot be stored, waiting callers receive the
+same defect fallback that storage records.
 
 Picking the wrong one is a real bug:
 
 - `layerJson` over a websocket → no framing → the first chunk past the first message is misinterpreted
-- `layerMsgPack` against a JSON-only HTTP client → garbled responses
+- SchemaBinary against a JSON-only HTTP client → incompatible responses
 - `layerNdjson` against `layerProtocolHttp` → streams incrementally through a bounded response queue (default 16), without RPC acks
 
 ## Testing — `RpcTest.makeClient`
@@ -1232,7 +1235,7 @@ The Node and Bun platform packages ship opinionated all-in-one layers that wire 
 import { NodeClusterSocket } from '@effect/platform-node';
 
 const ClusterLayer = NodeClusterSocket.layer({
-	serialization: 'msgpack', // or 'ndjson'; default 'msgpack'
+	serialization: 'binary', // or 'ndjson'; default 'binary'
 	clientOnly: false, // true → don't bind a server port
 	storage: 'sql', // 'sql' | 'memory' | 'byo'; default 'sql'
 	runnerHealth: 'ping', // 'ping' | 'k8s'; default 'ping'
@@ -1361,9 +1364,9 @@ The generated **RPC** payload wraps the original payload as `{ entityId: string,
 
 ### Encrypted Event-Log Compatibility
 
-As of beta.106, `EventLogEncryption.encrypt` returns `{ iv, encryptedEntry }` for every input entry, and `EventLogMessage.WriteEntries.encryptedEntries` carries `{ entryId, iv, encryptedEntry }` values. A fresh AES-GCM IV is generated per entry. This changes the encrypted replication wire format: upgrade encrypted event-log clients and servers together rather than performing a mixed-version rolling deployment.
+`EventLogEncryption.encrypt` returns `{ iv, encryptedEntry }` for every input entry, and `EventLogMessage.WriteEntries.encryptedEntries` carries `{ entryId, iv, encryptedEntry }` values. Each entry uses a fresh AES-GCM IV. Encrypted replication peers must agree on the wire format.
 
-In rc.112, `EventJournal.withRemoteUncommited` (spelling intentional) receives a
+`EventJournal.withRemoteUncommited` (spelling intentional) receives a
 non-empty readonly entry array in its callback and returns `Effect<Option<A>, ...>`.
 No pending entries means `None` and the callback is not invoked; `Some(result)`
 means it ran. Update adapters/tests that assumed every flush calls the writer.
@@ -1397,7 +1400,7 @@ To namespace the generated rpcs, pass `prefix` as the **second** argument: `Work
 
 These proxies are how you give a frontend or an external system a typed RPC/HTTP surface that drives durable workflows, without leaking workflow-engine internals.
 
-In rc.112 workflow discard endpoints return a `Schema.String` execution ID
+Workflow discard endpoints return a `Schema.String` execution ID
 instead of `void`, for both RPC and HTTP. Call the generated `<Name>Discard` RPC
 normally to receive it; passing the RPC client's `{ discard: true }` option
 discards even that ID. Entity discard endpoints keep their separate contract.
@@ -1622,7 +1625,7 @@ const usersByName = Effect.gen(function*() {
 3. **Treating `Rpc.fork` and `Rpc.uninterruptible` like options.** They are wrappers — apply with `.pipe(Rpc.fork)` on the handler's return value.
 4. **Forgetting `primaryKey` on entity rpcs that need dedup.** Without it, retried sends are *not* deduplicated; this is critical for clustered handlers that should be idempotent.
 5. **Using `JSON.parse`/`JSON.stringify` on rpc payloads.** Schemas already round-trip; if you need a JSON string boundary, use `Schema.fromJsonString(...)`.
-6. **Picking `layerJson` for a streaming or socket transport.** No framing → message corruption. Use `layerNdjson` or `layerMsgPack`.
+6. **Picking unframed JSON for raw TCP or incremental HTTP streaming.** Use `layerNdjson` or `layerSchemaBinary()`.
 7. **Forgetting `Layer.provide(AuthClient)` on a `requiredForClient: true` middleware.** Compile error, but a confusing one if you don't know to look.
 8. **Using `WorkflowEngine.layerMemory` in production.** It is testing-only; use `ClusterWorkflowEngine.layer` plus a real cluster bundle.
 9. **Forgetting `ShardingConfig` when using `Entity.makeTestClient`.** `TestRunner.layer` provides one; `makeTestClient` does not.
@@ -1649,5 +1652,5 @@ const usersByName = Effect.gen(function*() {
 - Use `RpcTest.makeClient` for handler tests and `Entity.makeTestClient` for entity tests; reach for `TestRunner.layer` for full-cluster integration tests.
 - For production cluster, use `NodeClusterSocket.layer` / `NodeClusterHttp.layer` (or the Bun equivalents) unless you specifically need to assemble layers manually.
 - Size `maxResidentEntities` and `unprocessedMessageBatchSize` deliberately for the runner's memory and storage throughput.
-- Match transport ↔ serialization: HTTP → `layerJson`; sockets/websocket/streaming → `layerNdjson` or `layerMsgPack`.
+- Match serialization to framing: unframed JSON for whole messages; NDJSON or SchemaBinary for byte streams and incremental responses.
 - Pattern-match on `client.GetUser(...).pipe(Effect.catchTag('UserNotFound', ...), Effect.catchFilter(...))` for typed recovery; reserve broad `Effect.catch` for an explicit boundary recovery policy.

@@ -9,11 +9,11 @@ This skill covers the **contract layer**: the definitions that client and server
 
 ## Effect Source Reference
 
-In rc.112 schema encoding is selected by the transport's `codecFor`, rather
+Schema encoding is selected by the transport's `codecFor`, rather
 than being fixed to canonical JSON for every protocol. Preserve the schemas and
 their decoding/encoding requirements in shared contracts; custom protocol
 implementations must supply `codecFor` (see `effect-rpc-client` /
-`effect-rpc-server`). Existing JSON, NDJSON, JSON-RPC, and MsgPack formats keep
+`effect-rpc-server`). JSON, NDJSON, and JSON-RPC formats use
 their wire representation; the new SchemaBinary transport has its own codecs.
 
 The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules are under `unstable` and move between betas.
@@ -627,5 +627,5 @@ it('GetUser exits round-trip', () => {
 11. **Mutating in place.** `annotate`, `prefix`, `middleware`, `setSuccess`, etc. all return new `Rpc`/`RpcGroup` values; discarding the return value is a no-op.
 12. **Renaming or re-prefixing rpcs after deployment.** `_tag` is the wire identity; old clients will send tags the server no longer knows. Treat tag changes like breaking schema changes.
 13. **Passing a union to `Schema.Union` variadically.** v4 takes an array: `Schema.Union([OrderError, RateLimited])`, not `Schema.Union(OrderError, RateLimited)`.
-14. **Declaring errors as plain `Schema.Struct`s.** Use `Schema.TaggedError` (or `Schema.Error` with a `Schema.tag` field) so errors are yieldable, `catchTag`-able, and carry a stable `_tag` on the wire. The former `Schema.TaggedErrorClass` / `Schema.ErrorClass` names were removed in beta.104.
+14. **Declaring errors as plain `Schema.Struct`s.** Use `Schema.TaggedError` (or `Schema.Error` with a `Schema.tag` field) so errors are yieldable, `catchTag`-able, and carry a stable `_tag` on the wire.
 15. **Expecting stack traces in remote defects.** The default `Schema.Defect()` strips stacks; opt in per rpc with `defect: Schema.Defect({ includeStack: true })`.

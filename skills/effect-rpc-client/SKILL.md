@@ -15,7 +15,7 @@ Key files:
 
 - `packages/effect/src/unstable/rpc/RpcClient.ts` — `make`, `makeNoSerialization`, the `Protocol` service, `layerProtocolHttp`/`layerProtocolSocket`/`layerProtocolWorker` (+ `makeProtocol*`), `CurrentHeaders`, `withHeaders`, `ConnectionHooks`
 - `packages/effect/src/unstable/rpc/RpcClientError.ts` — `RpcClientError` and `RpcClientDefect`
-- `packages/effect/src/unstable/rpc/RpcSerialization.ts` — `json`, `ndjson`, `jsonRpc`, `ndJsonRpc`, `msgPack` codecs, their layers, the `Parser` interface and `includesFraming`
+- `packages/effect/src/unstable/rpc/RpcSerialization.ts` — JSON, NDJSON, JSON-RPC, SchemaBinary codecs, their layers, the `Parser` interface and `includesFraming`
 - `packages/effect/src/unstable/rpc/RpcTest.ts` — `makeClient` in-process test client
 - `packages/effect/src/unstable/rpc/RpcWorker.ts` — `InitialMessage`, `layerInitialMessage`, `initialMessage`
 - `packages/effect/src/unstable/rpc/RpcMessage.ts` — wire vocabulary: `Request`, `Ack`, `Interrupt`, `Chunk`, `Exit`, `Defect`, `Ping`/`Pong`, `ClientProtocolError`, `RequestId`
@@ -30,7 +30,7 @@ A client is assembled from three replaceable layers plus your shared `RpcGroup` 
 ```
 RpcClient.make(group)                      typed methods, spans, request ids
 	requires: Protocol                        ← RpcClient.layerProtocolHttp / Socket / Worker
-		requires: RpcSerialization              ← RpcSerialization.layerJson / Ndjson / MsgPack / JsonRpc
+		requires: RpcSerialization              ← JSON / NDJSON / SchemaBinary / JSON-RPC layer
 		requires: transport service             ← HttpClient | Socket.Socket | WorkerPlatform + Spawner
 ```
 
@@ -263,14 +263,14 @@ const BrowserProtocolLive = RpcClient.layerProtocolSocket().pipe(
 );
 ```
 
-`Socket.layerWebSocket(url, { closeCodeIsError?, openTimeout?, protocols? })` requires a `WebSocketConstructor`; `layerWebSocketConstructorGlobal` uses `globalThis.WebSocket`. `NodeSocket.layerWebSocket` bundles the constructor.
+`Socket.layerWebSocket(url, { openTimeout?, protocols?, highWaterMark? })` requires a `WebSocketConstructor`; `layerWebSocketConstructorGlobal` uses `globalThis.WebSocket`. `NodeSocket.layerWebSocket` bundles the constructor. Close is a typed failure; reconnect policies reacquire the scoped reader.
 
 ### Raw TCP
 
 ```ts
 const TcpProtocolLive = RpcClient.layerProtocolSocket().pipe(
 	Layer.provide(NodeSocket.layerNet({ port: 9000 })),
-	Layer.provide(RpcSerialization.layerMsgPack)
+	Layer.provide(RpcSerialization.layerSchemaBinary())
 );
 ```
 
@@ -293,7 +293,7 @@ const TcpProtocolLive = RpcClient.layerProtocolSocket().pipe(
 
 Build your own with `RpcClient.Protocol.make((writeResponse, clientIds) => Effect<Omit<Service, 'run'>>)` — it buffers server responses per client until that client's `run` loop is installed. You rarely need this; prefer `RpcTest` for in-memory wiring (section 11).
 
-As of rc.112 the returned service must include `codecFor`, normally forwarded
+The returned service must include `codecFor`, normally forwarded
 from the selected `RpcSerialization` service. It chooses the schema codec for
 RPC payloads/results while the protocol handles envelopes. JSON-compatible
 custom transports can use `codecFor: Schema.toCodecJson`. Preserve the schema's
@@ -310,26 +310,27 @@ full `RpcSerialization.CodecFor` contract.
 |---|---|---|---|
 | `RpcSerialization.layerJson` | `application/json` | no | HTTP (response decoded once, as an array); WebSocket (each ws message is one frame already) |
 | `RpcSerialization.layerNdjson` | `application/ndjson` | yes (newline) | anything — the safe default; enables streaming over HTTP |
-| `RpcSerialization.layerMsgPack` | `application/msgpack` | yes (msgpack frames) | binary framing with JSON-compatible schema codecs; msgpackr `useRecords: true` |
 | `RpcSerialization.layerSchemaBinary(options?)` | `application/vnd.effect.rpc+schema-binary` | yes | schema-derived binary framing and payload codecs; pair on both peers |
 
 `layerSchemaBinary({ maxFrameSize?, fingerprintPayloads? })` defaults to a
 16 MiB frame limit and no payload fingerprint. Envelopes are fingerprinted and
 dictionary-enabled; payload fingerprints opt into strict layout agreement.
-Existing built-in formats retain their wire encoding in rc.112. Workers use
+Workers use
 `Schema.toCodecJson` with structured clone without a serialization layer.
 | `RpcSerialization.layerJsonRpc({ contentType? })` | `application/json` | no | JSON-RPC 2.0 interop over HTTP/WebSocket; maps rpc tag ↔ `method`, supports batch arrays |
 | `RpcSerialization.layerNdJsonRpc({ contentType? })` | `application/json-rpc` | yes (newline) | JSON-RPC 2.0 over sockets |
 
-Rules of thumb, verified by the upstream e2e matrix (http: ndjson/msgpack/ndJsonRpc; ws: ndjson/json/msgpack/jsonRpc; tcp: ndjson/msgpack/ndJsonRpc):
+Choose serialization according to transport framing:
 
-- **Raw TCP needs a framed codec** (`ndjson` / `msgPack` / `ndJsonRpc`) — plain `json` cannot find message boundaries in a byte stream.
+- **Raw TCP needs a framed codec** (NDJSON, SchemaBinary, or newline JSON-RPC) — plain JSON cannot find message boundaries in a byte stream.
 - **WebSocket works with any codec** including plain `json`, because the ws transport frames messages itself.
 - **HTTP + unframed (`json`/`jsonRpc`)**: the client buffers the whole response and expects a JSON array of response messages — streaming rpcs only flush when the response ends.
-- **HTTP + framed (`ndjson`/`msgPack`/`ndJsonRpc`)**: the client incrementally parses the response body — streaming rpc chunks arrive as the server emits them, over a single POST.
-- **Client and server must use the same codec.** A msgpack client against a json server garbles both directions.
+- **HTTP + framed serialization**: the client incrementally parses the response body — streaming rpc chunks arrive as the server emits them, over a single POST.
+- **Client and server must use the same codec.** SchemaBinary and JSON are distinct wire contracts.
 
-`RpcSerialization.makeMsgPack(options)` customizes msgpackr (`useRecords`, `useFloat32`, ...); wrap with `Layer.succeed(RpcSerialization.RpcSerialization)(RpcSerialization.makeMsgPack({ useRecords: false }))` if the peer cannot handle msgpackr record extensions.
+Use `layerSchemaBinary()` for schema-derived binary transport, and coordinate
+both peers when changing formats. Do not treat a serialization change as a
+transparent migration of persisted data.
 
 ---
 
@@ -666,7 +667,7 @@ const WorkerClientLive = UsersClient.layer.pipe(
 1. **Importing from `@effect/rpc`.** Gone in v4 — everything is `effect/unstable/rpc`. And `import { RpcClientError } from 'effect/unstable/rpc'` gives you a *namespace*; import the class from `effect/unstable/rpc/RpcClientError`.
 2. **Missing `Scope` for `RpcClient.make`.** The constructor is scoped. Build clients inside `Layer.effect(Tag)(RpcClient.make(group))` or under `Effect.scoped` — providing protocol layers alone will not discharge `Scope`.
 3. **Forgetting the client middleware layer.** A group with a `requiredForClient: true` middleware needs `Layer.provide(RpcMiddleware.layerClient(M, ...))` on the client (and in `RpcTest.makeClient`'s context). The compile error points at an unsatisfied `ForClient<M>` requirement — provide the layer, don't cast.
-4. **Wrong codec/transport pairing.** Raw TCP + `layerJson` corrupts framing — use `layerNdjson`/`layerMsgPack`/`layerNdJsonRpc`. Over HTTP, unframed `layerJson` buffers the whole response, so streaming rpcs stall until the request ends — use a framed codec. WebSocket alone is fine with any codec (the transport frames messages).
+4. **Wrong codec/transport pairing.** Raw TCP requires `layerNdjson`, `layerSchemaBinary()`, or `layerNdJsonRpc()`. HTTP with unframed JSON buffers the response; use a framed codec for streaming. WebSocket supplies its own framing.
 5. **Mismatched client/server serialization.** Both sides share one `RpcSerialization` choice; there is no negotiation. Garbled `RpcClientDefect: Error decoding ...` errors usually mean the codecs differ.
 6. **Reading mixed-case header names server-side.** `Headers.fromInput` lowercases keys: send `{ userId: '123' }`, read `headers.userid`. Same for `withHeaders` and middleware `Headers.set`.
 7. **Expecting `discard: true` to be error-free.** It only removes the rpc's *declared* error; `RpcClientError` and middleware errors remain, and over HTTP the POST round-trip is still awaited.

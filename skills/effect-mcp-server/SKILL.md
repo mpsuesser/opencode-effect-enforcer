@@ -53,14 +53,15 @@ Layer.mergeAll(
 )
 ```
 
-Every server runner requires a non-empty `protocols` option. Put the preferred fallback revision first; an exact initialization offer is selected when present, otherwise the first adapter is used where the transport permits fallback. In rc.112, `initialize` negotiates from its body even if the client sends an unsupported default `MCP-Protocol-Version` header. The header is checked only on subsequent requests; unsupported explicit versions there still return `400`. Do not reject the initialization request in custom middleware before body negotiation.
+Every server runner requires a non-empty `protocols` option. Put the preferred fallback revision first; an exact initialization offer is selected when present, otherwise the first adapter is used where the transport permits fallback. `initialize` negotiates from its body even when the client sends an unsupported default protocol header. Subsequent requests validate `MCP-Protocol-Version`; unsupported explicit versions return `400`. Let initialization reach body negotiation.
 
 ## Protocol Revisions
 
-Effect ships four dated adapters:
+Declare the protocol adapters the server supports:
 
 ```typescript
 const protocols = [
+	McpProtocol.v2026_07_28,
 	McpProtocol.v2025_11_25,
 	McpProtocol.v2025_06_18,
 	McpProtocol.v2025_03_26,
@@ -71,12 +72,25 @@ const protocols = [
 - `2024-11-05` and `2025-03-26` are compatibility revisions.
 - `2025-06-18` supports form elicitation.
 - `2025-11-25` adds sampling with tools, independently advertised form/URL elicitation modes, descriptor icons, and elicitation-complete notifications.
+- `2026-07-28` is available as `McpProtocol.v2026_07_28`.
 - Duplicate versions or an empty protocol declaration fail layer construction with `Cause.IllegalArgumentError`.
 - `v2024_11_05` over `layerHttp` uses Effect's single-endpoint Streamable HTTP compatibility transport. It does not recreate the historical two-endpoint HTTP+SSE transport, GET SSE, event resumption, session expiry, or client session termination.
 
 Each part layer has type `Layer.Layer<never, never, ...>` — they register themselves with the McpServer service and produce no output type.
 
 ## Tools and Toolkit
+
+Server options accept `instructions` for initialization/discovery. Prompt
+registration accepts `title`; callbacks receive decoded prompt parameters.
+
+`Tool.Strict` controls MCP input schema generation and argument validation.
+Strict dynamic tools require Effect schemas; raw JSON Schema is rejected at
+registration. Non-strict tools may use identified input schemas. Invalid arguments
+produce `InvalidParams` before protocol 2025-11-25 and `isError: true` on newer
+protocols. Declared handler failures return `isError: true` without
+`structuredContent`; only JSON objects are valid structured content.
+Declared failures are distinct from internal diagnostics. Defects and encoding
+failures are logged/reported while client-facing messages stay generic.
 
 ### Defining Tools
 
@@ -362,7 +376,9 @@ Layer.mergeAll(/* parts */).pipe(
 );
 ```
 
-**Critical**: When using stdio transport, logs MUST go to stderr. Any stdout output interferes with protocol communication. Use `Logger.consolePretty({ stderr: true })` or `Logger.LogToStderr`.
+For stdio transport, route logs to stderr with `Logger.LogToStderr`. Stdout is
+reserved for protocol messages. `Logger.consolePretty` controls formatting;
+the context reference controls its destination.
 
 ### HTTP Transport
 
@@ -525,7 +541,8 @@ const ServerLayer = Layer.mergeAll(
 		})
 	),
 	Layer.provide(NodeStdio.layer),
-	Layer.provide(Logger.layer([Logger.consolePretty({ stderr: true })]))
+	Layer.provide(Logger.layer([Logger.consolePretty()])),
+	Layer.provide(Layer.succeed(Logger.LogToStderr)(true))
 );
 
 Layer.launch(ServerLayer).pipe(NodeRuntime.runMain);

@@ -555,7 +555,7 @@ This is exactly what the FiberHandle/Map/Set runtime helpers wrap for you — pr
 
 ### Keep-alive and runMain
 
-In the current v4 runtime there is **no per-fiber keep-alive in the core runtime** (it existed earlier in v4 but was removed in beta.80; the `migration/fiber-keep-alive.md` doc predates the removal). A bare `Effect.runFork`/`Effect.runPromise` whose fiber is suspended on a pure Effect primitive (e.g. `Deferred.await`, `Effect.never`) does not by itself hold the Node.js process open.
+There is **no per-fiber keep-alive in the core runtime**. A bare `Effect.runFork`/`Effect.runPromise` whose fiber is suspended on a pure Effect primitive (e.g. `Deferred.await`, `Effect.never`) does not by itself hold the Node.js process open.
 
 `Runtime.makeRunMain`-based runners — `NodeRuntime.runMain` from `@effect/platform-node`, `BunRuntime.runMain`, etc. — install a long-interval timer that keeps the process alive until the main fiber completes, and additionally provide SIGINT/SIGTERM handling (interrupting the root fiber gracefully), exit-code mapping (interruption-only causes → 130), and error reporting. Always use `runMain` for long-lived program entry points:
 
@@ -724,7 +724,7 @@ const handoff = Effect.gen(function* () {
 10. **Expecting `onlyIfMissing: true` to error when occupied** — it succeeds, returning a shared already-interrupted fiber while keeping the existing one. Check `Exit.hasInterrupts(yield* Fiber.await(fiber))` to detect the rejected start.
 11. **Calling `run` on a closed collection** — `FiberHandle.run`/`FiberMap.run` interrupt the *calling* fiber; `FiberSet.run` and all `runtime()` runners return a pre-interrupted fiber instead. Neither throws.
 12. **Assuming collection fibers are children of the caller** — they are root fibers created via `Effect.runForkWith` with the caller's context: they start immediately and survive the calling fiber; only the collection (scope close, replacement, remove/clear) interrupts them.
-13. **Relying on `Effect.runFork`/`runPromise` to keep Node alive** — beta.80 removed the core fiber keep-alive; a fiber suspended on `Deferred.await`/`Effect.never` won't hold the process open. Use `NodeRuntime.runMain` (built on `Runtime.makeRunMain`).
+13. **Relying on `Effect.runFork`/`runPromise` to keep Node alive** — a fiber suspended on `Deferred.await`/`Effect.never` won't hold the process open. Use `NodeRuntime.runMain` (built on `Runtime.makeRunMain`).
 14. **Letting interruption leak through acquire/release** — wrap the whole sequence in `Effect.uninterruptibleMask` and `restore` only the use phase; pending interruption is delivered as soon as the region ends, so cleanup still runs exactly once.
 15. **Leaving collection type parameters off** — `FiberHandle.make()` defaults to `<unknown, unknown>`, making `join` surface `unknown` errors. Always pass them: `FiberHandle.make<A, E>()`, `FiberMap.make<K, A, E>()`, `FiberSet.make<A, E>()`.
 16. **Using v3 `FiberId` types** — v4 fiber ids are plain `number`s; `Cause.interruptors(cause)` and `Effect.onInterrupt` finalizers give you `ReadonlySet<number>`.

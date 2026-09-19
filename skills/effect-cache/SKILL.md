@@ -7,6 +7,15 @@ You are an Effect TypeScript expert specializing in in-memory caching with `Cach
 
 ## Effect Source Reference
 
+`Effect.cachedWithTTL` accepts either a fixed Duration input or an Exit-dependent
+TTL function, so success and failure retention can differ. Allocate the cache
+once in its owning layer. A zero TTL is explicit, not omission.
+For `LayerMap.Service({ preload: true, ... })`, preserve acquisition errors on
+the yielded service and `get` / `contextEffect` / `contextEffectOption`: an entry
+can fail when reacquired after successful preloading. Invalidating an active
+RcMap/LayerMap entry releases it after its last borrower closes; a replacement
+entry remains independently owned.
+
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
 
@@ -363,7 +372,7 @@ The full method surface (`get`, `getOption`, `getSuccess`, `set`, `has`, `invali
 
 ## 9. Services in Lookups (requireServicesAt)
 
-### Retain an existing keyed resource (rc.112)
+### Retain an existing keyed resource
 
 `RcMap.getOption(map, key)` atomically retains a cached entry for the caller's
 `Scope` before awaiting it. It returns `Option.none()` if the entry is missing or

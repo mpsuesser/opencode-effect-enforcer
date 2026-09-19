@@ -20,7 +20,7 @@ Use this skill when building React (or Atom-based) frontends that consume an exi
 For the underlying RPC definitions, see the `effect-rpc-cluster` skill.
 For Atom fundamentals (`Atom.make`, `family`, `keepAlive`, `AsyncResult`, hydration), see the `effect-atom-state` skill.
 
-The underlying RPC protocols require `codecFor` in rc.112. Built-in protocol
+The underlying RPC protocols require `codecFor`. Built-in protocol
 layers supply it; forward it when implementing a custom transport. You can pair
 `RpcSerialization.layerSchemaBinary` on client/server without changing query or
 mutation call sites; see `effect-rpc-client` for frame limits and compatibility.
@@ -28,6 +28,12 @@ Workflow proxy discard RPCs now return execution IDs, so their mutation success
 type is `string`. This is distinct from the client's `{ discard: true }` option.
 
 ## Effect Source Reference
+
+Query and mutation errors include client middleware errors. AtomHttpApi stream
+successes retain transport, decoding, and SSE failures in the stream error channel;
+handle them when consuming the stream. An explicit zero `timeToLive` disables
+default idle retention, so unmount/remount may dispose and refetch. Omission uses
+the registry default. HttpApi calls accept per-call `sseOptions`.
 
 - `packages/effect/src/unstable/reactivity/AtomRpc.ts` — the whole API (~270 lines)
 - `packages/effect/test/reactivity/AtomRpc.test.ts` — minimal usage + serialization test

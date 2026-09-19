@@ -206,7 +206,7 @@ const fileOperations = Effect.gen(function* () {
 });
 ```
 
-`fs.watch(directory)` reports direct-child changes by default; pass `{ recursive: true }` to include nested subdirectories. For open handles, `file.seek(offset, 'start' | 'current')` returns the new offset as a branded `FileSystem.Size`. The old `FileSystem.File.Descriptor` type and `file.descriptor` property were removed in beta.103; use scoped `File` methods instead.
+`fs.watch(directory)` reports direct-child changes by default; pass `{ recursive: true }` for nested subdirectories. `file.seek(offset, 'start' | 'current')` accepts and returns `bigint`; negative resulting positions fail without moving the cursor. File byte counts use `ByteSize.ByteSize`. Use scoped File methods for handle operations.
 
 **Streaming Files:**
 
@@ -782,10 +782,10 @@ declare const someOperation: Effect.Effect<string>;
 
 // ✅ CORRECT - Type-safe CLI with full Effect integration
 // Define arguments
-const inputArg = Argument.file('input');
+const inputArg = Argument.File('input');
 
 // Define flags
-const verboseFlag = Flag.boolean('verbose').pipe(Flag.withAlias('v'));
+const verboseFlag = Flag.Boolean('verbose').pipe(Flag.withAlias('v'), Flag.withDefault(false));
 
 // Define command
 const command = CliCommand.make(

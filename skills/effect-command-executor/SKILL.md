@@ -7,6 +7,12 @@ description: Spawn and manage child processes using Effect's ChildProcess module
 
 ## Overview
 
+Node process-group cleanup waits for the leader and descendants. Without
+`forceKillAfter`, cleanup waits up to one second without escalating. With it,
+the group receives SIGKILL at the deadline, then a final bounded wait. Native
+timers drive escalation even under TestClock. `exitCode` / `isRunning` describe
+the leader, not all descendants; do not use virtual time alone to prove OS cleanup.
+
 The `ChildProcess` module provides type-safe, composable process execution with automatic resource cleanup via `Scope`. Commands are AST values — built first with `make` and `pipeTo`, then executed via the `ChildProcessSpawner` service.
 
 **When to use this skill:**
@@ -131,7 +137,7 @@ const cmd = ChildProcess.make('node', ['script.js'], {
 
 `extendEnv` defaults to `false`. If `env` is supplied without `extendEnv: true`, it replaces the inherited child environment rather than merging with it.
 
-The `fd3`/`fd4` names above configure child-process stdio channels. They are unrelated to the `FileSystem.File.Descriptor` type removed in beta.103; process handles still expose `getInputFd(number)` and `getOutputFd(number)` for configured additional descriptors.
+The `fd3`/`fd4` names configure child-process stdio channels. Process handles expose `getInputFd(number)` and `getOutputFd(number)` for configured additional descriptors; use FileSystem's scoped handle operations for files.
 
 ### Combinators
 

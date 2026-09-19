@@ -125,7 +125,7 @@ yield* SendEmail.resume(executionId);
 
 ### Deterministic Execution ID
 
-As of rc.112, generated `WorkflowProxy.toRpcGroup` `<Name>Discard` RPCs and
+Generated `WorkflowProxy.toRpcGroup` `<Name>Discard` RPCs and
 `WorkflowProxy.toHttpApiGroup` discard HTTP endpoints also return the execution
 ID (`Schema.String`). Consumers can persist that ID to poll/resume the workflow.
 Update generated client response types and tests that expected `void`; ordinary
@@ -192,7 +192,7 @@ const sendWithRetry = Activity.make({
 
 `Activity.retry` accepts the same options as `Effect.retry` *minus* `schedule` — the activity owns the attempt counter, so retries are attempt-based (`times`, `until`, `while`, `catch`, etc.) rather than schedule-based.
 
-Because an `Activity` *is* an `Effect`, pipe it directly through compensation/retry combinators — there is no `.asEffect()` method (`Effect.Yieldable` was removed in beta.66):
+An `Activity` *is* an `Effect`; pipe it directly through compensation/retry combinators:
 
 ```ts
 yield* SomeActivity.pipe(
@@ -459,6 +459,17 @@ const AppLayer = Layer.mergeAll(MyWorkflowLayer, ApiWorker).pipe(
 ```
 
 Delivery is **at least once** per the backing `PersistedQueue`, so worker handlers must be **idempotent** and tolerate retries, duplicate observations, and worker restarts.
+
+Persisted queue processing policy belongs on `PersistedQueue.make`: `maxAttempts`
+defaults to 10 and `retrySchedule` determines redelivery delay. Attempts count on
+claim; exhausted and undecodable items are dead-lettered. Distinguish this policy
+from retrying a transient failure to offer an item.
+
+`DurableDeferred.into` requires the schema encoding services needed to persist the
+exit. Cluster handoff interrupts an abandoned workflow run attempt without
+persisting a business failure or running compensations; replay continues under
+the next owner. Keep durable completion and activity state under the workflow
+engine rather than adding local retry/wakeup bookkeeping.
 
 ## Compensation (Saga Pattern)
 

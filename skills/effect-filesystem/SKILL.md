@@ -207,16 +207,46 @@ const useFileHandle = Effect.gen(function* () {
 		Effect.gen(function* () {
 			const file = yield* fs.open('data.txt', { flag: 'r' });
 
-			// File methods return branded Size values for byte counts and offsets.
+			// Byte counts use ByteSize; seek positions are signed bigint inputs.
 			const buffer = new Uint8Array(1024);
 			const bytesRead = yield* file.read(buffer);
-			const offset = yield* file.seek(FileSystem.Size(0), 'start');
+			const offset = yield* file.seek(0n, 'start');
 		})
 	);
 });
 ```
 
-`file.seek(offset, from)` accepts a `SizeInput`, supports `from: 'start' | 'current'`, and returns the new offset as `FileSystem.Size` (not `void` or a plain number). Open `File` handles no longer expose a `descriptor` property or `File.Descriptor` type as of beta.103; use the scoped handle operations (`read`, `readAlloc`, `write`, `writeAll`, `seek`, `stat`, `sync`, and `truncate`) instead.
+`file.seek(offset, from)` accepts `bigint`, supports `from: 'start' | 'current'`,
+and returns `Effect<bigint, PlatformError>`. A negative resulting position fails
+without changing the cursor. Byte counts and `File.Info.size` use
+`ByteSize.ByteSize`; size inputs use `ByteSize.Input`. Keep large offsets/counts
+exact, and handle `Option.none()` for optional stat metadata outside the safe
+integer range. Use scoped handle operations (`read`, `readAlloc`, `write`,
+`writeAll`, `seek`, `stat`, `sync`, `truncate`) rather than raw descriptors.
+
+### Byte sizes and exact offsets
+
+<!-- typecheck -->
+```ts
+import { ByteSize, Effect, FileSystem } from 'effect';
+
+const inspect = Effect.gen(function* () {
+	const fs = yield* FileSystem.FileSystem;
+	const file = yield* fs.open('data.bin');
+	const position = yield* file.seek(0n, 'start');
+	const chunk = yield* file.readAlloc(64 * 1024);
+	return { position, chunk };
+}).pipe(Effect.scoped);
+const bodyLimit = ByteSize.mebibytes(1);
+const parsedLimit = ByteSize.fromString('1.5 MiB');
+```
+
+`ByteSize.Input` string literals are canonical non-negative integers with recognized
+units. Parse external strings or fractional quantities with `ByteSize.fromString`
+(or the explicitly throwing `fromStringUnsafe` at a controlled boundary).
+Do not convert large sizes/offsets to number and silently lose precision.
+Buffer allocation lengths (`readAlloc`) and per-buffer read/write counts are
+numbers. File stat sizes and streaming byte limits use ByteSize; seek uses bigint.
 
 ## Directory Operations
 
@@ -284,7 +314,7 @@ const getFileInfo = Effect.gen(function* () {
 
 	yield* Console.log(`Type: ${info.type}`);
 	// "File" | "Directory" | "SymbolicLink" | "BlockDevice" | "CharacterDevice" | "FIFO" | "Socket" | "Unknown"
-	yield* Console.log(`Size: ${info.size}`); // FileSystem.Size (branded bigint)
+	yield* Console.log(`Size: ${info.size}`); // ByteSize.ByteSize
 	yield* Console.log(`Modified: ${info.mtime}`); // Option<Date>
 	yield* Console.log(`Accessed: ${info.atime}`); // Option<Date>
 	yield* Console.log(`Created: ${info.birthtime}`); // Option<Date>

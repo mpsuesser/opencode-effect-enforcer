@@ -197,14 +197,14 @@ const byteStream = request.stream; // Stream<Uint8Array, HttpServerError> (singl
 
 Cap accepted body sizes with the `MaxBodySize` reference (re-exported from `HttpIncomingMessage`, default `undefined` = unlimited):
 
-On Node in rc.112, `remoteAddress` returns `Option.none()` after Node has cleared
+On Node, `remoteAddress` returns `Option.none()` after Node has cleared
 the incoming message's socket. Preserve absence; do not dereference the native
 socket after request cleanup. The same behavior applies to Node client responses.
 
 ```ts
 import { FileSystem } from 'effect';
 
-someEffect.pipe(Effect.provideService(HttpServerRequest.MaxBodySize, FileSystem.Size(1024 * 1024)));
+someEffect.pipe(Effect.provideService(HttpServerRequest.MaxBodySize, ByteSize.mebibytes(1)));
 ```
 
 ### Schema-validated decoding
@@ -624,7 +624,7 @@ Layer.launch(Main).pipe(BunRuntime.runMain);
 
 ```ts
 const server = yield* HttpServer.HttpServer;
-server.address; // { _tag: 'TcpAddress', hostname, port } | { _tag: 'UnixAddress', path }
+server.address; // NetAddress.SocketAddress; narrow to InetAddress before reading port
 HttpServer.formatAddress(server.address); // 'http://0.0.0.0:3000'
 yield* HttpServer.logAddress; // log it
 someServerLayer.pipe(HttpServer.withLogAddress); // log on startup
@@ -654,7 +654,7 @@ yield* HttpServer.serveEffect(httpEffect);
 
 ## 8. WebSocket Upgrades
 
-In `@effect/platform-bun` rc.112, outgoing WebSocket messages are compressed when
+In `@effect/platform-bun`, outgoing WebSocket messages are compressed when
 per-message deflate is configured **and negotiated**. The server option
 `websocket.compressionThreshold` sets the minimum byte size (default `1024`);
 smaller messages stay uncompressed. Configure it alongside
@@ -667,16 +667,18 @@ application payloads. See `packages/platform/bun/src/BunHttpServer.ts`.
 const WsRoute = HttpRouter.add('GET', '/ws', Effect.gen(function* () {
 	const request = yield* HttpServerRequest.HttpServerRequest;
 	const socket = yield* request.upgrade; // Effect<Socket.Socket, HttpServerError>
-	const write = yield* socket.writer; // scoped — the request Scope keeps it alive
-
-	// runs until the client disconnects; the handler receives each message
-	yield* socket.runString((message) => write(`echo: ${message}`));
-
-	return HttpServerResponse.empty(); // sent when the socket session ends
+	const writer = yield* socket.writer;
+	const pull = yield* Socket.readerString(socket);
+	yield* pull.pipe(
+		Effect.flatMap((batch) => Effect.forEach(batch, (message) => writer.write(`echo: ${message}`))),
+		Effect.forever,
+		Effect.catchReason('SocketError', 'SocketCloseError', () => Effect.void)
+	);
+	return HttpServerResponse.empty(); // the adapter does not write HTTP bytes after upgrade
 }));
 ```
 
-- `socket.run(handler)` for binary (`Uint8Array`) messages, `runString` for text, `runRaw` for both.
+- Acquire `socket.reader` for raw batches or `Socket.readerBytes` / `readerString` for converted pulls. Every close is a typed failure; handle closure at the protocol boundary.
 - `HttpServerRequest.upgradeChannel()` exposes the socket as a `Channel` for pipeline-style use.
 - `request.upgrade` fails with `HttpServerError` (`RequestParseError` reason) when the request is not upgradeable — e.g. in plain web-handler adapters that lack upgrade support.
 - For socket combinators, close events, and client sockets see the `effect-socket` skill.
@@ -684,6 +686,21 @@ const WsRoute = HttpRouter.add('GET', '/ws', Effect.gen(function* () {
 ---
 
 ## 9. Static Files (`HttpStaticServer`)
+
+`HttpServerResponse.file` calculates length from the file and requested range;
+it has no `contentLength` override. Explicit content types/headers take priority;
+web files then use nonempty `File.type`, then extension inference. Ranges clamp
+to EOF and retain exact bigint offsets. HEAD and statuses 204/205/304 omit the
+body and finalize request resources without starting omitted Effect streams.
+
+`HttpRouter.toWebHandler` and the layer-based `HttpEffect` web handlers start
+building their layers when created. Construction failures reject requests with
+the build error. Own and dispose that handler lifetime explicitly.
+
+Bound server addresses use `NetAddress.SocketAddress`. Use `NetAddress.formatIp`
+for numeric IP display, `formatHost` for host/port socket APIs, and the server URL
+helpers for IPv6-safe URLs. Bun/Deno listener layers can fail with `ServeError`
+when address conversion fails.
 
 ```ts
 const StaticFiles = HttpStaticServer.layer({

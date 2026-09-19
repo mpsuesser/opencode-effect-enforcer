@@ -13,7 +13,7 @@ and `effect-typeclass-design` for reusable predicate/order APIs.
 
 ## Source Reference
 
-Baseline: **Effect 4.0.0-rc.112**. In the Effect source reference, consult
+Baseline: **Effect 4.0.0-rc.116**. In the Effect source reference, consult
 `packages/effect/SCHEMA.md` and `packages/effect/src/{Schema,Match,DateTime,Order}.ts`.
 Verify the installed version and source tag before applying newer APIs.
 
@@ -159,7 +159,7 @@ message. Never claim the invariant is enforced solely because fields use
   `matchOrElse`. Use it when plain internal object variants are intentional.
 - `Data.TaggedEnum` is useful for trusted, non-schema types. It does not decode
   unknown input; do not duplicate a schema model with a parallel Data union.
-- Use `.match` for exhaustiveness. Use rc.112 `.matchOrElse(cases, fallback)` or
+- Use `.match` for exhaustiveness. Use `.matchOrElse(cases, fallback)` or
   `.matchOrElse(value, cases, fallback)` when one fallback truthfully handles all
   other cases. The fallback from `toTaggedUnion` is narrowed to unmatched
   variants; direct `Schema.TaggedUnion.matchOrElse` types it as the full union.
@@ -228,7 +228,7 @@ see `effect-schema-composition` for transformation and recursion details.
 - Use `Schema.toEquivalence` for model comparisons. `Eq.equals` provides general
   structural equality in v4, but schema equivalence expresses model intent.
 - Compose `Order.mapInput` / `Order.combine` and sort with `Arr.sort`. Finite
-  `Arr.groupBy` / `Iterable.groupBy` keys remain finite in rc.112, with optional
+  `Arr.groupBy` / `Iterable.groupBy` preserve finite keys, with optional
   properties: a particular group may not exist. Handle that absence explicitly.
 - Use `DateTime` for instants, `Duration` for intervals, and `DateTime.now` for
   effectful current time. Deterministic fixtures may use `DateTime.makeUnsafe`

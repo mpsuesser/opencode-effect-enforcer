@@ -21,10 +21,15 @@ Reference this for:
 
 ## Framework Selection
 
-Keep `@effect/vitest` aligned with the Effect release. The rc.112 adapter's
-Vitest peer range is `>=4.1.0 <5.0.0`; do not install it into a Vitest 3 project
+Keep `@effect/vitest` aligned with the Effect release. Its
+Vitest peer range is `>=5.0.0 <6.0.0`; do not install it into a Vitest 3 or 4 project
 without migrating that project's test framework. Plain compiler/inventory tests
 can keep using their existing Vitest runner without the adapter.
+
+The adapter requires Node.js `^22.12.0 || ^24.0.0 || >=26.0.0`. Use
+`{ concurrent: false }` for sequential suites, including named `layer` / `it.layer`
+suites. Await asynchronous assertions and finalizers. Define custom matchers
+through `vitest.Matchers` and import reporter types from `vitest/node`.
 
 **CRITICAL**: Choose the correct testing framework based on the code being tested.
 
@@ -367,7 +372,7 @@ layer(DatabaseLayer)((it) => {
 });
 ```
 
-A nested `it.layer` suite **reuses** the parent suite's memoized layer allocations rather than rebuilding them. As of beta.67, each nested suite also **forks its own memo map**, so layers allocated locally inside one nested suite are isolated from sibling nested suites and are released independently when that suite finishes. The practical effect: shared parent layers (e.g. `DatabaseLayer`) are built once and reused, while sibling-local allocations do not leak across siblings even in concurrent suites.
+A nested `it.layer` suite **reuses** the parent's memoized allocations and **forks its own memo map**. Parent layers are built once; local allocations are isolated from sibling suites and released when their suite finishes, including concurrent suites.
 
 ### Excluding Test Services
 
@@ -604,19 +609,21 @@ it.effect('should fail with specific error', () =>
 ### Using it.prop for Pure Properties
 
 ```typescript
-import { FastCheck } from 'effect/testing';
+import * as Schema from 'effect/Schema';
 import { it } from '@effect/vitest';
 
 it.prop(
 	'addition is commutative',
-	[FastCheck.integer(), FastCheck.integer()],
+	[Schema.Int, Schema.Int],
 	([a, b]) => a + b === b + a
 );
 
 // With object syntax
 it.prop(
 	'multiplication distributes',
-	{ a: FastCheck.integer(), b: FastCheck.integer(), c: FastCheck.integer() },
+	{ a: Schema.Int.check(Schema.isBetween({ minimum: -100, maximum: 100 })),
+	  b: Schema.Int.check(Schema.isBetween({ minimum: -100, maximum: 100 })),
+	  c: Schema.Int.check(Schema.isBetween({ minimum: -100, maximum: 100 })) },
 	({ a, b, c }) => a * (b + c) === a * b + a * c
 );
 ```
@@ -626,7 +633,7 @@ it.prop(
 ```typescript
 import { it } from '@effect/vitest';
 import { Effect, Context } from 'effect';
-import { FastCheck } from 'effect/testing';
+import * as Schema from 'effect/Schema';
 
 class Database extends Context.Service<
 	Database,
@@ -638,7 +645,7 @@ class Database extends Context.Service<
 
 it.effect.prop(
 	'database operations are idempotent',
-	[FastCheck.string(), FastCheck.integer()],
+	[Schema.String, Schema.Int],
 	([key, value]) =>
 		Effect.gen(function* () {
 			const db = yield* Database;
@@ -674,35 +681,41 @@ it.effect.prop('user validation works', { user: User }, ({ user }) =>
 );
 ```
 
-`it.prop` and `it.effect.prop` accept schemas directly and derive their arbitraries internally. For manual use, beta.106 consolidated derivation into `Schema.toArbitrary(schema)`, which returns a factory that must receive the fast-check module:
+`it.prop` and `it.effect.prop` accept schemas and native Arbitraries, composed
+with `Arbitrary.all`. For manual sampling use the interruptible native runner:
 
 ```typescript
-import { Schema } from 'effect';
-import { FastCheck } from 'effect/testing';
+import { Arbitrary } from 'effect/unstable/arbitrary';
 
-const UserArbitrary = Schema.toArbitrary(User)(FastCheck);
-const samples = FastCheck.sample(UserArbitrary, 10);
+const userArbitrary = Arbitrary.schema(User);
+const samples = Arbitrary.sampleEffect(userArbitrary, { count: 10, seed: 'users' });
 ```
 
-`Schema.toArbitraryLazy` and arbitrary derivation reports no longer exist.
+Generation is from the decoded schema Type. Compose with `map`, `flatMap`,
+`filter`, `filterMap`, `all`, and `array(item, { minLength, maxLength })`.
+Prefer constructive schemas over filters that exhaust the discard budget.
+`checkEffect` returns `Passed`, `Falsified`, `Exhausted`, or an invalid-replay
+result; inspect the outcome rather than treating completion as success. Preserve
+seeds, replay tokens, and important failing inputs. Replay paths can change when
+the generator/shrinker changes. In the Vitest adapter, thrown exceptions, typed
+failures, and defects are shrinkable falsifications; interruption stays interruption.
 
-### Configuring FastCheck
+### Configuring native property checks
 
 ```typescript
 import { it } from '@effect/vitest';
 import { Effect } from 'effect';
-import { FastCheck } from 'effect/testing';
+import * as Schema from 'effect/Schema';
 
 it.effect.prop(
 	'property test',
-	[FastCheck.integer()],
+	[Schema.Int],
 	([n]) => Effect.succeed(n >= 0 || n < 0),
 	{
 		timeout: 10000,
-		fastCheck: {
-			numRuns: 1000,
-			seed: 42,
-			verbose: true
+		arbitrary: {
+			runs: 1000,
+			seed: 42
 		}
 	}
 );
@@ -1155,7 +1168,7 @@ Key differences from `@effect/vitest`:
 - Layer composition uses `Layer.provideMerge` here because the harness intentionally exposes both application and test services; do not use it blindly
 - Keep `effect` as the default; use `live` only when real time or live runtime services are under test
 
-**`TestClock` without an ambient `Scope` (beta.70):** earlier betas required a surrounding `Scope` for `TestClock.adjust` to advance time. As of beta.70, `TestClock.layer()` works when provided directly to a program run with `Effect.runPromise` (no ambient `Scope`) — which is exactly what the harness above relies on. `testEffect(...).effect(...)` merges `TestClock.layer()` into the layer stack and runs with `Effect.runPromise`, and `TestClock.adjust` still drives time correctly.
+`TestClock.layer()` works when provided directly to a program executed with `Effect.runPromise`, without an ambient Scope. The harness above merges that layer into the test stack so `TestClock.adjust` controls time.
 
 ## Testing Checklist
 

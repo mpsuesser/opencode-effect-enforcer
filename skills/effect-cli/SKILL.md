@@ -7,6 +7,17 @@ description: Build type-safe CLI applications using Effect CLI module for argume
 
 Build type-safe command-line applications with typed arguments, flags, subcommands, and dependency injection.
 
+Scalar/control constructors are PascalCase; combinators and factories
+such as `Command.make`, `Prompt.succeed`, and `Flag.withDefault` retain their names.
+`Primitive.Choice` differs from `Param` / `Flag` / `Argument.Literals`.
+Sentinels are `Never`; numeric constructors are `Int` / `Finite`, while prompts
+use `Prompt.Int` / `Prompt.Number`. Global flags use `GlobalFlag.Action` / `Setting`.
+Public primitive/completion tags are `Int`, `Finite`, and (for primitives) `Never`.
+
+`Prompt.Select` / `MultiSelect` may omit `message`; `AutoComplete` requires it.
+`KeyValuePair` preserves `=` inside values. YAML config parsing rejects plain
+scalars containing colon-whitespace or a trailing colon: quote those values.
+
 ## Import Pattern
 
 ```typescript
@@ -21,33 +32,33 @@ import { NodeRuntime, NodeServices } from '@effect/platform-node';
 
 ## Positional Arguments (Argument)
 
-Positional arguments are parsed in order. `Argument.boolean` intentionally does not exist — use `Flag.boolean` or `Argument.choice("name", ["true", "false"])` instead.
+Positional arguments are parsed in order. Use `Flag.Boolean` for toggles or `Argument.Literals("name", ["true", "false"])` for positional boolean spellings.
 
 ### Constructors
 
 ```typescript
 import { Argument } from 'effect/unstable/cli';
 
-Argument.string('name'); // string
-Argument.integer('count'); // number (integer)
-Argument.float('ratio'); // number (float)
-Argument.date('deadline'); // Date
-Argument.file('input'); // file path (string)
-Argument.file('input', { mustExist: true }); // file path that must exist
-Argument.directory('dir'); // directory path (string)
-Argument.directory('dir', { mustExist: true }); // directory that must exist
-Argument.path('target'); // any path (string)
-Argument.choice('env', ['dev', 'staging', 'prod']); // constrained string union
-Argument.choiceWithValue('level', [
+Argument.String('name'); // string
+Argument.Int('count'); // number (integer)
+Argument.Finite('ratio'); // finite number
+Argument.Date('deadline'); // Date
+Argument.File('input'); // file path (string)
+Argument.File('input', { mustExist: true }); // file path that must exist
+Argument.Directory('dir'); // directory path (string)
+Argument.Directory('dir', { mustExist: true }); // directory that must exist
+Argument.Path('target'); // any path (string)
+Argument.Literals('env', ['dev', 'staging', 'prod']); // constrained string union
+Argument.ChoiceWithValue('level', [
 	// choice with mapped values
 	['debug', 0],
 	['info', 1],
 	['error', 3]
 ]);
-Argument.redacted('secret'); // Redacted<string>
-Argument.fileText('config'); // reads file content as string
-Argument.fileParse('config'); // reads and parses file (auto-detects format)
-Argument.fileSchema('config', MySchema); // reads and validates file via Schema
+Argument.Redacted('secret'); // Redacted<string>
+Argument.FileText('config'); // reads file content as string
+Argument.FileParse('config'); // reads and parses file (auto-detects format)
+Argument.FileSchema('config', MySchema); // reads and validates file via Schema
 ```
 
 ### Combinators
@@ -56,49 +67,49 @@ Argument.fileSchema('config', MySchema); // reads and validates file via Schema
 import { Argument } from 'effect/unstable/cli';
 
 // Description for help text
-Argument.string('file').pipe(Argument.withDescription('Input file'));
+Argument.String('file').pipe(Argument.withDescription('Input file'));
 
 // Default value
-Argument.integer('port').pipe(Argument.withDefault(8080));
+Argument.Int('port').pipe(Argument.withDefault(8080));
 
 // Optional (returns Option<T>)
-Argument.string('config').pipe(Argument.optional);
+Argument.String('config').pipe(Argument.optional);
 
 // Variadic (returns ReadonlyArray<T>)
-Argument.string('files').pipe(Argument.variadic);
-Argument.string('files').pipe(Argument.variadic({ min: 1 }));
-Argument.string('files').pipe(Argument.variadic({ min: 1, max: 5 }));
+Argument.String('files').pipe(Argument.variadic);
+Argument.String('files').pipe(Argument.variadic({ min: 1 }));
+Argument.String('files').pipe(Argument.variadic({ min: 1, max: 5 }));
 
 // Direct variadic form is also supported
-Argument.variadic(Argument.string('files'));
-Argument.variadic(Argument.string('files'), { min: 1 });
+Argument.variadic(Argument.String('files'));
+Argument.variadic(Argument.String('files'), { min: 1 });
 
 // Cardinality shortcuts
-Argument.string('files').pipe(Argument.atLeast(1));
-Argument.string('files').pipe(Argument.atMost(5));
-Argument.string('files').pipe(Argument.between(1, 5));
+Argument.String('files').pipe(Argument.atLeast(1));
+Argument.String('files').pipe(Argument.atMost(5));
+Argument.String('files').pipe(Argument.between(1, 5));
 
 // Transform
-Argument.integer('port').pipe(Argument.map((p) => `http://localhost:${p}`));
+Argument.Int('port').pipe(Argument.map((p) => `http://localhost:${p}`));
 
 // Validate with Schema
-Argument.string('input').pipe(Argument.withSchema(Schema.NonEmptyString));
+Argument.String('input').pipe(Argument.withSchema(Schema.NonEmptyString));
 
 // Fallback from env config
-Argument.string('repo').pipe(
-	Argument.withFallbackConfig(Config.string('REPOSITORY'))
+Argument.String('repo').pipe(
+	Argument.withFallbackConfig(Config.String('REPOSITORY'))
 );
 
 // Fallback interactive prompt
-Argument.string('name').pipe(
-	Argument.withFallbackPrompt(Prompt.text({ message: 'Name' }))
+Argument.String('name').pipe(
+	Argument.withFallbackPrompt(Prompt.String({ message: 'Name' }))
 );
 
 // Custom metavar for help text
-Argument.integer('port').pipe(Argument.withMetavar('PORT'));
+Argument.Int('port').pipe(Argument.withMetavar('PORT'));
 
 // Filter with error message
-Argument.integer('count').pipe(
+Argument.Int('count').pipe(
 	Argument.filter(
 		(n) => n > 0,
 		(n) => `Expected positive, got ${n}`
@@ -115,27 +126,27 @@ Flags are named options with `--name` or `-alias` syntax.
 ```typescript
 import { Flag } from 'effect/unstable/cli';
 
-Flag.boolean('verbose'); // required: --verbose / --no-verbose; omission fails
-Flag.string('config'); // --config value
-Flag.integer('port'); // --port 8080
-Flag.float('rate'); // --rate 3.14
-Flag.date('since'); // --since 2024-01-01
-Flag.file('input'); // --input file.txt
-Flag.file('input', { mustExist: true }); // file must exist
-Flag.directory('output'); // --output ./dist
-Flag.path('config-path'); // --config-path /etc/app
-Flag.choice('env', ['dev', 'staging', 'prod']); // --env dev
-Flag.choiceWithValue('log-level', [
+Flag.Boolean('verbose'); // required: --verbose / --no-verbose; omission fails
+Flag.String('config'); // --config value
+Flag.Int('port'); // --port 8080
+Flag.Finite('rate'); // --rate 3.14
+Flag.Date('since'); // --since 2024-01-01
+Flag.File('input'); // --input file.txt
+Flag.File('input', { mustExist: true }); // file must exist
+Flag.Directory('output'); // --output ./dist
+Flag.Path('config-path'); // --config-path /etc/app
+Flag.Literals('env', ['dev', 'staging', 'prod']); // --env dev
+Flag.ChoiceWithValue('log-level', [
 	// choice with mapped values
 	['debug', 'Debug' as const],
 	['info', 'Info' as const],
 	['error', 'Error' as const]
 ]);
-Flag.redacted('password'); // Redacted<string>
-Flag.fileText('config-file'); // reads file content
-Flag.fileParse('config'); // reads and parses file (auto-detects format)
-Flag.fileSchema('config', MySchema); // reads and validates via Schema
-Flag.keyValuePair('env'); // --env FOO=bar → Record<string, string>
+Flag.Redacted('password'); // Redacted<string>
+Flag.FileText('config-file'); // reads file content
+Flag.FileParse('config'); // reads and parses file (auto-detects format)
+Flag.FileSchema('config', MySchema); // reads and validates via Schema
+Flag.KeyValuePair('env'); // --env FOO=bar → Record<string, string>
 ```
 
 ### Combinators
@@ -144,42 +155,42 @@ Flag.keyValuePair('env'); // --env FOO=bar → Record<string, string>
 import { Flag } from 'effect/unstable/cli';
 
 // Alias
-Flag.boolean('verbose').pipe(
+Flag.Boolean('verbose').pipe(
 	Flag.withAlias('v'),
 	Flag.withDefault(false)
 ); // switch semantics: omission is false
 
 // Hidden from help, completions, and typo suggestions, but still parsed
-Flag.boolean('experimental-foo').pipe(
+Flag.Boolean('experimental-foo').pipe(
 	Flag.withHidden,
 	Flag.withDefault(false)
 );
 
 // Description
-Flag.string('config').pipe(Flag.withDescription('Path to config file'));
+Flag.String('config').pipe(Flag.withDescription('Path to config file'));
 
 // Default value (makes flag optional with fallback)
-Flag.integer('port').pipe(Flag.withDefault(3000));
+Flag.Int('port').pipe(Flag.withDefault(3000));
 
 // Optional (returns Option<T>)
-Flag.string('token').pipe(Flag.optional);
+Flag.String('token').pipe(Flag.optional);
 
 // Custom metavar for help
-Flag.string('db-url').pipe(Flag.withMetavar('URL')); // --db-url URL
+Flag.String('db-url').pipe(Flag.withMetavar('URL')); // --db-url URL
 
 // Repetition
-Flag.string('tag').pipe(Flag.atLeast(1)); // --tag a --tag b
-Flag.string('warning').pipe(Flag.atMost(3));
-Flag.string('host').pipe(Flag.between(1, 3));
+Flag.String('tag').pipe(Flag.atLeast(1)); // --tag a --tag b
+Flag.String('warning').pipe(Flag.atMost(3));
+Flag.String('host').pipe(Flag.between(1, 3));
 
 // Transform
-Flag.integer('port').pipe(Flag.map((p) => `http://localhost:${p}`));
+Flag.Int('port').pipe(Flag.map((p) => `http://localhost:${p}`));
 
 // Validate with Schema
-Flag.string('email').pipe(Flag.withSchema(EmailSchema));
+Flag.String('email').pipe(Flag.withSchema(Email));
 
 // Filter
-Flag.integer('port').pipe(
+Flag.Int('port').pipe(
 	Flag.filter(
 		(p) => p >= 1 && p <= 65535,
 		(p) => `Port ${p} out of range`
@@ -187,13 +198,13 @@ Flag.integer('port').pipe(
 );
 
 // Fallback from env config
-Flag.boolean('verbose').pipe(
-	Flag.withFallbackConfig(Config.boolean('VERBOSE'))
+Flag.Boolean('verbose').pipe(
+	Flag.withFallbackConfig(Config.Boolean('VERBOSE'))
 );
 
 // Fallback interactive prompt
-Flag.string('name').pipe(
-	Flag.withFallbackPrompt(Prompt.text({ message: 'Name' }))
+Flag.String('name').pipe(
+	Flag.withFallbackPrompt(Prompt.String({ message: 'Name' }))
 );
 ```
 
@@ -208,11 +219,11 @@ Bare boolean flags are required. `--verbose` produces `true`, `--no-verbose` pro
 import { Effect } from 'effect';
 import { Prompt } from 'effect/unstable/cli';
 
-Prompt.integer({ message: 'Count', default: 42 });
-Prompt.file({ message: 'Pick file', default: '/workspace/config.json' });
+Prompt.Int({ message: 'Count', default: 42 });
+Prompt.File({ message: 'Pick file', default: '/workspace/config.json' });
 
 // A local override merges over the context theme.
-const name = Prompt.text({ message: 'Name', theme: { prefix: '>' } });
+const name = Prompt.String({ message: 'Name', theme: { prefix: '>' } });
 
 // Provide once to theme all prompts in a command or application.
 const themed = name.pipe(
@@ -220,9 +231,9 @@ const themed = name.pipe(
 );
 ```
 
-Integer prompt defaults are editable and Enter submits the default if unchanged. `Prompt.file` resolves/selects the default as the initial path.
+Integer prompt defaults are editable and Enter submits the default if unchanged. `Prompt.File` resolves/selects the default as the initial path.
 
-In rc.112, per-prompt `prefix` is replaced by `theme?: Partial<Prompt.Theme>`.
+Per-prompt appearance is configured with `theme?: Partial<Prompt.Theme>`.
 `Prompt.Theme` is a context reference with platform defaults; `Prompt.makeTheme`
 builds a complete theme. Local fields override the context theme. Theme fields
 include prompt symbols, `passwordMask`, and ANSI color values. The default
@@ -249,19 +260,19 @@ const version = Command.make('version');
 
 // Command with config (no handler yet)
 const deploy = Command.make('deploy', {
-	env: Flag.string('env'),
-	force: Flag.boolean('force').pipe(Flag.withDefault(false)),
-	files: Argument.string('files').pipe(Argument.variadic)
+	env: Flag.String('env'),
+	force: Flag.Boolean('force').pipe(Flag.withDefault(false)),
+	files: Argument.String('files').pipe(Argument.variadic)
 });
 
 // Command with config and inline handler
 const greet = Command.make(
 	'greet',
 	{
-		name: Argument.string('name').pipe(
+		name: Argument.String('name').pipe(
 			Argument.withDescription('Person to greet')
 		),
-		times: Flag.integer('times').pipe(Flag.withDefault(1))
+		times: Flag.Int('times').pipe(Flag.withDefault(1))
 	},
 	Effect.fn(function* ({ name, times }) {
 		for (let i = 0; i < times; i++) {
@@ -279,8 +290,8 @@ Handlers use `Effect.fn` with a generator that destructures the config:
 const cmd = Command.make(
 	'deploy',
 	{
-		env: Flag.choice('env', ['dev', 'staging', 'prod']),
-		dryRun: Flag.boolean('dry-run').pipe(Flag.withDefault(false))
+		env: Flag.Literals('env', ['dev', 'staging', 'prod']),
+		dryRun: Flag.Boolean('dry-run').pipe(Flag.withDefault(false))
 	},
 	Effect.fn(function* ({ env, dryRun }) {
 		if (dryRun) {
@@ -296,7 +307,7 @@ Alternatively, add a handler later with `Command.withHandler`:
 
 ```typescript
 const cmd = Command.make('greet', {
-	name: Flag.string('name')
+	name: Flag.String('name')
 }).pipe(Command.withHandler(({ name }) => Console.log(`Hello, ${name}!`)));
 ```
 
@@ -326,12 +337,12 @@ Config objects can be nested for organization:
 
 ```typescript
 const deploy = Command.make('deploy', {
-	environment: Flag.string('env'),
+	environment: Flag.String('env'),
 	server: {
-		host: Flag.string('host').pipe(Flag.withDefault('localhost')),
-		port: Flag.integer('port').pipe(Flag.withDefault(3000))
+		host: Flag.String('host').pipe(Flag.withDefault('localhost')),
+		port: Flag.Int('port').pipe(Flag.withDefault(3000))
 	},
-	files: Argument.string('files').pipe(Argument.variadic)
+	files: Argument.String('files').pipe(Argument.variadic)
 });
 // Handler receives: { environment: string, server: { host: string, port: number }, files: ReadonlyArray<string> }
 ```
@@ -354,7 +365,7 @@ const init = Command.make(
 const build = Command.make(
 	'build',
 	{
-		target: Flag.choice('target', ['web', 'node'])
+		target: Flag.Literals('target', ['web', 'node'])
 	},
 	Effect.fn(function* ({ target }) {
 		yield* Console.log(`Building for ${target}`);
@@ -377,11 +388,11 @@ Use `Command.withSharedFlags` to define flags on a parent that are available to 
 ```typescript
 const tasks = Command.make('tasks').pipe(
 	Command.withSharedFlags({
-		workspace: Flag.string('workspace').pipe(
+		workspace: Flag.String('workspace').pipe(
 			Flag.withAlias('w'),
 			Flag.withDefault('personal')
 		),
-		verbose: Flag.boolean('verbose').pipe(
+		verbose: Flag.Boolean('verbose').pipe(
 			Flag.withAlias('v'),
 			Flag.withDefault(false)
 		)
@@ -391,8 +402,8 @@ const tasks = Command.make('tasks').pipe(
 const create = Command.make(
 	'create',
 	{
-		title: Argument.string('title'),
-		priority: Flag.choice('priority', ['low', 'normal', 'high']).pipe(
+		title: Argument.String('title'),
+		priority: Flag.Literals('priority', ['low', 'normal', 'high']).pipe(
 			Flag.withDefault('normal')
 		)
 	},
@@ -419,10 +430,10 @@ const create = Command.make(
 const list = Command.make(
 	'list',
 	{
-		status: Flag.choice('status', ['open', 'done', 'all']).pipe(
+		status: Flag.Literals('status', ['open', 'done', 'all']).pipe(
 			Flag.withDefault('open')
 		),
-		json: Flag.boolean('json').pipe(Flag.withDefault(false))
+		json: Flag.Boolean('json').pipe(Flag.withDefault(false))
 	},
 	Effect.fn(function* ({ status, json }) {
 		const root = yield* tasks;
@@ -467,7 +478,7 @@ app.pipe(
 const deploy = Command.make(
 	'deploy',
 	{
-		env: Flag.string('env')
+		env: Flag.String('env')
 	},
 	Effect.fn(function* ({ env }) {
 		const fs = yield* FileSystem.FileSystem;
@@ -503,7 +514,7 @@ import { Command, Flag } from 'effect/unstable/cli';
 const myCommand = Command.make(
 	'myapp',
 	{
-		name: Flag.string('name')
+		name: Flag.String('name')
 	},
 	Effect.fn(function* ({ name }) {
 		yield* Console.log(`Hello, ${name}!`);
@@ -533,7 +544,7 @@ const run = Command.runWith(myCommand, { version: '1.0.0' });
 
 ## Key Patterns
 
-1. **`Argument` = positional, `Flag` = named** — No `Argument.boolean`; use `Flag.boolean` for toggles, and add `Flag.withDefault(false)` when omission should mean `false`
+1. **`Argument` = positional, `Flag` = named** — Use `Flag.Boolean` for toggles, and add `Flag.withDefault(false)` when omission should mean `false`
 2. **Handlers use `Effect.fn`** — `Effect.fn(function*({ ...config }) { ... })`
 3. **Parent access via yield** — `const root = yield* parentCommand` inside subcommand handlers
 4. **Shared flags** — `Command.withSharedFlags` on parent; only flags allowed (no arguments)

@@ -465,7 +465,7 @@ function split(separator: string) {
 
 ## Custom Transformations
 
-### Schema-derived binary boundaries (rc.112)
+### Schema-derived binary boundaries
 
 Use `SchemaBinary.toCodec(schema)` from `effect/unstable/encoding` for a compact
 `Uint8Array` representation. It derives the wire layout from the schema's
@@ -535,9 +535,9 @@ const BooleanFromString = Schema.Literals(['on', 'off']).pipe(
 );
 ```
 
-### SchemaTransformation.transformOrFail — Transformations That Can Fail
+### SchemaTransformation.transformEffect — Transformations That Can Fail
 
-Use `SchemaTransformation.transformOrFail` when transformation might fail:
+Use `SchemaTransformation.transformEffect` when transformation might fail:
 
 ```typescript
 import {
@@ -551,7 +551,7 @@ import {
 
 const NumberFromString = Schema.String.pipe(
 	Schema.decodeTo(Schema.Number, {
-		decode: SchemaGetter.transformOrFail((s) =>
+		decode: SchemaGetter.transformEffect((s) =>
 			Option.match(Number.parse(s), {
 				onNone: () =>
 					Effect.fail(
@@ -632,6 +632,14 @@ export const beGreaterThan =
 ## Decoding and Encoding
 
 ### Constructor vs Boundary Decoder
+
+`make`, `makeOption`, and `makeEffect` return an existing class
+instance unchanged. Use `new` when a distinct instance is required. Pass parsing
+options at the adapter call, not in annotations; options apply operation-wide.
+Products support parsing concurrency but union alternatives stay sequential.
+Retain extra object fields with Record/StructWithRest; excess-property modes are
+`ignore` or `error`. See `effect-schema-v4` for inherited-field, template-literal,
+JSON Schema, Getter composition, and optional JIT/AOT contracts.
 
 Keep decoded shapes schema-first with `Schema.Class`. Choose construction and decoding APIs by input trust and failure semantics:
 

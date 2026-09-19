@@ -55,6 +55,6 @@ TypeScript correctly narrows literal `_tag` checks. Prefer exported guards and
 matching helpers for consistent semantics and exhaustiveness as variants evolve.
 For schema-first models use union `.guards`, `.match`, or `Schema.is`; class
 variants can also use `instanceof`. `Schema.toTaggedUnion` supports discriminator
-keys beyond `_tag`. In rc.112, `.matchOrElse` adds partial matching with a typed
+keys beyond `_tag`. `.matchOrElse` provides partial matching with a typed
 fallback. For trusted `Data.taggedEnum` values use `$is` / `$match`; `$is` checks
 only the tag and is not structural validation of unknown input.

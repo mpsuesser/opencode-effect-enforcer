@@ -9,6 +9,15 @@ In v4 there is no `@effect/platform` package — the HTTP client lives in the `e
 
 ## Effect Source Reference
 
+Client recovery through `HttpClient.catch` must return an `HttpClientResponse`.
+For a different success type, recover on the Effect returned by `execute`.
+`response.url` includes query parameters, excludes the hash, and reflects the
+final URL after redirects. Response schema decoders honor supplied parse options.
+Use `Schema.Cookie`, `Schema.Cookies`, `Schema.Headers`, and `Schema.UrlParams`
+for HTTP value schemas. Import Undici-specific APIs from
+`@effect/platform-node/Undici`; the transport layer owns their initialization.
+HTTP `QUERY` is supported; configure CORS `allowedMethods` explicitly if needed.
+
 The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules are `unstable` and change between betas.
 
 Key files:
@@ -42,7 +51,7 @@ An `HttpClient.With<E, R>` is a pair of functions — `preprocess` (request → 
 - Runtime application and provider integrations use `HttpClient`; do not call raw `fetch` from business or provider code.
 - A raw `fetch` call is permitted only in an explicitly named low-level platform adapter that owns transport interop and documents why an Effect transport cannot be used. Lift it with `Effect.tryPromise`, pass the supplied `AbortSignal` to fetch, and do not let `Request`, `Response`, rejected promises, or untyped payloads escape that adapter.
 - Give each upstream adapter a named service and named effects that own request construction, authentication, execution, status classification, schema decoding, and error mapping.
-- Read credentials with `Config.redacted` and attach them in a configured client transform; never pass raw secret strings through business workflows.
+- Read credentials with `Config.Redacted` and attach them in a configured client transform; never pass raw secret strings through business workflows.
 - Classify status before decoding a success schema. Non-2xx error bodies often have a different shape and must not be decoded as successful payloads.
 - Decode external response data with `HttpClientResponse.schemaBodyJson`, `schemaJson`, or another `Schema` decoder. A successful JSON parse is not validation.
 - Preserve bounded diagnostic evidence such as provider request IDs, status, error codes, and retry metadata. Redact credentials, authorization headers, query secrets, private payload fields, and full bodies before logging or storing evidence.
@@ -233,7 +242,7 @@ request.pipe(
 
 `UrlParams.Input` accepts records, iterables of `[key, value]` tuples, or `URLSearchParams`. Values may be `string | number | bigint | boolean | null | undefined`; `undefined` entries are **skipped** (great for optional params), arrays produce repeated keys, and nested records render with bracket notation (`filter[name]=x`).
 
-For standalone `UrlParams` values (e.g. `response.urlParamsBody`) the module mirrors these combinators: `UrlParams.getFirst`/`getAll`, `set`/`append`/`setAll`/`appendAll`, `toRecord`. In schema pipelines, `UrlParams.schemaRecord` decodes params into a record (`schemaBodyUrlParams` wraps it) and `UrlParams.schemaJsonField(name, { reviver })` parses one field's value as JSON with an optional `JSON.parse` reviver.
+For standalone `UrlParams` values (e.g. `response.urlParamsBody`) the module mirrors these combinators: `UrlParams.getFirst`/`getAll`, `set`/`append`/`setAll`/`appendAll`, `toRecord`. Schema values and record/JSON-field codecs live in `effect/Schema`; use `Schema.RecordFromUrlParams` and `Schema.JsonFromUrlParamsField(name, options?)`.
 
 ### Headers and auth
 

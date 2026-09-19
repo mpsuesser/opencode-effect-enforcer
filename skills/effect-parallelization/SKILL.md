@@ -81,7 +81,7 @@ yield* Effect.forEach(ids, fetchUser, { concurrency: 8 });
 yield* Effect.forEach(ids, fetchUser, { concurrency: 'unbounded' });
 ```
 
-As of beta.102, `"inherit"`, `References.CurrentConcurrency`, and `Effect.withConcurrency` are removed. Reusable APIs that expose fan-out policy should accept a `Types.Concurrency` value and pass it explicitly to each combinator instead of relying on ambient configuration.
+Reusable APIs that expose fan-out policy should accept a `Types.Concurrency` value and pass it explicitly to each combinator instead of relying on ambient configuration.
 
 ### Failure semantics under concurrency
 
@@ -652,7 +652,7 @@ const checkConfig = (entries: ReadonlyArray<Entry>) =>
 ## Common Mistakes
 
 1. **Assuming `Effect.all` / `Effect.forEach` are parallel by default** — they are sequential. Pass `{ concurrency: n | 'unbounded' }` explicitly; without it you also silently lose request batching (see effect-batching).
-2. **Using removed ambient concurrency APIs** — beta.102 removed `"inherit"`, `References.CurrentConcurrency`, and `Effect.withConcurrency`. Pass a number or `"unbounded"` explicitly at each combinator.
+2. **Relying on ambient concurrency** — pass a number or `"unbounded"` explicitly at each combinator.
 3. **Wrong option key on zips** — `Effect.zip`/`zipWith` take `{ concurrent: true }` (boolean), not `{ concurrency: ... }`.
 4. **v3 `mode: 'either'` / `mode: 'validate'` on `Effect.all`** — gone. v4 has `mode: 'result'` (slots become `Result<A, E>`); for accumulate-all-failures use `Effect.validate`, which fails with `NonEmptyArray<E>`.
 5. **`Effect.makeSemaphore` / `Effect.makeLatch` no longer exist** — they moved to their own modules: `Semaphore.make(n)`, `Latch.make(open?)`, both importable from `'effect'`.

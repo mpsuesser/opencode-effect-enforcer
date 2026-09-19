@@ -100,7 +100,7 @@ import { FetchHttpClient } from 'effect/unstable/http';
 
 // Client layer (reusable across models)
 const AnthropicClientLayer = AnthropicClient.layerConfig({
-	apiKey: Config.redacted('ANTHROPIC_API_KEY')
+	apiKey: Config.Redacted('ANTHROPIC_API_KEY')
 }).pipe(Layer.provide(FetchHttpClient.layer));
 
 // Option A: model() — returns Model.Model (preferred)
@@ -130,7 +130,7 @@ import { Config, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/unstable/http';
 
 const OpenAiClientLayer = OpenAiClient.layerConfig({
-	apiKey: Config.redacted('OPENAI_API_KEY')
+	apiKey: Config.Redacted('OPENAI_API_KEY')
 }).pipe(Layer.provide(FetchHttpClient.layer));
 
 // model() constructor (preferred)
@@ -186,7 +186,7 @@ import { Config, Layer } from 'effect';
 import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect/unstable/http';
 
 const CompatibleClientLayer = OpenAiClient.layerConfig({
-	apiKey: Config.redacted('OPENAI_COMPAT_API_KEY'),
+	apiKey: Config.Redacted('OPENAI_COMPAT_API_KEY'),
 	apiUrl: Config.succeed('https://my-provider.example.com/v1')
 }).pipe(Layer.provide(FetchHttpClient.layer));
 
@@ -211,7 +211,7 @@ import { Config, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/unstable/http';
 
 const OpenRouterClientLayer = OpenRouterClient.layerConfig({
-	apiKey: Config.redacted('OPENROUTER_API_KEY')
+	apiKey: Config.Redacted('OPENROUTER_API_KEY')
 }).pipe(Layer.provide(FetchHttpClient.layer));
 
 // model() constructor — use provider-prefixed model IDs
@@ -420,7 +420,7 @@ export class AiWriter extends Context.Service<
 
 ## Custom Error Wrapping
 
-In rc.112, `AiError.AuthenticationError` accepts an optional `description` and
+`AiError.AuthenticationError` accepts an optional `description` and
 appends it after the kind-based remediation message. Anthropic, OpenAI,
 OpenAI-compatible, and OpenRouter adapters propagate provider error text from
 401/403 responses. Preserve this reason rather than replacing it with a generic
@@ -496,11 +496,11 @@ import { FetchHttpClient } from 'effect/unstable/http';
 // ---------------------------------------------------------------------------
 
 const AnthropicClientLayer = AnthropicClient.layerConfig({
-	apiKey: Config.redacted('ANTHROPIC_API_KEY')
+	apiKey: Config.Redacted('ANTHROPIC_API_KEY')
 }).pipe(Layer.provide(FetchHttpClient.layer));
 
 const OpenAiClientLayer = OpenAiClient.layerConfig({
-	apiKey: Config.redacted('OPENAI_API_KEY')
+	apiKey: Config.Redacted('OPENAI_API_KEY')
 }).pipe(Layer.provide(FetchHttpClient.layer));
 
 // ---------------------------------------------------------------------------
@@ -619,15 +619,15 @@ Effect.runPromise(program.pipe(Effect.provide(AiWriter.layer)));
 // WRONG: Hardcoded API keys
 AnthropicClient.layerConfig({ apiKey: 'sk-...' });
 
-// RIGHT: Config.redacted for secrets
-AnthropicClient.layerConfig({ apiKey: Config.redacted('ANTHROPIC_API_KEY') });
+// RIGHT: Config.Redacted for secrets
+AnthropicClient.layerConfig({ apiKey: Config.Redacted('ANTHROPIC_API_KEY') });
 
 // WRONG: Missing FetchHttpClient layer
-AnthropicClient.layerConfig({ apiKey: Config.redacted('KEY') });
+AnthropicClient.layerConfig({ apiKey: Config.Redacted('KEY') });
 // Will fail at runtime — providers require an HttpClient
 
 // RIGHT: Always provide an HTTP client layer
-AnthropicClient.layerConfig({ apiKey: Config.redacted('KEY') }).pipe(
+AnthropicClient.layerConfig({ apiKey: Config.Redacted('KEY') }).pipe(
 	Layer.provide(FetchHttpClient.layer)
 );
 
@@ -653,7 +653,7 @@ import { BedrockClient } from '@effect/ai-amazon-bedrock'; // Does NOT exist
 
 ## Quality Checklist
 
-- [ ] Use `Config.redacted` for API keys (never hardcode)
+- [ ] Use `Config.Redacted` for API keys (never hardcode)
 - [ ] Provide `FetchHttpClient.layer` to all client layers
 - [ ] Use `.model()` constructor for `ExecutionPlan` and `Effect.provide`
 - [ ] Use `ExecutionPlan` for multi-provider fallback with retry
@@ -673,6 +673,17 @@ import { BedrockClient } from '@effect/ai-amazon-bedrock'; // Does NOT exist
 - effect-layer-design - General Effect layer composition patterns
 
 ## References
+
+Provider-neutral structured decisions use `Decision` / `DecisionModel` from
+`effect/unstable/ai`. `OpenRouterDecisionModel` targets OpenRouter's alpha Decisions
+API; `@effect/ai-typesafe` supplies a provider for TypeSafe System One. Custom
+OpenRouter client implementations include `createDecisions`.
+
+Use each branded service's same-name type (`LanguageModel.LanguageModel`,
+`EmbeddingModel.EmbeddingModel`, `Chat.Chat`) and its exported TypeId for custom
+implementations. Prefer provided constructors; do not hard-code marker strings.
+OpenAI web-search sources are a discriminated union: narrow `type` before reading
+`url` or `name`. Provider-executed tool failures remain failure results.
 
 - `packages/ai/anthropic/src/AnthropicLanguageModel.ts`
 - `packages/ai/openai/src/OpenAiLanguageModel.ts`

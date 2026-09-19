@@ -19,9 +19,9 @@ suggestSkills:
 processEnv :: String -> IO (Maybe String)    -- side effect, untyped, untestable
 
 -- Instead
-Config.string :: String -> Config String     -- typed, composable, testable
+Config.String :: String -> Config String     -- typed, composable, testable
 Config.withDefault :: a -> Config a -> Config a
-Config.redacted :: String -> Config Redacted -- for sensitive values
+Config.Redacted :: String -> Config Redacted -- for sensitive values
 ```
 
 ```haskell
@@ -30,10 +30,10 @@ bad :: Effect String
 bad = Effect.sync \_ -> process.env.API_KEY    -- raw side effect
 
 good :: Effect String ConfigError
-good = Config.string "API_KEY"                 -- typed, validated
+good = Config.Redacted "API_KEY"               -- typed, redacted
 
 better :: Effect String ConfigError
-better = Config.string("PORT")
+better = Config.Int("PORT")
   & Config.withDefault "3000"
   & Config.map Number.parse                    -- with transformation
 ```

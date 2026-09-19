@@ -305,7 +305,7 @@ Close semantics (from `internal/effect.ts` `scopeCloseFinalizers`):
 - The scope transitions to `Closed` *before* finalizers run, so finalizers registered from inside finalizers execute immediately.
 - You can inspect `scope.state._tag` (`'Empty' | 'Open' | 'Closed'`) and `scope.strategy` directly.
 
-In rc.112, `Scope.State.Open` stores `finalizerKey` / `finalizer` inline and
+`Scope.State.Open` stores `finalizerKey` / `finalizer` inline and
 allocates its optional `finalizers` map only for additional entries. Avoid
 constructing or mutating that representation; use `Scope.addFinalizer*` and
 `Scope.close`. LIFO order and failure-preserving cleanup still apply.
@@ -499,7 +499,7 @@ Semantics (verified in `ScopedRef.ts` and its tests):
 
 For keyed collections of scoped resources, see `LayerMap` (`ai-docs/src/01_effect/04_resources/30_layer-map.ts`); for capacity-managed pools, see `Pool` (`packages/effect/src/Pool.ts` — `Pool.make` returns a scoped pool whose `Pool.get(pool)` is itself scoped per item). `ScopedCache` is covered by the `effect-cache` skill.
 
-### Callback-scoped pool checkout (rc.112)
+### Callback-scoped pool checkout
 
 Prefer `Pool.use(pool, use)` when one callback owns the entire borrow. It returns
 the item on success, failure, or interruption without adding `Scope` to the
@@ -521,8 +521,8 @@ const program = Effect.gen(function* () {
 
 `Effect.scoped(Pool.get(pool))` releases the checkout before the returned item is
 used outside that effect. Put the use inside the scope or use `Pool.use`.
-`Pool.State` / `Pool.PoolItem` changed in rc.112 (incremental usage and intrusive
-FIFO tracking); use the public checkout/invalidation APIs rather than their fields.
+`Pool.State` / `Pool.PoolItem` use incremental usage and intrusive
+FIFO tracking; use the public checkout/invalidation APIs rather than their fields.
 
 ---
 

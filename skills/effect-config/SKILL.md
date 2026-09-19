@@ -37,20 +37,20 @@ Never read `process.env` directly in Effect code. `Config` provides:
 Each constructor reads a single value and decodes it. The optional `name` parameter sets the root path segment for lookup. Omit it when the config is part of a larger `Config.schema`.
 
 ```ts
-Config.string('HOST'); // string
-Config.nonEmptyString('HOST'); // string (rejects "")
-Config.number('RATE'); // number (includes NaN, Infinity)
-Config.finite('RATE'); // number (rejects NaN, Infinity)
-Config.int('PORT'); // number (integers only)
-Config.boolean('DEBUG'); // boolean (accepts true/false, yes/no, on/off, 1/0, y/n)
-Config.port('PORT'); // number (integer in 1–65535)
-Config.url('CALLBACK_URL'); // URL
-Config.date('EXPIRES_AT'); // Date (rejects invalid dates)
-Config.duration('TIMEOUT'); // Duration (parses "10 seconds", "500 millis", "Infinity", "-Infinity")
-Config.logLevel('LOG_LEVEL'); // string (All|Fatal|Error|Warn|Info|Debug|Trace|None)
-Config.redacted('API_KEY'); // Redacted<string> (hidden from logs and toString)
-Config.literal('production', 'ENV'); // literal type (accepts only the given literal)
-Config.literals(['development', 'production'], 'ENV'); // accepts one of several literals
+Config.String('HOST'); // string
+Config.NonEmptyString('HOST'); // string (rejects "")
+Config.Number('RATE'); // number (includes NaN, Infinity)
+Config.Finite('RATE'); // number (rejects NaN, Infinity)
+Config.Int('PORT'); // number (integers only)
+Config.Boolean('DEBUG'); // boolean (accepts true/false, yes/no, on/off, 1/0, y/n)
+Config.Port('PORT'); // number (integer in 1–65535)
+Config.URL('CALLBACK_URL'); // URL
+Config.Date('EXPIRES_AT'); // Date (rejects invalid dates)
+Config.Duration('TIMEOUT'); // Duration (parses "10 seconds", "500 millis", "Infinity", "-Infinity")
+Config.LogLevel('LOG_LEVEL'); // string (All|Fatal|Error|Warn|Info|Debug|Trace|None)
+Config.Redacted('API_KEY'); // Redacted<string> (hidden from logs and toString)
+Config.Literal('production', 'ENV'); // literal type (accepts only the given literal)
+Config.Literals(['development', 'production'], 'ENV'); // accepts one of several literals
 ```
 
 ## Config Combinators
@@ -60,7 +60,7 @@ Config.literals(['development', 'production'], 'ENV'); // accepts one of several
 Only triggers when data is **missing**. Validation errors (wrong type, out of range) still propagate.
 
 ```ts
-const port = Config.int('PORT').pipe(Config.withDefault(3000));
+const port = Config.Int('PORT').pipe(Config.withDefault(3000));
 ```
 
 ### `Config.option` — Optional Values
@@ -68,13 +68,13 @@ const port = Config.int('PORT').pipe(Config.withDefault(3000));
 Returns `Option.some(value)` on success, `Option.none()` when data is missing.
 
 ```ts
-const maybePort = Config.option(Config.int('PORT'));
+const maybePort = Config.option(Config.Int('PORT'));
 ```
 
 ### `Config.map` — Transform a Value
 
 ```ts
-const upperHost = Config.string('HOST').pipe(
+const upperHost = Config.String('HOST').pipe(
 	Config.map((s) => s.toUpperCase())
 );
 ```
@@ -84,7 +84,7 @@ const upperHost = Config.string('HOST').pipe(
 Unlike `withDefault`, this catches **all** `ConfigError`s:
 
 ```ts
-const host = Config.string('HOST').pipe(
+const host = Config.String('HOST').pipe(
 	Config.orElse(() => Config.succeed('localhost'))
 );
 ```
@@ -96,13 +96,13 @@ Accepts a record or a tuple:
 ```ts
 // As a record
 const appConfig = Config.all({
-	host: Config.string('host'),
-	port: Config.int('port'),
-	debug: Config.boolean('debug')
+	host: Config.String('host'),
+	port: Config.Int('port'),
+	debug: Config.Boolean('debug')
 });
 
 // As a tuple
-const pair = Config.all([Config.string('a'), Config.int('b')]);
+const pair = Config.all([Config.String('a'), Config.Int('b')]);
 ```
 
 ### `Config.nested` — Scope Under a Prefix
@@ -111,8 +111,8 @@ Prepends a path segment to every key the inner config reads. With environment va
 
 ```ts
 const dbConfig = Config.all({
-	host: Config.string('host'),
-	port: Config.int('port')
+	host: Config.String('host'),
+	port: Config.Int('port')
 }).pipe(Config.nested('database'));
 
 // Reads from env: database_host, database_port
@@ -146,17 +146,40 @@ const ServerConfig = Config.schema(
 );
 ```
 
-### Config Schemas for Use with `Config.schema`
+### Config constructors versus schemas
 
-| Schema                      | Type           | Notes                                      |
-| --------------------------- | -------------- | ------------------------------------------ |
-| `Config.Boolean`            | `boolean`      | Decodes `true/false/yes/no/on/off/1/0/y/n` |
-| `Schema.DurationFromString` | `Duration`     | Decodes duration strings; accepts `"Infinity"` / `"-Infinity"` |
-| `Config.Port`               | `number`       | Integer in 1–65535                         |
-| `Config.LogLevel`           | `string`       | One of the standard log level literals     |
-| `Config.Record(key, value)` | `Record<K, V>` | Also parses flat `"k1=v1,k2=v2"` strings   |
+PascalCase names on `Config` construct configs, not schemas. Combine
+`Config.Boolean`, `Config.Port`, and `Config.LogLevel` with `Config.all`; use
+Schema values inside `Config.schema`. The specialized implementation schemas
+are internal. `Config.mapEffect` is the effectful mapping combinator.
 
-Plain `Schema.Array` and `Schema.Record` load structural provider children. Use `Config.Array` and `Config.Record` when a flat separated scalar should also be accepted. Opaque encodings such as `Schema.Any`, `Schema.Unknown`, and `Schema.Json` are rejected when `Config.schema` is constructed; use a concrete shape or `Schema.fromJsonString(Schema.Json)` to read scalar JSON.
+<!-- typecheck -->
+```ts
+import { Config, ConfigProvider, Schema } from 'effect';
+
+const settings = Config.all({
+	port: Config.Port('PORT'),
+	debug: Config.Boolean('DEBUG'),
+	exporters: Config.Array(Schema.String, 'EXPORTERS'),
+	labels: Config.Record(Schema.String, Schema.String, 'LABELS'),
+	limit: Config.ByteSize('LIMIT')
+});
+const parsed = settings.parse(ConfigProvider.fromUnknown({
+	PORT: '8080', DEBUG: 'yes', EXPORTERS: 'otlp,console',
+	LABELS: 'service.name=api', LIMIT: '64 KiB'
+}));
+```
+
+`Config.Array(value, path?, options?)` and `Config.Record(key, value, path?, options?)`
+also accept an options object without a path. They read structural values or
+separated strings. Plain `Schema.Array` / `Schema.Record` in `Config.schema` load
+structural children. Opaque encodings such as `Schema.Any`, `Schema.Unknown`, and
+`Schema.Json` are rejected; use a concrete shape or
+`Schema.fromJsonString(Schema.Json)` for scalar JSON.
+
+Environment/bracket array indices must be unpadded decimal integers from 0 through
+4294967294. Numeric-looking keys such as `01` remain object keys; use `[1]` for
+array paths.
 
 Missing or unavailable representations are decoded as `undefined` before `Config.withDefault` and `Config.option` decide semantic absence. A successful decoded `undefined` or an explicitly present empty structure remains a real value and is not replaced by a default.
 
@@ -166,8 +189,8 @@ Missing or unavailable representations are decoded as `undefined` before `Config
 
 ```ts
 const program = Effect.gen(function* () {
-	const host = yield* Config.string('HOST');
-	const port = yield* Config.int('PORT');
+	const host = yield* Config.String('HOST');
+	const port = yield* Config.Int('PORT');
 	console.log(`${host}:${port}`);
 });
 ```
@@ -175,7 +198,7 @@ const program = Effect.gen(function* () {
 ### 2. Call `.parse(provider)` directly — useful for testing
 
 ```ts
-const host = Config.string('HOST');
+const host = Config.String('HOST');
 const provider = ConfigProvider.fromUnknown({ HOST: 'localhost' });
 const result = Effect.runSync(host.parse(provider));
 // "localhost"
@@ -368,7 +391,7 @@ const TestLayer = ConfigProvider.layer(
 );
 
 const program = Effect.gen(function* () {
-	const port = yield* Config.int('port');
+	const port = yield* Config.Int('port');
 	return port;
 });
 
@@ -416,7 +439,7 @@ const DefaultsLayer = ConfigProvider.layerAdd(
 const provider = ConfigProvider.fromUnknown({ HOST: 'localhost' });
 
 const program = Effect.gen(function* () {
-	const host = yield* Config.string('HOST');
+	const host = yield* Config.String('HOST');
 	return host;
 }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, provider));
 ```
@@ -430,8 +453,8 @@ import { Config, ConfigProvider, Effect } from 'effect';
 
 // Pattern 1: .parse(provider) for direct testing
 const config = Config.all({
-	host: Config.string('host'),
-	port: Config.int('port')
+	host: Config.String('host'),
+	port: Config.Int('port')
 });
 
 const testProvider = ConfigProvider.fromUnknown({
@@ -451,7 +474,7 @@ const TestConfigLayer = ConfigProvider.layer(
 );
 
 const program = Effect.gen(function* () {
-	const host = yield* Config.string('host').pipe(Config.nested('server'));
+	const host = yield* Config.String('host').pipe(Config.nested('server'));
 	return host;
 });
 
@@ -466,7 +489,7 @@ Config operations fail with `ConfigError`, which wraps either:
 - **`SchemaError`** — data was found but didn't match the schema (wrong type, out of range, missing key)
 
 ```ts
-const program = Config.int('PORT')
+const program = Config.Int('PORT')
 	.parse(ConfigProvider.fromUnknown({ PORT: 'not-a-number' }))
 	.pipe(
 		Effect.tapError((error) =>
@@ -510,7 +533,7 @@ const DbConfig = Config.schema(
 const AppConfig = Config.all({
 	server: ServerConfig,
 	db: DbConfig,
-	debug: Config.boolean('debug').pipe(Config.withDefault(false))
+	debug: Config.Boolean('debug').pipe(Config.withDefault(false))
 });
 
 // In production — just yield it, reads from process.env
@@ -551,7 +574,7 @@ debug=true
 const port = parseInt(process.env.PORT ?? '3000');
 
 // GOOD
-const port = Config.int('PORT').pipe(Config.withDefault(3000));
+const port = Config.Int('PORT').pipe(Config.withDefault(3000));
 ```
 
 ### NEVER validate config manually

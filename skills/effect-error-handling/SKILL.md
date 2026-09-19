@@ -84,7 +84,7 @@ Reference this for:
 | `Schema.TaggedErrorClass`         | `Schema.TaggedError`           |
 | `Schema.ErrorClass`               | `Schema.Error`                 |
 | `Schema.Error` (instance schema)  | `Schema.ErrorInstance`         |
-| `Schema.ErrorReviver`             | `Schema.ErrorInstanceReviver`  |
+| `Schema.ErrorReviver`             | `SchemaRepresentation.ErrorInstanceReviver`  |
 | `ParseError`                      | `Schema.SchemaError`           |
 
 ## Core Error Handling Philosophy
@@ -592,7 +592,7 @@ const program2 = riskyOp().pipe(
 );
 ```
 
-> **Type preservation (beta.71):** When you omit `orElse`, the tags you do not handle stay in the error channel — `catchTag(['NotFound'], ...)` on `Effect<string, NotFound | Forbidden | ServerError>` yields `Effect<string, Forbidden | ServerError>`. Supplying `orElse` handles those remaining variants, so the resulting error channel reflects only what the fallback produces. A beta.71 fix ensures `catchTag` / `catchTags` / `catchIf` no longer silently drop the unhandled error types from the inferred type.
+> **Type preservation:** When you omit `orElse`, unhandled tags stay in the error channel — `catchTag(['NotFound'], ...)` on `Effect<string, NotFound | Forbidden | ServerError>` yields `Effect<string, Forbidden | ServerError>`. Supplying `orElse` handles the remaining variants, so the resulting error channel reflects what the fallback produces.
 
 ### catchTags - Multiple Error Types
 

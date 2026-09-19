@@ -17,7 +17,7 @@ Key files:
 - `packages/effect/src/unstable/rpc/RpcGroup.ts` — `toLayer`, `toLayerHandler`, `toHandlers`, `accessHandler`, `of`, handler type derivation
 - `packages/effect/src/unstable/rpc/Rpc.ts` — `ServerClient`, `Handler`, `ToHandlerFn`, `ResultFrom`, `fork`, `uninterruptible`, `ServicesServer`
 - `packages/effect/src/unstable/rpc/RpcMiddleware.ts` — `Service` constructor, server middleware function shape, `layerClient`
-- `packages/effect/src/unstable/rpc/RpcSerialization.ts` — `json`, `ndjson`, `jsonRpc`, `ndJsonRpc`, `msgPack` parsers and their layers
+- `packages/effect/src/unstable/rpc/RpcSerialization.ts` — JSON, NDJSON, JSON-RPC, and SchemaBinary parsers and layers
 - `packages/effect/src/unstable/rpc/RpcMessage.ts` — the wire vocabulary (`Request`, `Ack`, `Interrupt`, `Eof`, `Chunk`, `Exit`, `Defect`, `ClientEnd`)
 - `packages/effect/src/unstable/rpc/RpcWorker.ts` — `InitialMessage` for worker transports
 - `packages/effect/src/unstable/rpc/RpcTest.ts` — in-process test client
@@ -293,7 +293,7 @@ const TcpServer = RpcServer.layer(UserRpcs).pipe(
 	Layer.provide(UsersLive),
 	Layer.provide(RpcServer.layerProtocolSocketServer),
 	Layer.provide(NodeSocketServer.layer({ port: 9000 })),
-	Layer.provide(RpcSerialization.layerMsgPack) // must be a framed format (§4)
+	Layer.provide(RpcSerialization.layerSchemaBinary()) // must be a framed format (§4)
 );
 ```
 
@@ -349,10 +349,9 @@ Provide exactly one `RpcSerialization` layer. The load-bearing property is `incl
 | `RpcSerialization.layerNdjson` | `application/ndjson` | yes | newline-delimited JSON |
 | `RpcSerialization.layerJsonRpc({ contentType? })` | `application/json` | no | JSON-RPC 2.0 interop |
 | `RpcSerialization.layerNdJsonRpc({ contentType? })` | `application/json-rpc` | yes | JSON-RPC 2.0, newline-framed |
-| `RpcSerialization.layerMsgPack` | `application/msgpack` | yes | msgpackr `useRecords: true`; schema payloads still use JSON codecs |
 | `RpcSerialization.layerSchemaBinary(options?)` | `application/vnd.effect.rpc+schema-binary` | yes | schema-derived binary payloads and envelopes |
 
-### Schema-aware serialization (rc.112)
+### Schema-aware serialization
 
 `RpcSerialization.RpcSerialization`, `RpcClient.Protocol`, and
 `RpcServer.Protocol` now require `codecFor: RpcSerialization.CodecFor`:
@@ -364,9 +363,9 @@ type CodecFor = <S extends Schema.Top>(schema: S) =>
 
 Forward the selected serialization's `codecFor` when implementing a protocol.
 This selects codecs for payloads, successes, errors, defects, and stream elements;
-envelope framing remains the serialization's responsibility. Existing JSON,
-NDJSON, JSON-RPC, and MsgPack wire formats keep their JSON-compatible schema
-codecs. Workers supply `Schema.toCodecJson` themselves over structured clone and
+envelope framing remains the serialization's responsibility. JSON,
+NDJSON, and JSON-RPC use JSON-compatible schema codecs.
+Workers supply `Schema.toCodecJson` themselves over structured clone and
 still need no serialization layer. Cluster network traffic follows the protocol
 codec; cluster persistence continues to use JSON.
 
@@ -374,17 +373,16 @@ codec; cluster persistence continues to use JSON.
 both peers. The default maximum frame size is 16 MiB. Envelopes use fingerprints
 and a connection-local string dictionary. Payload fingerprints default to `false`
 to allow compatible schema evolution; enable them for strict layout agreement.
-This is an Effect RPC format, not generic MsgPack or JSON-RPC interoperability.
+This is an Effect RPC format; use JSON-RPC layers for JSON-RPC interoperability.
 See `effect-schema-composition` for binary layout/ownership constraints.
 
 Rules, verified against the protocol implementations and the e2e matrix:
 
-- **Raw TCP sockets need a framed format** (`ndjson`, `ndJsonRpc`, `msgPack`). Plain `json` cannot split the byte stream — decoding breaks as soon as two messages share a chunk.
-- **WebSocket frames messages itself**, so *any* format works there — the e2e suite runs ws with json, ndjson, msgpack, and jsonRpc.
-- **HTTP POST works with both**, with different response behavior: with an **unframed** format the server buffers all responses and returns one JSON array when every request finishes (a streaming rpc arrives as one big batch at the end); with a **framed** format the server returns a chunked streaming response and chunks arrive incrementally. Use `layerNdjson` (or msgpack) over HTTP if you serve streaming rpcs.
+- **Raw TCP sockets need a framed format** (NDJSON, newline JSON-RPC, or SchemaBinary). Plain JSON cannot split the byte stream.
+- **WebSocket frames messages itself**, so it also supports unframed serialization.
+- **HTTP POST works with both**, with different response behavior: an **unframed** format buffers responses until all requests finish; a **framed** format emits chunks incrementally. Use `layerNdjson` or `layerSchemaBinary()` for streaming RPCs.
 - The response `content-type` is the serialization's `contentType`.
 - `RpcSerialization.layerJsonRpc()` / `layerNdJsonRpc()` speak JSON-RPC 2.0: rpc tags map to `method`, batched arrays are preserved, and internal signals travel as `@effect/rpc/Ack`-style methods. Use for interop with non-Effect JSON-RPC clients.
-- `RpcSerialization.makeMsgPack(options)` customizes msgpackr (`useRecords`, `useFloat32`, ...); wrap with `Layer.succeed(RpcSerialization.RpcSerialization)(RpcSerialization.makeMsgPack({ ... }))`.
 
 Client and server must use the **same** serialization.
 
@@ -778,7 +776,7 @@ const ServerLayer = RpcServer.layer(StoreRpcs, { concurrency: 1 }).pipe(
 1. **Importing from `@effect/rpc`.** v3 habit; the package does not exist in v4. Everything is `effect/unstable/rpc` (and platform layers come from `@effect/platform-node` / `-bun` / `-browser`).
 2. **Forgetting `protocol: 'http'` on `layerHttp`.** The default is `'websocket'` — your `POST /rpc` curl returns 404 and only a `GET` upgrade route exists. Also note `layerHttp` takes `{ group, path, ... }` as one options bag, while `layer(group, options)` takes the group positionally.
 3. **Providing handlers/middleware but no `Protocol` or `RpcSerialization`.** `RpcServer.layer` requires all of: handler layer(s), middleware implementation layers, a `layerProtocol*`, and (for non-worker protocols) a `RpcSerialization.layer*`. Missing ones surface as unresolved layer requirements.
-4. **`layerJson` on a raw TCP socket server.** No framing — decode breaks when messages span chunks. Sockets need `layerNdjson`, `layerNdJsonRpc()`, or `layerMsgPack`. (WebSocket is fine with `layerJson` — ws frames messages itself.)
+4. **`layerJson` on a raw TCP socket server.** Sockets need `layerNdjson`, `layerNdJsonRpc()`, or `layerSchemaBinary()` for framing. WebSocket supplies its own framing and supports `layerJson`.
 5. **Streaming rpcs over `layerProtocolHttp` + `layerJson` and wondering why chunks arrive all at once.** Unframed HTTP buffers the whole response until every request in the call finishes. Framed HTTP streams incrementally with a bounded response queue (`streamBufferSize`, default 16). HTTP has no RPC acknowledgment protocol, but the bounded queue still backpressures producers; full-duplex transports additionally support RPC acks.
 6. **Leaving `disableFatalDefects: false` in production.** One handler `die` then nukes every in-flight request on that connection with a connection-level defect. Set `true` to confine defects to the failing request.
 7. **Assuming `concurrency` is per-client.** It is one semaphore per server instance shared by all clients. Use `Rpc.fork` to exempt cheap read handlers instead of raising the global limit.

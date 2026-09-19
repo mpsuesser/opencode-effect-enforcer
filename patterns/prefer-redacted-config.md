@@ -3,13 +3,13 @@ action: context
 tool: (edit|write)
 event: after
 name: prefer-redacted-config
-description: Use Config.redacted or Schema.Redacted for secret-like configuration values
+description: Use Config.Redacted or Schema.Redacted for secret-like configuration values
 glob: '**/*.{ts,tsx}'
 detector: ast
 rule:
     any:
-        - pattern: Config.string($KEY)
-        - pattern: Config.nonEmptyString($KEY)
+        - pattern: Config.String($KEY)
+        - pattern: Config.NonEmptyString($KEY)
         - all:
               - kind: pair
               - has:
@@ -33,18 +33,18 @@ suggestSkills:
 
 ```haskell
 -- Transformation
-Config.string secretKey    :: String            -- easy to log accidentally
-Config.redacted secretKey  :: Redacted String   -- hidden from logs/toString
+Config.String secretKey    :: String            -- easy to log accidentally
+Config.Redacted secretKey  :: Redacted String   -- hidden from logs/toString
 ```
 
 ```typescript
 // Bad
-const apiKey = Config.string('API_KEY');
-const token = Config.nonEmptyString('GITHUB_TOKEN');
+const apiKey = Config.String('API_KEY');
+const token = Config.NonEmptyString('GITHUB_TOKEN');
 
 // Good
-const apiKey = Config.redacted('API_KEY');
-const token = Config.redacted('GITHUB_TOKEN');
+const apiKey = Config.Redacted('API_KEY');
+const token = Config.Redacted('GITHUB_TOKEN');
 ```
 
 For structured config schemas, wrap secret-like string fields in `Schema.Redacted`:
@@ -67,4 +67,4 @@ const AppConfig = Config.schema(
 );
 ```
 
-Secrets should remain redacted from the moment they enter the program. Use `Config.redacted` for primitive config values and `Schema.Redacted(Schema.String)` for schema-based config fields.
+Secrets should remain redacted from the moment they enter the program. Use `Config.Redacted` for primitive config values and `Schema.Redacted(Schema.String)` for schema-based config fields.

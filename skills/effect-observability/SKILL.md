@@ -207,7 +207,7 @@ import { Config, Effect, Layer, Logger } from 'effect';
 
 const LoggerLayer = Layer.unwrap(
 	Effect.gen(function* () {
-		const env = yield* Config.string('NODE_ENV').pipe(
+		const env = yield* Config.String('NODE_ENV').pipe(
 			Config.withDefault('development')
 		);
 		if (env === 'production') {
@@ -652,7 +652,7 @@ const ProdObservability = Layer.mergeAll(
 
 const ObservabilityLayer = Layer.unwrap(
 	Effect.gen(function* () {
-		const env = yield* Config.string('NODE_ENV').pipe(
+		const env = yield* Config.String('NODE_ENV').pipe(
 			Config.withDefault('development')
 		);
 		return env === 'production' ? ProdObservability : DevObservability;

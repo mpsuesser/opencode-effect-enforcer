@@ -208,6 +208,19 @@ type Error = Tool.Failure<typeof FindUser>;
 
 **Key Pattern: failureMode**
 
+Parameter validation follows the tool's `failureMode`. Failure results include
+`Tool.ExecutionFailure` for framework failures (AI errors, denial, interruption)
+as well as declared user errors. Select result codecs using `isFailure` and
+`Tool.failureResultSchema(tool)`; preserve `encodedResult` when storing or
+replaying response parts. A failure with `Schema.NumberFromString` is stored as
+a string, even when the success schema stores a number. Validation errors do not
+expose a `toolParams` field.
+
+`Toolkit.handle` accepts parse options for parameter decoding. Returned failures
+carry `failureOrigin`, also available through the `Toolkit.FailureOrigin` cause
+annotation and `Tool.FailureOrigin` type. Keep validation, declared handler, and
+internal failures distinct when presenting or reporting them.
+
 - `"error"` (default): Failures go to Effect error channel
 - `"return"`: Failures returned as tool result (captured, not thrown)
 

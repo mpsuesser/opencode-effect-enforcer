@@ -79,7 +79,7 @@ Effect.forEach xs f opts      -- concurrency intent explicit
 Effect.forEach(items, processItem);
 Effect.all(tasks);
 Effect.validate(inputs, validateInput, { discard: true });
-Effect.all(tasks, { concurrency: 'inherit' }); // removed in beta.102
+Effect.all(tasks, { concurrency: 'inherit' }); // unsupported ambient policy
 
 // Good
 Effect.forEach(items, processItem, { concurrency: 1 });

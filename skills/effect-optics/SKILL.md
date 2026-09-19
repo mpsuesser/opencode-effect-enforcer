@@ -328,7 +328,7 @@ const atKey = (key: string) =>
 	);
 ```
 
-Since beta.105, all fallible optic operations use `SchemaIssue.Issue`, not `string`. Custom `makePrism` and `makeOptional` implementations must return structured issues. Issues do not format themselves through `toString`; use `SchemaIssue.makeFormatterDefault()` when a human-readable message is needed:
+Fallible optic operations use `SchemaIssue.Issue`. Custom `makePrism` and `makeOptional` implementations return structured issues. Use `SchemaIssue.makeFormatterDefault()` for human-readable messages:
 
 ```ts
 const formatIssue = SchemaIssue.makeFormatterDefault();

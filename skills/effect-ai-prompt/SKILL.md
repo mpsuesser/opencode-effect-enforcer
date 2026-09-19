@@ -516,7 +516,7 @@ const program = Effect.gen(function* () {
 
 ## Provider-Specific Options
 
-### OpenAI Responses explicit cache breakpoints (rc.112)
+### OpenAI Responses explicit cache breakpoints
 
 With `@effect/ai-openai` loaded, system-message and text-part options accept
 `openai.promptCacheBreakpoint`. This requires GPT-5.6 or later; earlier models

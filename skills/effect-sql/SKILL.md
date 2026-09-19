@@ -560,7 +560,7 @@ Effect SQL uses driver-specific packages that provide `SqlClient` layers.
 
 | Package                   | Database                             |
 | ------------------------- | ------------------------------------ |
-| `@effect/sql-pg`          | PostgreSQL (via `pg`)                |
+| `@effect/sql-pg`          | PostgreSQL (native Effect protocol client) |
 | `@effect/sql-pglite`      | Embedded PostgreSQL/PGlite           |
 | `@effect/sql-mysql2`      | MySQL (via `mysql2`)                 |
 | `@effect/sql-sqlite-node` | SQLite (via `better-sqlite3`)        |
@@ -591,14 +591,14 @@ const DatabaseLayer = PgClient.layer({
 
 // From Config (reads from environment/config provider)
 const DatabaseLayerConfig = PgClient.layerConfig({
-	url: Config.redacted('DATABASE_URL')
+	url: Config.Redacted('DATABASE_URL')
 });
 
 // The layer provides both PgClient and SqlClient services
 const program = Effect.gen(function* () {
 	const sql = yield* SqlClient; // generic interface
 	// or
-	const pg = yield* PgClient; // pg-specific (has .json(), .listen(), .notify())
+	const pg = yield* PgClient.PgClient; // PostgreSQL-specific service
 });
 
 const main = program.pipe(Effect.provide(DatabaseLayer));
@@ -606,10 +606,35 @@ const main = program.pipe(Effect.provide(DatabaseLayer));
 
 ### PgClient-Specific Features
 
-### Low-level PostgreSQL codecs (rc.112)
+### Native PostgreSQL client and codecs
 
-`@effect/sql-pg` adds public `PgProtocol`, `PgTypes`, and `PgAuth` modules.
-These are building blocks for protocol adapters; `PgClient` still uses `pg`.
+`PgClient` uses `PgConnection` and `PgPool` for native binary queries, prepared
+statements, pipelining, streaming, cancellation, and notifications. Use `make`
+for a pool or `makeClient` for one connection. `types` accepts a `PgTypes.Registry`.
+Bind JSON explicitly with `sql.json`, and send one statement per query string.
+Named preparation is enabled by default; set `prepare: false` for incompatible
+poolers, or use statement-level `unprepared` / `valuesUnprepared`.
+
+Decode rows according to the actual driver boundary: `int8` is `bigint`, `date`
+is a string, timestamps are `Date` (millisecond precision), and `bytea` is
+`Uint8Array`. Infinite/out-of-range timestamps decode to invalid Dates; validate
+before constructing domain instants. Timestamp encoders accept Date or epoch
+milliseconds; invalid Date encoding fails. A Date binds as `timestamptz`, so use
+UTC session time or `PgTypes.timestamp(value)` for UTC fields in a timestamp column.
+`executeRaw` returns `PgConnection.Result`.
+
+Unregistered OIDs decode as UTF-8 text, suitable for scalar enum labels but not
+arbitrary binary types. Register custom scalar/array codecs through
+`PgTypes.makeRegistry().register(elementOid, codec, { arrayOid })` and pass the
+registry as `types`. Decode failures close the connection and fail pending work.
+`inet` uses `IpInterface`; `cidr` uses `IpNetwork` and rejects host bits.
+
+Use structured `startupParameters` and opaque `startupOptions` for per-connection
+session defaults. Passwords may be infallible, service-free Effects reevaluated
+per physical connection. `sslmode=prefer` and `allow` try TLS first and fall back
+only when the server declines SSLRequest; handshake/certificate failures remain
+fatal. Explicit SSL options take precedence. `maxMessageSize` defaults to 16 MiB;
+when multiplexing is enabled, `multiplexConcurrency` defaults to 32.
 
 - `PgProtocol`: PostgreSQL 3.0 frontend encoding and incremental backend-frame
   parsing. Stateful parser failures are terminal and synchronous; lift a parser
@@ -629,15 +654,28 @@ keep the Effect-family package versions aligned when upgrading those adapters.
 ### PgClient JSON and Notifications
 
 ```ts
-const pg = yield* PgClient;
+const pg = yield* PgClient.PgClient;
 
 // JSON parameter helper
 sql`INSERT INTO data ${sql.insert({ metadata: pg.json({ key: 'value' }) })}`;
 
 // LISTEN/NOTIFY
-const notifications = pg.listen('my_channel'); // Stream<string, SqlError>
+const notifications = yield* pg.listen('my_channel'); // scoped Dequeue<string, SqlError>
 yield* pg.notify('my_channel', 'hello');
+const messages = Stream.fromQueue(notifications);
 ```
+
+Listener acquisition completes after registration, giving an explicit readiness
+boundary. PostgreSQL listener queues carry `SqlError` when the connection fails;
+retry a scoped effect that reacquires the listener, not the failed queue. Intentional
+scope closure interrupts consumers. PGlite also returns a scoped notification dequeue.
+
+`SqlModel.makeResolvers().insert` requires both input encoding and row decoding
+services; `insertVoid` needs only input encoding services. D1 statement `.raw`
+returns the complete native result; read `.results` for rows. Durable Object SQL
+transactions support nested child rollback but no explicit async operations inside
+the transaction. Use `Statement.SpanPropagationEnabled` to opt into driver span
+parenting under `sql.execute`.
 
 ### PGlite Setup
 
@@ -654,7 +692,7 @@ const PgliteLayer = PgliteClient.layer({
 });
 
 const PgliteLayerConfig = PgliteClient.layerConfig({
-	dataDir: Config.string('PGLITE_DATA_DIR')
+	dataDir: Config.String('PGLITE_DATA_DIR')
 });
 
 const program = Effect.gen(function* () {
@@ -662,7 +700,7 @@ const program = Effect.gen(function* () {
 	const pglite = yield* PgliteClient.PgliteClient;
 
 	yield* sql`INSERT INTO data ${sql.insert({ metadata: pglite.json({ key: 'value' }) })}`;
-	const notifications = pglite.listen('my_channel');
+	const notifications = yield* pglite.listen('my_channel');
 	yield* pglite.notify('my_channel', 'hello');
 	yield* pglite.refreshArrayTypes;
 	const snapshot = yield* pglite.dumpDataDir('gzip');
@@ -704,7 +742,7 @@ yield*
 		Stream.runCollect
 	);
 
-// Chunked streaming (driver-dependent, e.g. pg uses cursor with 128-row chunks)
+// Streaming uses the driver's bounded result batching.
 ```
 
 ## Error Handling

@@ -28,7 +28,7 @@ Reference this for:
 - Declarative, not imperative
 - Pipeline-friendly composition
 
-## Schema-First Matching (rc.112)
+## Schema-First Matching
 
 For domain/wire models, prefer class variants combined with
 `Schema.Union([...]).pipe(Schema.toTaggedUnion('kind'))`. Use `.match` for

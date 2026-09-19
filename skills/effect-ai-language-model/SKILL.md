@@ -94,7 +94,13 @@ const manualTools = LanguageModel.generateText({
 });
 ```
 
-When `disableToolCallResolution: true`, tool-call `params` are preserved in the schema's **encoded** representation instead of being decoded and then returned. The response type reflects this as `GenerateTextResponse<Tools, true>` and `Response.ToolCallParts<Tools, true>`; streaming uses `Response.StreamPart<Tools, true>`. This matters for transformations such as `Schema.NumberFromString`: manual calls contain the wire value `{ count: '3' }`, not `{ count: 3 }`.
+With `disableToolCallResolution: true`, tool-call `params` retain the schema's
+**encoded** representation. Response generics use the mode `"encoded"`, for
+example `GenerateTextResponse<Tools, "encoded">` and
+`Response.StreamPart<Tools, "encoded">`. Automatic resolution uses `"opaque"`
+parameters (`unknown`), because invalid calls can also appear in responses.
+Only successfully decoded handler inputs have the decoded parameter type.
+For `Schema.NumberFromString`, manual calls contain `{ count: '3' }`.
 
 Pass those encoded params directly to `toolkit.handle(name, params, toolCallId)` when resolving manually. `Toolkit.handle` now accepts `Tool.ParametersEncoded<T>` and performs the decode before the handler receives `Tool.Parameters<T>`.
 
@@ -104,7 +110,7 @@ Pass those encoded params directly to `toolkit.handle(name, params, toolCallId)`
 const response = yield* LanguageModel.generateText({ prompt: '...' });
 
 response.text; // string - concatenated text content
-response.toolCalls; // decoded params normally; encoded params when resolution is disabled
+response.toolCalls; // opaque params normally; encoded params when resolution is disabled
 response.toolResults; // Array<ToolResultParts> - tool outputs
 response.finishReason; // "stop" | "length" | "content-filter" | "tool-calls" | "error" | "pause" | "unknown" | "other"
 response.usage; // Usage object with nested structure, e.g. response.usage.outputTokens.total
@@ -297,6 +303,32 @@ const robust = LanguageModel.generateText({
 );
 ```
 
+## Batched classification, rating, and probability
+
+Use `DecisionModel` for structured judgments over one schema-encoded input.
+Define named decisions once and send them in one call; input encoding services
+remain explicit and provider/validation failures use `AiError`. Classification
+requires at least two labels, rating requires at least two distinct ordered
+levels, and a definition requires at least one decision.
+
+<!-- typecheck -->
+```ts
+import * as Schema from 'effect/Schema';
+import { Decision, DecisionModel } from 'effect/unstable/ai';
+
+class Ticket extends Schema.Class<Ticket>('Ticket')({ body: Schema.String }) {}
+const triage = Decision.make({
+	input: Ticket,
+	decisions: {
+		team: Decision.classify({
+			instructions: 'Choose the team responsible for this request',
+			criteria: { billing: 'Payments and invoices', support: 'Product support' }
+		})
+	}
+});
+const result = DecisionModel.decide(triage, { input: new Ticket({ body: 'Invoice question' }) });
+```
+
 ## Type Extraction Utilities
 
 ```typescript
@@ -308,8 +340,8 @@ type MyError = LanguageModel.ExtractError<typeof options>;
 // Extract service requirements from options
 type MyRequirements = LanguageModel.ExtractServices<typeof options>;
 
-// true only when options has literal disableToolCallResolution: true
-type EncodedParams = LanguageModel.ExtractEncodedToolParameters<typeof options>;
+// "encoded" for literal disableToolCallResolution: true; otherwise "opaque"
+type ParametersMode = LanguageModel.ExtractToolParametersMode<typeof options>;
 
 // Inferred based on:
 // - toolkit: Toolkit.WithHandler<Tools> → Tool.HandlerError<Tools> ∈ E

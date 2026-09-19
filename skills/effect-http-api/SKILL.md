@@ -7,6 +7,21 @@ You are an Effect TypeScript expert specializing in the HttpApi module for build
 
 ## Effect Source Reference
 
+Use `HttpApi.ParseOptions` annotations at API, group, or endpoint scope to
+configure client and server codecs. `HttpApiBuilder.handler` defines a reusable
+endpoint callback with inferred request, success, error, and service types.
+Generated clients and AtomHttpApi calls accept per-call `sseOptions`.
+SSE IDs may be absent: model them with `Schema.optional(Schema.String)`.
+With excess-property errors, include the `event` field (default `message`) and
+any `id`, including inherited IDs. `Sse.decodeSchema` / `ChannelSchema.decode`
+accept parse options directly.
+
+HTTP `QUERY` endpoints are supported. OpenAPI 3.1 represents them through
+`x-oai-additionalOperations`, requiring consumer support for that extension;
+the generator also accepts OpenAPI 3.2's native `query` operation.
+Generated multipart binary fields use `File | Blob` and dedicated `*Multipart`
+component exports. Keep generated imports aligned with the chosen transport.
+
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Browse and read files there directly to look up APIs, types, and implementations.
 
 Key reference files:
@@ -1128,7 +1143,7 @@ The `layerClient` second argument can also be an `Effect` returning the middlewa
 const AuthorizationClient = HttpApiMiddleware.layerClient(
 	Authorization,
 	Effect.gen(function* () {
-		const token = yield* Config.redacted('API_TOKEN');
+		const token = yield* Config.Redacted('API_TOKEN');
 		return ({ next, request }) =>
 			next(
 				HttpClientRequest.bearerToken(request, Redacted.value(token))
@@ -1170,7 +1185,7 @@ Top-level group endpoints are at the root: `buildUrl.health()`. With `disableCod
 
 ## OpenAPI Documentation
 
-As of rc.112 built-in OpenAPI documentation responses are generated lazily on
+Built-in OpenAPI documentation responses are generated lazily on
 the first request, rather than while the route layer is built. A generation
 defect is not permanently cached: a later request retries generation. Include a
 documentation-route request in integration checks if generation must be verified;

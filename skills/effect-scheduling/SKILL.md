@@ -11,6 +11,13 @@ Verify APIs against `~/.local/share/opencode/repos/github.com/Effect-TS/effect@m
 
 ## Semantics
 
+`Effect.timeoutOrElse` finishes interrupting the source before evaluating the
+fallback. The fallback runs in the caller fiber with its interruptibility and
+supervision. `Effect.repeatOrElse` receives the previous step's `Schedule.Metadata`
+in its fallback. Custom `RateLimiterStore.tokenBucket` implementations return
+`[remaining, elapsedMillis]` atomically; fabricating zero elapsed time produces
+incorrect delay, retryAfter, and resetAfter values.
+
 - `Effect.retry` reruns typed failures. It does not retry defects or interruption.
 - `Effect.repeat` reruns successes. A typed failure stops repetition unless the pass handles it first.
 - The source effect runs once before the schedule is stepped.

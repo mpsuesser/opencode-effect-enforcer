@@ -1,6 +1,6 @@
 ---
 name: effect-stream
-description: Build effectful pull-based streaming pipelines with Effect Stream — creation, transformation, consumption, NDJSON/Msgpack encoding, concurrency, resource safety. Use when working with values produced over time, paginated APIs, event listeners, or streaming I/O.
+description: Build effectful pull-based streaming pipelines with Effect Stream — creation, transformation, consumption, NDJSON/SchemaBinary encoding, concurrency, resource safety. Use when working with values produced over time, paginated APIs, event listeners, or streaming I/O.
 ---
 
 You are an Effect TypeScript expert specializing in pull-based streaming with `Stream`, `Sink`, and `Channel`.
@@ -15,7 +15,7 @@ Reference this for:
 - Stream constructors and combinators (`packages/effect/src/Stream.ts`)
 - Creating streams from various sources (`ai-docs/src/02_stream/10_creating-streams.ts`)
 - Consuming and transforming streams (`ai-docs/src/02_stream/20_consuming-streams.ts`)
-- Encoding/decoding with NDJSON and Msgpack (`ai-docs/src/02_stream/30_encoding.ts`)
+- Encoding/decoding with NDJSON and SchemaBinary (`packages/effect/src/unstable/encoding/`)
 
 ## Core Model
 
@@ -25,7 +25,7 @@ Use a stream when values are naturally many-valued and ordered over time. For on
 
 ```ts
 import { Effect, Schedule, Schema, Sink, Stream } from 'effect';
-import { Ndjson, Msgpack } from 'effect/unstable/encoding';
+import { Ndjson, SchemaBinary } from 'effect/unstable/encoding';
 ```
 
 For Node.js readable streams:
@@ -249,11 +249,11 @@ Stream.make('US', 'CA', 'NZ').pipe(
 ```ts
 // Running accumulator — emits initial state plus each accumulated state
 // Output: [0, 1, 3, 6]
-Stream.make(1, 2, 3).pipe(Stream.scan(0, (acc, n) => acc + n));
+Stream.make(1, 2, 3).pipe(Stream.scan(() => 0, (acc, n) => acc + n));
 
 // Effectful variant
 Stream.make(1, 2, 3).pipe(
-	Stream.scanEffect(0, (acc, n) => Effect.succeed(acc + n))
+	Stream.scanEffect(() => 0, (acc, n) => Effect.succeed(acc + n))
 );
 ```
 
@@ -355,15 +355,15 @@ stream.pipe(
 
 ---
 
-## 4. Encoding & Decoding (NDJSON / Msgpack / SchemaBinary)
+## 4. Encoding & Decoding (NDJSON / SchemaBinary)
 
 Use `Stream.pipeThroughChannel` with codec channels from `effect/unstable/encoding`.
 
 ```ts
-import { Ndjson, Msgpack } from 'effect/unstable/encoding';
+import { Ndjson, SchemaBinary } from 'effect/unstable/encoding';
 ```
 
-### Schema-derived binary frames (rc.112)
+### Schema-derived binary frames
 
 <!-- typecheck -->
 ```ts
@@ -446,20 +446,8 @@ objectStream.pipe(Stream.pipeThroughChannel(Ndjson.encode())); // objects → Ui
 Stream.pipeThroughChannel(Ndjson.decodeString({ ignoreEmptyLines: true }));
 ```
 
-### Msgpack
-
-Same API shape — replace `Ndjson` with `Msgpack`. Note that `Msgpack.decodeSchema(schema)` is curried: it returns a factory you must invoke (`()`) to get the `Channel` value passed to `Stream.pipeThroughChannel`, exactly like the NDJSON schema helpers.
-
-```ts
-const decoder = Msgpack.decodeSchema(
-	Schema.Struct({
-		id: Schema.Number,
-		name: Schema.String
-	})
-)();
-
-binaryStream.pipe(Stream.pipeThroughChannel(decoder), Stream.runCollect);
-```
+Use SchemaBinary for a schema-derived binary contract and NDJSON for JSON
+interoperability. Both peers must agree on the wire format and schema.
 
 ### Realistic pipeline: decode → transform → re-encode
 
@@ -545,6 +533,13 @@ stream.pipe(Stream.orElseSucceed((error) => defaultValue));
 
 Prefer natural backpressure. Add `Stream.buffer` only to deliberately decouple producer and consumer: `"suspend"` backpressures when full, `"dropping"` drops new values, and `"sliding"` drops old values to retain the latest. Avoid `capacity: "unbounded"` unless growth is bounded elsewhere and documented.
 
+`Stream.partition` returns `[passes, fails]` and accepts `{ capacity }` (default
+16). Consume both sides concurrently to avoid blocking a full partition.
+`Stream.mapBoth` takes `onElement` / `onError`. `catchTags` rejects unknown tag
+keys; `catchDefect` handles defects separately from typed failures/interruption.
+`tapDefect`, `tapErrorTag`, and `unwrapReason` provide targeted observation/recovery.
+Use `Channel.runDrain` to consume channel output and return its completion value.
+
 ### merge
 
 Interleave elements from two streams concurrently in arrival order.
@@ -625,7 +620,7 @@ Because the producer starts immediately, subscribers that attach after the sourc
 
 ### broadcastN
 
-Fixed-fanout multicast (added in beta.68). Produces a tuple of `n` streams; the source starts only **after all `n` downstream streams have been subscribed**, so every consumer sees the full sequence without needing `replay`. If a downstream stream is interrupted, it unsubscribes and no longer contributes backpressure.
+Fixed-fanout multicast produces a tuple of `n` streams; the source starts only **after all `n` downstream streams have been subscribed**, so every consumer sees the full sequence without needing `replay`. If a downstream stream is interrupted, it unsubscribes and no longer contributes backpressure.
 
 ```ts
 Effect.scoped(
@@ -679,7 +674,7 @@ const safeStream = Stream.scoped(
 // Stream<string, never, never> — Scope is eliminated
 ```
 
-As of beta.69, `Stream.scoped` provides its managed scope to the **pull effects** as well — including effects created by `Stream.fromEffect` and by sequential `Stream.mapEffect`. So `Effect.acquireRelease` finalizers used inside those pulls run when the stream completes, not leaked until the outer program ends.
+`Stream.scoped` provides its managed scope to **pull effects**, including effects created by `Stream.fromEffect` and sequential `Stream.mapEffect`. `Effect.acquireRelease` finalizers inside those pulls run when the stream completes.
 
 ### unwrap
 

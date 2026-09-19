@@ -1,6 +1,6 @@
 # Agent Rules
 
-The bundled guidance targets **Effect 4.0.0-rc.112**. Read the consuming project's
+The bundled guidance targets **Effect 4.0.0-rc.116**. Read the consuming project's
 version before applying an API: stable v3, older prereleases, and unreleased main
 can have different contracts. Keep directly used Effect-family packages on
 compatible release versions.
@@ -10,8 +10,8 @@ Load all relevant skills before writing or planning any code. Effect is a massiv
 When skills leave any ambiguity, or when you encounter unfamiliar APIs during implementation, read the OpenCode `effect` reference at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Treat this reference as the source of truth over `node_modules`, stale external docs, or memory.
 
 Check the reference revision too. For this baseline, inspect the
-`effect@4.0.0-rc.112` tag (for example with `git show
-effect@4.0.0-rc.112:packages/effect/src/Schema.ts`) when main has moved ahead.
+`effect@4.0.0-rc.116` tag (for example with `git show
+effect@4.0.0-rc.116:packages/effect/src/Schema.ts`) when main has moved ahead.
 Source symbols and signatures at that tag take precedence over stale prose or
 line-number links. Public exports marked `@internal` in source are not application APIs.
 

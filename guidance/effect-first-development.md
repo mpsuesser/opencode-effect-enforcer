@@ -2,9 +2,9 @@
 
 This document defines the working model behind Effect-first code using the Effect v4 ecosystem.
 
-Bundled baseline: **Effect 4.0.0-rc.112**. Check the consuming project's installed
+Bundled baseline: **Effect 4.0.0-rc.116**. Check the consuming project's installed
 version and inspect the matching upstream release tag before using newer APIs.
-The release changelog and migration audit are in `docs/effect-4.0.0-rc.112.md`.
+The release changelog and migration audit are in `docs/effect-4.0.0-rc.116.md`.
 Source paths below are relative to the Effect source reference; locate symbols
 by name rather than relying on line numbers or a particular tool name.
 
@@ -296,7 +296,7 @@ export type Tenant = typeof Tenant.Type;
 - Prefer `Schema.Class` for tagged union member schemas.
 - Use `Schema.TaggedUnion` only for canonical `_tag` object-union construction.
 - Reference: `packages/effect/SCHEMA.md`, sections `TaggedUnion` and `toTaggedUnion`.
-- In rc.112, both union forms offer `matchOrElse` for partial matching with a typed fallback. Prefer `match` when every variant must be handled separately. `toTaggedUnion` narrows fallback input to unmatched variants; direct `Schema.TaggedUnion` types it as the full union.
+- Both union forms offer `matchOrElse` for partial matching with a typed fallback. Prefer `match` when every variant must be handled separately. `toTaggedUnion` narrows fallback input to unmatched variants; direct `Schema.TaggedUnion` types it as the full union.
 
 Example:
 
@@ -420,6 +420,12 @@ const pollInterval = Duration.millis(250);
 const program = Effect.sleep(pollInterval).pipe(Effect.timeout(timeout));
 ```
 
+### EF-16b: Byte counts use `ByteSize`
+
+Use `ByteSize` and `ByteSize.Input` for byte counts and storage/network limits.
+Keep signed seek offsets as `bigint`. Parse external size strings before passing
+them to APIs, and preserve exact counts rather than coercing them to numbers.
+
 ### EF-17: Nullable/nullish schema fields should decode to `Option`
 
 - Use dedicated schema helpers for optional/null conversions:
@@ -467,7 +473,7 @@ const b = pipe('value', addPrefix('p:'));
 
 ### EF-19: JSON parse/stringify must use Schema
 
-- Use `Schema.fromJsonString(Schema.Unknown)` for unknown JSON payloads. `Schema.UnknownFromJsonString` is internal as of beta.103.
+- Use `Schema.fromJsonString(Schema.Unknown)` for unknown JSON payloads.
 - Use `Schema.fromJsonString(MySchema)` for typed JSON string boundaries.
 - Avoid direct `JSON.parse` / `JSON.stringify` in Effect-first code.
 - Reference: [`fromJsonString`](packages/effect/src/Schema.ts) in the Effect v4 source.
@@ -540,7 +546,7 @@ const readSdkValue = (client: ExternalSdk) =>
 - Prefer `Effect.scoped` for helper composition that allocates resources.
 - Do not manually open resources without an explicit finalization strategy.
 - Reference: `acquireUseRelease` and `scoped` in `packages/effect/src/Effect.ts`.
-- For pool checkouts in rc.112 use `Pool.use(pool, callback)` to return the item on every exit without adding a caller `Scope` requirement. Do not return an item from `Effect.scoped(Pool.get(pool))` and then use it after release.
+- For pool checkouts use `Pool.use(pool, callback)` to return the item on every exit without adding a caller `Scope` requirement. Do not return an item from `Effect.scoped(Pool.get(pool))` and then use it after release.
 
 Example:
 
@@ -615,7 +621,7 @@ const runWithHeartbeat = Effect.fn('Worker.run')(function* () {
 - For non-trivial fan-out, set concurrency in `Effect.forEach`, `Effect.all`, or `Effect.validate`.
 - Avoid implicit unbounded parallelism on large collections.
 - Concurrency should be part of API intent for throughput-sensitive paths.
-- Use an explicit number or `"unbounded"`. The `"inherit"` option and `Effect.withConcurrency` were removed in beta.102.
+- Use an explicit number or `"unbounded"`; pass concurrency policy directly to each combinator.
 - Reference: `Effect.forEach`, `Effect.all`, and `Types.Concurrency` in the Effect v4 source.
 
 Example:
@@ -640,16 +646,16 @@ Example:
 import { Config, Effect } from 'effect';
 
 const loadPort = Effect.fn('Config.loadPort')(function* () {
-	return yield* Config.int('PORT');
+	return yield* Config.Int('PORT');
 });
 ```
 
 ### EF-29: Secrets must stay redacted
 
-- Use `Config.redacted` for secret config values.
+- Use `Config.Redacted` for secret config values.
 - Use `Redacted.make` for sensitive values coming from non-config sources.
 - Never log secret values after unwrapping.
-- Reference: `Config.redacted` in `packages/effect/src/Config.ts` and `packages/effect/src/Redacted.ts`.
+- Reference: `Config.Redacted` in `packages/effect/src/Config.ts` and `packages/effect/src/Redacted.ts`.
 
 Example:
 
@@ -657,7 +663,7 @@ Example:
 import { Config, Effect } from 'effect';
 
 const loadApiKey = Effect.fn('Config.loadApiKey')(function* () {
-	const apiKey = yield* Config.redacted('API_KEY');
+	const apiKey = yield* Config.Redacted('API_KEY');
 	yield* Effect.logDebug(`apiKey=${String(apiKey)}`);
 	return apiKey;
 });
@@ -764,6 +770,8 @@ export class CreateOrderInput extends Schema.Class<CreateOrderInput>(
 - Use `Schema.withDecodingDefault` / `Schema.withDecodingDefaultKey` for decode-time defaults.
 - Constructor defaults may fail with `SchemaIssue.Issue`. Likewise, `MySchema.makeEffect(fields)` returns validation failures directly as `SchemaIssue.Issue`, not wrapped in `Schema.SchemaError`.
 - Constructor defaults (including `Schema.tag`) do not automatically apply during boundary decoding. Unknown input uses `Schema.decodeUnknownEffect`; `decodeSync` is not a constructor replacement.
+- Class `make`, `makeOption`, and `makeEffect` preserve an existing instance. Use `new` when a distinct instance is intended.
+- Pass parsing options to the decoder/encoder/constructor adapter. Model retained extra properties with `Record` or `StructWithRest`; use `onExcessProperty: "error"` for closed boundaries.
 
 Example:
 
@@ -925,6 +933,7 @@ const arraysEqual = (
 
 - If conversion is deterministic and type-shaping (path normalization, filename conversion, tagged-string normalization), model it with `Schema.decodeTo(..., SchemaTransformation.transform(...))`.
 - Prefer schema transformation helpers over ad-hoc conversion functions.
+- Use `SchemaGetter.transformEffect` / `SchemaTransformation.transformEffect` for effectful conversion. Compose getters with standalone `SchemaGetter.compose`, and transformation pairs with `SchemaTransformation.composeTransformation`.
 
 Example:
 
@@ -994,7 +1003,7 @@ const UnknownToString = Schema.Unknown.pipe(
 - For invalidatable caches, use `Effect.cachedInvalidateWithTTL(effect, Duration.infinity)` which returns a `[cachedEffect, invalidate]` tuple. Call `yield* invalidate` to force re-computation on next access.
 - For time-based caches, use `Effect.cachedWithTTL(effect, duration)`.
 - Prefer `Effect.cachedInvalidateWithTTL` with `Duration.infinity` over mutable `let` rebinding of cached effects.
-- For keyed scoped resources, rc.112 adds `RcMap.getOption` and `LayerMap.contextEffectOption`. They atomically retain already-cached entries and propagate acquisition failures; `None` means missing/closed, not failed. A `has` check followed by `get` is not equivalent.
+- For keyed scoped resources, use `RcMap.getOption` and `LayerMap.contextEffectOption` to atomically retain already-cached entries and propagate acquisition failures; `None` means missing/closed, not failed. A `has` check followed by `get` is not equivalent.
 
 Example:
 
@@ -1191,8 +1200,8 @@ export const resilientTask = task.pipe(
 import { Config, Effect } from 'effect';
 
 export const loadConfig = Effect.fn('Config.load')(function* () {
-	const port = yield* Config.int('PORT');
-	const apiKey = yield* Config.redacted('API_KEY');
+	const port = yield* Config.Int('PORT');
+	const apiKey = yield* Config.Redacted('API_KEY');
 	return { port, apiKey };
 });
 ```
@@ -1237,7 +1246,7 @@ Use this before submitting code:
 24. Forking intent is explicit (`forkChild` default; `forkDetach` justified).
 25. Large fan-out operations specify concurrency deliberately.
 26. Config values come from `Config` / `ConfigProvider`, not direct `process.env` in domain logic.
-27. Secrets are `Redacted` (`Config.redacted` / `Redacted.make`) and not logged raw.
+27. Secrets are `Redacted` (`Config.Redacted` / `Redacted.make`) and not logged raw.
 28. Recovery uses `catchTag` / `catchFilter` for targeted cases.
 29. Expected failures use `Effect.fail`; defects are reserved for invariants and discarding irrelevant upstream error types via `orDie`.
 30. Isolation-sensitive layer provisioning uses `{ local: true }` or `Layer.fresh`.

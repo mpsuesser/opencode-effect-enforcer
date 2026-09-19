@@ -26,13 +26,13 @@ suggestSkills:
 
 # Use `Context.Service` for All Service Definitions
 
-`Context.Service` is the single canonical service-definition API in Effect v4 (beta.46+). Three legacy spellings exist and must all be replaced:
+Use `Context.Service` for service definitions. Replace these legacy spellings:
 
 | Legacy API                  | Era       | Replacement                |
 | --------------------------- | --------- | -------------------------- |
 | `Context.Tag` / `GenericTag` | pre-v4    | `Context.Service`          |
 | `Effect.Service`            | early v4  | `Context.Service`          |
-| `ServiceMap.Service` / `.*` | beta.43    | `Context.Service` / `Context.*` |
+| `ServiceMap.Service` / `.*` | prerelease | `Context.Service` / `Context.*` |
 
 ```haskell
 -- Anti-pattern: *Tag suffix + Context.Tag — removed in v4
@@ -43,10 +43,10 @@ data ParallelClientService = ...
 -- Anti-pattern: Effect.Service — also removed in v4
 class ParallelClient extends Effect.Service<ParallelClient>()(...)
 
--- Anti-pattern: ServiceMap.* — removed before v4 beta.46 stabilized
+-- Anti-pattern: ServiceMap.*
 class MyService extends ServiceMap.Service<MyService>()("@app/MyService", { ... })
 
--- Fix: Context.Service (beta.46 API)
+-- Fix: Context.Service
 class ParallelClient extends Context.Service<ParallelClient>()(
   "@parallel/ParallelClient"
 )

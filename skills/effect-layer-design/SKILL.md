@@ -424,7 +424,7 @@ export const DatabaseTest = Layer.succeed(
 
 // Use in application
 const program = Effect.gen(function* () {
-	const nodeEnv = yield* Config.string('NODE_ENV').pipe(
+	const nodeEnv = yield* Config.String('NODE_ENV').pipe(
 		Config.withDefault('production')
 	);
 	yield* myProgram.pipe(
@@ -462,6 +462,10 @@ const program = Effect.all([
 > **Memo-map fork nuance:** Sharing is mediated by a `MemoMap`. A root memo map (`Layer.makeMemoMapUnsafe()`, used implicitly by `Effect.provide`) shares every layer allocation it builds. A _forked_ memo map (`Layer.forkMemoMap` / `Layer.forkMemoMapUnsafe`) can still see allocations its parent already built, but new allocations it builds stay isolated and are not written back to the parent. This is the mechanism `@effect/vitest` uses to reuse parent layers while isolating nested `it.layer` suites.
 
 ## Error Handling in Layers
+
+`Layer.tapError` and `Layer.tapCause` observers must accept the complete source
+error type. Preloading a LayerMap does not make future resource acquisition
+infallible; its accessors retain the resource error channel.
 
 Handle construction errors:
 
@@ -577,7 +581,7 @@ const layer = Layer.effect(Settings, Effect.gen(function* () {
 For refresh use `Effect.cachedInvalidateWithTTL(work, Duration.infinity)` and
 expose the returned invalidation effect. For keyed retention use `Cache`,
 `ScopedCache`, `RcMap`, or `LayerMap` according to resource lifetime (see
-`effect-cache`). `LayerMap.contextEffectOption` in rc.112 atomically retains an
+`effect-cache`). `LayerMap.contextEffectOption` atomically retains an
 already-cached layer context without allocating a missing key.
 
 When the requirement is a restartable worker, latest-wins scheduling, or queued
