@@ -10,21 +10,14 @@ Actionable feedback when it slips. An OpenCode V2 plugin that helps your agent
 write idiomatic Effect without you repeating the same corrections.
 
 ```mermaid
-flowchart TD
-    Task([Your task]) --> Context[Prepare model context]
-    Guidance["GUIDANCE · always in context"] --> Context
-    Context --> Agent[Agent decides next step]
-    Agent -->|Load a skill| Skills["SKILLS · on-demand API knowledge"]
-    Agent -->|Write or edit| Write[Save changes]
-    Write -->|Successful write| Patterns["PATTERNS · check new code"]
-    Patterns -->|Findings appended| Result[Tool result]
-    Skills --> Result
-    Agent -->|Other tool| Result
-    Result --> Context
-    Agent -->|Finished| Done([Answer])
+flowchart LR
+    Context["Prepare context<br/>GUIDANCE added every turn"]
+    Agent["Agent reasons<br/>Chooses next action"]
+    Tools["Run tools<br/>Load SKILLS as needed · Edit code"]
+    Results["Return results<br/>PATTERNS add feedback after writes"]
 
-    classDef support fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
-    class Guidance,Skills,Patterns support
+    Context --> Agent --> Tools --> Results
+    Results -->|Next turn| Context
 ```
 
 **Guidance sets the direction. Skills teach the details. Patterns catch the slips.**
@@ -67,18 +60,14 @@ or explain intentional exceptions. Checks are advisory and do not block writes.
 Browse the guidance, find a skill for your next task, or see what the patterns
 look for.
 
-<details>
-<summary><strong>Guidance · 4 foundations for Effect-first thinking</strong></summary>
+### Guidance (4)
 
 - [Effect-First Development](guidance/effect-first-development.md): Defines the Effect-first operating model, laws, templates, boundaries, and review checklist.
 - [Agent Rules](guidance/progressive-disclosure-guidance.md): Routes agents to the right skills and authoritative Effect v4 source references.
 - [Effect, and the Near-Inexpressible Majesty of Layers](guidance/post__effect-and-the-near-inexpressible-majesty-of-layers.md): Explains services, Layers, typed dependencies, and testable implementations.
 - [Parse, don't validate](guidance/post__parse-dont-validate.md): Shows how refined types preserve validation knowledge and make illegal states unrepresentable.
 
-</details>
-
-<details>
-<summary><strong>Skills · 53 focused guides, loaded when needed</strong></summary>
+### Skills (53)
 
 #### Modeling And Core APIs
 
@@ -154,10 +143,7 @@ look for.
 - [`effect-concurrency-testing`](skills/effect-concurrency-testing/SKILL.md): Test fibers, PubSub, Deferred, Latch, SubscriptionRef, and concurrent streams.
 - [`effect-incremental-migration`](skills/effect-incremental-migration/SKILL.md): Migrate Promise-based modules incrementally while preserving required compatibility.
 
-</details>
-
-<details>
-<summary><strong>Patterns · 45 checks that turn mistakes into feedback</strong></summary>
+### Patterns (45)
 
 #### Types, Modeling, And Collections
 
@@ -218,8 +204,6 @@ look for.
 
 - [`avoid-react-hooks`](patterns/avoid-react-hooks.md): Reviews React state and effects for Effect Atom alternatives.
 - [`avoid-expect-in-if`](patterns/avoid-expect-in-if.md): Prevents conditional assertions that allow tests to pass without checking behavior.
-
-</details>
 
 ## License
 
