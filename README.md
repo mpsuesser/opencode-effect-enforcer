@@ -3,26 +3,33 @@
 [![npm version](https://img.shields.io/npm/v/opencode-effect-enforcer.svg)](https://www.npmjs.com/package/opencode-effect-enforcer)
 [![license](https://img.shields.io/npm/l/opencode-effect-enforcer.svg)](LICENSE)
 
-**Give your coding agent an Effect-first mindset.**
+**Spend less time teaching your coding agent Effect.**
 
-Better defaults before it writes. The right API knowledge when it needs it.
-Actionable feedback when it slips. An OpenCode V2 plugin that helps your agent
-write idiomatic Effect without you repeating the same corrections.
+If you keep reminding your agent to use typed errors, decode with Schema, or
+check the current API, this plugin gives those reminders a permanent home in
+OpenCode V2. It includes Effect guidance and skills the agent can consult while
+working, plus checks that send common mistakes back for correction after edits.
 
-```mermaid
-flowchart LR
-    Context["Prepare context<br/>GUIDANCE added every turn"]
-    Agent["Agent reasons<br/>Chooses next action"]
-    Tools["Run tools<br/>Load SKILLS as needed · Edit code"]
-    Results["Return results<br/>PATTERNS add feedback after writes"]
+## How it helps
 
-    Context --> Agent --> Tools --> Results
-    Results -->|Next turn| Context
-```
+**Guidance** is included before every model call. Four documents cover
+Effect-first design, schema-first modeling, typed dependencies, and how to
+choose the relevant skills.
 
-**Guidance sets the direction. Skills teach the details. Patterns catch the slips.**
+**Skills** explain how to use specific Effect APIs. The agent loads the relevant
+guides through OpenCode's native skill tool, with 53 to choose from across
+services, streams, HTTP, SQL, React, AI, and more.
 
-Built for **Effect `4.0.0-rc.112`**.
+**Patterns** check the code after edits. 45 tested checks look for common
+TypeScript and TSX mistakes and return correction advice and relevant skill
+suggestions to the agent for its next turn.
+
+Checks run after successful `write`, `edit`, `patch`, and `apply_patch` calls.
+Edits and patches are checked only in newly added text; full-file writes and new
+files are checked in full. Feedback asks the agent to fix valid findings or
+explain intentional exceptions. Checks are advisory and do not block writes.
+
+The bundled guidance and skills target **Effect `4.0.0-rc.112`**.
 
 ## Install
 
@@ -38,24 +45,7 @@ Add the plugin to `opencode.jsonc` in your project, or
 
 Start a new session. OpenCode installs the package automatically.
 
-## Fewer Corrections. Better Effect.
-
-- **Start with the right instincts.** Four guidance documents keep typed errors,
-  schema-first modeling, and explicit dependencies in the agent's context before
-  every model call.
-- **Reach for the right API.** 53 focused skills give the agent task-specific
-  recipes for everything from services and streams to AI, SQL, and React.
-  The agent loads them through OpenCode's native skill tool.
-- **Catch mistakes while the agent is still working.** 45 tested patterns spot
-  common missteps in TypeScript and TSX, then feed corrections and relevant
-  skill suggestions back into the next turn.
-
-Pattern checks run after successful `write`, `edit`, `patch`, and `apply_patch`
-calls. Edits and patches are checked only in newly added text; full-file writes
-and new files are checked in full. Feedback asks the agent to fix valid findings
-or explain intentional exceptions. Checks are advisory and do not block writes.
-
-## Explore What's Included
+## Explore what's included
 
 Browse the guidance, find a skill for your next task, or see what the patterns
 look for.
@@ -69,7 +59,7 @@ look for.
 
 ### Skills (53)
 
-#### Modeling And Core APIs
+#### Modeling and core APIs
 
 - [`effect-error-handling`](skills/effect-error-handling/SKILL.md): Model typed failures, inspect causes, report errors, and recover precisely.
 - [`effect-schema-v4`](skills/effect-schema-v4/SKILL.md): Use current Effect Schema v4 APIs and migrate away from v3 patterns.
@@ -81,7 +71,7 @@ look for.
 - [`effect-typeclass-design`](skills/effect-typeclass-design/SKILL.md): Design typeclasses with curried signatures and dual data-first/data-last APIs.
 - [`effect-graph`](skills/effect-graph/SKILL.md): Construct, traverse, analyze, and render immutable graphs.
 
-#### Services, Lifecycle, And Concurrency
+#### Services, lifecycle, and concurrency
 
 - [`effect-context-witness`](skills/effect-context-witness/SKILL.md): Choose between service witnesses and capability-based dependency injection.
 - [`effect-service-implementation`](skills/effect-service-implementation/SKILL.md): Implement focused Effect services without monolithic interfaces.
@@ -96,7 +86,7 @@ look for.
 - [`effect-pubsub-event-bus`](skills/effect-pubsub-event-bus/SKILL.md): Implement typed publish/subscribe event buses with PubSub and Stream.
 - [`effect-workflow`](skills/effect-workflow/SKILL.md): Build durable workflows, activities, queues, clocks, and compensating transactions.
 
-#### Platform And Runtime Integration
+#### Platform and runtime integration
 
 - [`effect-platform-abstraction`](skills/effect-platform-abstraction/SKILL.md): Keep filesystem, process, HTTP, crypto, and terminal code portable.
 - [`effect-platform-layers`](skills/effect-platform-layers/SKILL.md): Provide platform implementations cleanly at application boundaries.
@@ -107,7 +97,7 @@ look for.
 - [`effect-socket`](skills/effect-socket/SKILL.md): Build TCP, Unix-domain, and WebSocket clients, servers, and framed transports.
 - [`effect-cli`](skills/effect-cli/SKILL.md): Build type-safe command-line interfaces with arguments, options, commands, and Layers.
 
-#### HTTP, RPC, And Persistence
+#### HTTP, RPC, and persistence
 
 - [`effect-http-api`](skills/effect-http-api/SKILL.md): Define typed HTTP APIs with schemas, security, handlers, clients, and OpenAPI.
 - [`effect-http-client`](skills/effect-http-client/SKILL.md): Make typed outgoing HTTP requests with decoding, retries, streaming, and test transports.
@@ -118,7 +108,7 @@ look for.
 - [`effect-rpc-cluster`](skills/effect-rpc-cluster/SKILL.md): Build clustered RPC entities, sharding, singletons, cron jobs, and workflows.
 - [`effect-sql`](skills/effect-sql/SKILL.md): Query databases and build schemas, models, resolvers, repositories, and migrations.
 
-#### AI And MCP
+#### AI and MCP
 
 - [`effect-ai-language-model`](skills/effect-ai-language-model/SKILL.md): Generate text, structured output, streams, and tool calls through `LanguageModel`.
 - [`effect-ai-prompt`](skills/effect-ai-prompt/SKILL.md): Construct and compose prompts from messages and multimodal parts.
@@ -128,13 +118,13 @@ look for.
 - [`effect-ai-chat`](skills/effect-ai-chat/SKILL.md): Build persistent multi-turn chats and agentic tool-calling loops.
 - [`effect-mcp-server`](skills/effect-mcp-server/SKILL.md): Expose MCP tools, resources, and prompts over stdio or HTTP.
 
-#### Frontend State And Composition
+#### Frontend state and composition
 
 - [`effect-atom-state`](skills/effect-atom-state/SKILL.md): Manage reactive React state with Effect Atom.
 - [`effect-atom-rpc`](skills/effect-atom-rpc/SKILL.md): Build cached, invalidating, SSR-aware RPC atoms for React clients.
 - [`effect-react-composition`](skills/effect-react-composition/SKILL.md): Compose React components around explicit Effect Atom state and behavior.
 
-#### Configuration, Operations, And Testing
+#### Configuration, operations, and testing
 
 - [`effect-config`](skills/effect-config/SKILL.md): Load, validate, compose, and test typed configuration sources.
 - [`effect-observability`](skills/effect-observability/SKILL.md): Add structured logs, traces, metrics, and OTLP or Prometheus export.
@@ -145,7 +135,7 @@ look for.
 
 ### Patterns (45)
 
-#### Types, Modeling, And Collections
+#### Types, modeling, and collections
 
 - [`avoid-any`](patterns/avoid-any.md): Flags assertions to `any` or `unknown` that erase type safety.
 - [`casting-awareness`](patterns/casting-awareness.md): Reviews type assertions and suggests decoding, guards, or `satisfies`.
@@ -162,7 +152,7 @@ look for.
 - [`imperative-loops`](patterns/imperative-loops.md): Replaces imperative loops with functional collection transformations.
 - [`prefer-arr-sort`](patterns/prefer-arr-sort.md): Replaces native array sorting with `Arr.sort` and explicit `Order`.
 
-#### Errors And Effect Boundaries
+#### Errors and Effect boundaries
 
 - [`avoid-data-tagged-error`](patterns/avoid-data-tagged-error.md): Reviews public or serialized `Data.TaggedError` values for schema-backed errors.
 - [`avoid-untagged-errors`](patterns/avoid-untagged-errors.md): Reviews raw `Error` construction and discrimination in recoverable code.
@@ -174,7 +164,7 @@ look for.
 - [`prefer-effect-fn`](patterns/prefer-effect-fn.md): Wraps service methods with named, traced `Effect.fn` definitions.
 - [`avoid-yield-ref`](patterns/avoid-yield-ref.md): Replaces direct yielding of Ref, Deferred, Fiber, and Latch with explicit operations.
 
-#### Services, Concurrency, And Time
+#### Services, concurrency, and time
 
 - [`context-tag-extends`](patterns/context-tag-extends.md): Replaces legacy service-tag APIs with `Context.Service`.
 - [`avoid-mutable-state`](patterns/avoid-mutable-state.md): Reviews mutable `let` state inside Effect services in favor of `Ref`.
@@ -185,7 +175,7 @@ look for.
 - [`use-random-service`](patterns/use-random-service.md): Replaces `Math.random()` with Effect's testable Random service.
 - [`use-console-service`](patterns/use-console-service.md): Replaces native console calls with Effect logging or Console services.
 
-#### Platform, I/O, And Configuration
+#### Platform, I/O, and configuration
 
 - [`avoid-native-fetch`](patterns/avoid-native-fetch.md): Replaces native `fetch` with Effect HTTP client modules.
 - [`use-http-client-service`](patterns/use-http-client-service.md): Replaces `node:http` and `node:https` with Effect `HttpClient`.
@@ -200,7 +190,7 @@ look for.
 - [`avoid-process-env`](patterns/avoid-process-env.md): Replaces direct environment access with Effect Config.
 - [`prefer-redacted-config`](patterns/prefer-redacted-config.md): Requires secret-like configuration values to remain redacted.
 
-#### React And Testing Conventions
+#### React and testing conventions
 
 - [`avoid-react-hooks`](patterns/avoid-react-hooks.md): Reviews React state and effects for Effect Atom alternatives.
 - [`avoid-expect-in-if`](patterns/avoid-expect-in-if.md): Prevents conditional assertions that allow tests to pass without checking behavior.
