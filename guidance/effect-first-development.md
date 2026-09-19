@@ -46,6 +46,8 @@ At boundaries:
 
 ## Laws and Conventions
 
+Keep types sound: no `any`, type assertions, `@ts-ignore`, or non-null assertions.
+
 ### EF-1: Errors are data, not side effects
 
 - If logic can fail, return `Effect.Effect<A, E, R>` with a typed error `E`.
@@ -103,8 +105,9 @@ const toDisplayName = (rawName: string | null | undefined) =>
 
 - Unknown or external data must be decoded at the boundary.
 - Prefer `Schema.decodeUnknownEffect` for effectful paths and `Schema.decodeUnknownSync` only where sync failure handling is explicit.
-- Never use `JSON.parse` / `JSON.stringify`; use schema JSON codecs (`Schema.fromJsonString`, `Schema.decodeUnknown*`, `Schema.encode*`). For unknown JSON, use `Schema.fromJsonString(Schema.Unknown)`.
 - Prefer `Schema.Class` over `Schema.Struct` for all decoded shapes — including HTTP response bodies, API payloads, and ephemeral wire formats, not just domain models. Named `Schema.Class` types enable `instanceof` discrimination (e.g., `Schema.Union([SuccessResponse, ErrorResponse])` then `if (parsed instanceof ErrorResponse)`), which is compile-time safe.
+- Use `Schema.Class` for shapes discriminated via `instanceof` or participating in a `Schema.Union`.
+- Prefer schema constructors over plain `type` / `interface` for property-based domain shapes; derive types from schemas rather than maintaining parallel models. Keep plain types for shapes schema cannot represent cleanly, such as complex type-level transforms, utility types, and overload-only surfaces.
 - Do not name schemas with a `Schema` suffix; schema constants should be named after the domain type.
 - For non-class schemas, export type aliases with the same identifier name as the schema value.
 
@@ -143,6 +146,7 @@ export const decodeCreateTaskInput =
 ### EF-5: Effect modules over native collection helpers
 
 - Use `Arr`, `R`, `Str`, `Eq`, `HashMap`, `HashSet`, `MutableHashMap`, `MutableHashSet`.
+- Sort with `Arr.sort(values, order)` and explicit `effect/Order` values (`Order.String`, `Order.Number`, `Order.mapInput`, etc.), never native array `.sort()`.
 - Avoid domain usage of native `Object`, `Map`, `Set`, `Date`, and direct native string helpers.
 - Do not use imperative `for` / `for...of` loops in domain code. Use `Arr.map`, `Arr.filter`, `Arr.filterMap`, or `Arr.reduce` for pure transformations. For effectful iteration, use `Effect.forEach` (which also supports concurrency).
 - When behavior is unchanged, prefer the tersest helper form: direct helper refs over trivial wrapper lambdas, `flow(...)` over passthrough `pipe(...)` callbacks, and shared thunk helpers when already in scope.
@@ -206,7 +210,6 @@ const summarizeAttempts = (attempts: ReadonlyArray<number>) =>
 
 ### EF-8: Services use explicit tags + `Layer`
 
-- Service identity comes from a unique string key.
 - Honor a current Effect service-tag style already standardized by the project; otherwise default to `Context.Service`.
 - Service constructors are explicit and layered.
 - Dependency wiring happens in Layer composition, not hidden global state.
@@ -275,14 +278,6 @@ export const TenantHeader = Tenant.annotate({
 
 export type Tenant = typeof Tenant.Type;
 ```
-
-### EF-12b: Schema-first internal domain building blocks
-
-- If an intermediate domain concept is named, reused, matched on, or structurally validated, model it as a schema first instead of an ad-hoc boolean helper.
-- Prefer built-in schema constructors/checks such as `Schema.NonEmptyString`, `Schema.NonEmptyArray`, `Schema.TupleWithRest`, `Schema.Union`, `Schema.isPattern`, and `Schema.isIncludes` before reaching for `Schema.makeFilter`.
-- Derive domain guards with `Schema.is(SomeSchema)`.
-- If an internal literal domain needs type guards, use `Schema.is(Schema.Literal(...))`. For exhaustive matching over literals, use `Match`. For annotation-bearing schema values, use `Schema.Literal(...).annotate({...})`.
-- Prefer named intermediate schemas; export and document them when reusable or when they materially clarify the module’s domain model, otherwise keep them module-local.
 
 ### EF-12c: Reusable schema checks carry metadata
 
@@ -504,6 +499,7 @@ You are not done if these fail:
 
 ### EF-21: Runtime execution stays at the boundary
 
+- Runtime source uses Effect `FileSystem`, `Path`, and process services instead of `node:fs`, `node:path`, or `node:child_process`.
 - Application entrypoints and tests may execute effects with `Effect.run*`.
 - Library and domain exports should return `Effect` values.
 - Keep runtime execution in one place so wiring, logging, and lifecycle behavior stay auditable.
@@ -739,30 +735,6 @@ const runIsolated = program.pipe(
 );
 ```
 
-### EF-33: Schema-first development for domain models
-
-- If a data shape is decoded from external input, will be discriminated via `instanceof`, or participates in a `Schema.Union`, define it as `Schema.Class` first — regardless of whether it is a "domain model" or an ephemeral HTTP response shape.
-- Prefer `Schema.Class` (or another schema constructor) over plain `type` / `interface` for property-based domain shapes.
-- Derive runtime types from schema definitions instead of duplicating parallel `type` / `interface` models.
-- Keep plain `type` / `interface` for cases schema cannot represent cleanly (complex type-level transforms, utility types, overload-only surfaces).
-
-Example:
-
-```ts
-import * as Schema from 'effect/Schema';
-
-// Prefer schema-first over plain interfaces for domain payloads.
-export class CreateOrderInput extends Schema.Class<CreateOrderInput>(
-	'CreateOrderInput'
-)(
-	{
-		orderId: Schema.String,
-		customerId: Schema.String
-	},
-	{ description: 'Input payload for creating an order.' }
-) {}
-```
-
 ### EF-34: Schema defaults over fallback object logic
 
 - Put defaults in schema definitions, not in handler/service fallback object literals.
@@ -800,10 +772,10 @@ export class VersionSyncOptions extends Schema.Class<VersionSyncOptions>(
 
 - If a guard validates domain strings/paths/tags, define a branded schema and use `Schema.is(...)`.
 - If a domain constraint is named, reused, matched on, or structurally validated, model it as a schema first rather than a forest of ad-hoc predicate helpers.
-- Prefer built-in schema constructors/checks before `Schema.makeFilter`.
+- Prefer built-in schema constructors/checks such as `Schema.NonEmptyString`, `Schema.NonEmptyArray`, `Schema.TupleWithRest`, `Schema.Union`, `Schema.isPattern`, and `Schema.isIncludes` before `Schema.makeFilter`.
 - Keep guard intent and reusable check intent in schema annotations and check metadata.
 - For internal literal domains, use `Schema.is(Schema.Literal(...))` for type guards, `Match` for exhaustive matching, and `Schema.Literal(...).annotate({...})` for annotated schema values.
-- Prefer named intermediate schemas; export them only when reusable or when they materially clarify the module's domain model.
+- Prefer named intermediate schemas; export and document them when reusable or when they materially clarify the module's domain model, otherwise keep them module-local.
 - Propagate branded schema types through the persistence layer (e.g., ORM column types: `text().$type<AccessToken>()`) to enforce compile-time safety across the entire stack and prevent parameter-swapping bugs.
 
 Example:
@@ -955,25 +927,6 @@ const NativePathToPosixPath = Schema.String.pipe(
 );
 ```
 
-### EF-38: Never use native array sort in Effect-first code
-
-- Use `Arr.sort(values, order)` from `effect/Array`.
-- Define ordering with `effect/Order` (`Order.String`, `Order.Number`, `Order.mapInput`, etc.).
-- Do not call native `.sort()` directly on arrays.
-
-Example:
-
-```ts
-import { Order } from 'effect';
-import * as Arr from 'effect/Array';
-
-const byName = Order.mapInput(
-	Order.String,
-	(item: { readonly name: string }) => item.name
-);
-const sorted = Arr.sort(items, byName);
-```
-
 ### EF-39: Avoid ad-hoc `String(...)` coercion for domain comparisons
 
 - When unknown/scalar data must normalize to domain strings, model the conversion with schema transformations.
@@ -1022,248 +975,3 @@ const [cachedConfig, invalidate] =
 	);
 // Later: yield* invalidate to force reload on next access
 ```
-
-## Copy-Paste Templates
-
-### Template: Tagged error
-
-```ts
-import * as Schema from 'effect/Schema';
-
-class DomainError extends Schema.TaggedError<DomainError>()(
-	'DomainError',
-	{
-		message: Schema.String
-	},
-	{ description: 'Domain failure' }
-) {}
-```
-
-### Template: Safe nullable boundary conversion
-
-```ts
-import { pipe } from 'effect';
-import * as Option from 'effect/Option';
-
-const fromNullableName = (name: string | null | undefined) =>
-	pipe(
-		Option.fromNullishOr(name),
-		Option.filter((value) => value.length > 0)
-	);
-```
-
-### Template: Decode unknown at API edge
-
-```ts
-import * as Schema from 'effect/Schema';
-
-export class Payload extends Schema.Class<Payload>('Payload')({
-	query: Schema.String
-}) {}
-
-const decodePayload = Schema.decodeUnknownEffect(Payload);
-```
-
-### Template: Schema naming + type alias (no `Schema` suffix)
-
-```ts
-import * as Schema from 'effect/Schema';
-
-export const OrderId = Schema.String;
-export type OrderId = typeof OrderId.Type;
-```
-
-### Template: Schema-first replacement for interface
-
-```ts
-import * as Schema from 'effect/Schema';
-
-export class UserProfile extends Schema.Class<UserProfile>('UserProfile')(
-	{
-		id: Schema.String,
-		displayName: Schema.String
-	},
-	{ description: 'User profile model used in domain workflows.' }
-) {}
-```
-
-### Template: Match over switch
-
-```ts
-import { Match } from 'effect';
-import * as Arr from 'effect/Array';
-
-type Phase = 'draft' | 'running' | 'done';
-
-const phaseLabel = (phase: Phase) =>
-	Match.value(phase).pipe(
-		Match.when('draft', () => 'draft'),
-		Match.when('running', () => 'running'),
-		Match.when('done', () => 'done'),
-		Match.exhaustive
-	);
-
-const summarize = (items: ReadonlyArray<string>) =>
-	Arr.match(items, {
-		onEmpty: () => 'none',
-		onNonEmpty: (values) => `count:${Arr.length(values)}`
-	});
-```
-
-### Template: Effect-returning function constructor
-
-```ts
-import { Effect } from 'effect';
-
-export const runTask = Effect.fn('Task.run')(function* (taskId: string) {
-	yield* Effect.logInfo('run task', taskId);
-	return taskId;
-});
-```
-
-### Template: Option schema from nullish/optional
-
-```ts
-import * as Schema from 'effect/Schema';
-
-export class Input extends Schema.Class<Input>('Input')({
-	maybeName: Schema.OptionFromNullishOr(Schema.String),
-	maybeEmail: Schema.OptionFromOptionalKey(Schema.String)
-}) {}
-```
-
-### Template: Dual helper (data-first + data-last)
-
-```ts
-import { dual } from 'effect/Function';
-
-export const rename: {
-	(
-		to: string
-	): (self: { readonly name: string }) => { readonly name: string };
-	(self: { readonly name: string }, to: string): { readonly name: string };
-} = dual(2, (self, to) => ({ ...self, name: to }));
-```
-
-### Template: JSON boundary without native JSON APIs
-
-```ts
-import * as Schema from 'effect/Schema';
-
-export class Payload extends Schema.Class<Payload>('Payload')({
-	query: Schema.String
-}) {}
-
-const PayloadJson = Schema.fromJsonString(Payload);
-
-export const decodePayloadJson = Schema.decodeUnknownEffect(PayloadJson);
-export const encodePayloadJson = Schema.encodeUnknownEffect(PayloadJson);
-```
-
-### Template: Runtime boundary execution
-
-```ts
-import { Effect } from 'effect';
-
-export const buildReport = Effect.fn('Report.build')(function* () {
-	return 'ok';
-});
-
-// runtime boundary only
-// Effect.runPromise(buildReport())
-```
-
-### Template: Scoped resource helper
-
-```ts
-import { Effect } from 'effect';
-
-export const withResource = <A, E, R>(
-	use: (resource: Resource) => Effect.Effect<A, E, R>
-) => Effect.acquireUseRelease(acquireResource, use, releaseResource);
-```
-
-### Template: Retry + timeout
-
-```ts
-import { Duration, Effect, Schedule } from 'effect';
-
-export const resilientTask = task.pipe(
-	Effect.retry(Schedule.recurs(3)),
-	Effect.timeoutOption(Duration.seconds(5))
-);
-```
-
-### Template: Config + redacted secret
-
-```ts
-import { Config, Effect } from 'effect';
-
-export const loadConfig = Effect.fn('Config.load')(function* () {
-	const port = yield* Config.Int('PORT');
-	const apiKey = yield* Config.Redacted('API_KEY');
-	return { port, apiKey };
-});
-```
-
-### Template: Isolated layer provide
-
-```ts
-import { Effect, Layer } from 'effect';
-
-export const runIsolated = program.pipe(
-	Effect.provide(Layer.fresh(AppLayer), { local: true })
-);
-```
-
-## LLM Review Checklist
-
-Use this before submitting code:
-
-1. No `any`, no type assertions, no `@ts-ignore`, no non-null assertions.
-2. No untyped error throwing in domain logic.
-3. Nullish converted to `Option` at boundaries.
-4. Unknown input decoded with `Schema`.
-5. Canonical namespace imports (`Option`, `Schema`, `Arr`, `P`, `R`, etc.) present and used.
-6. No native `Object/Map/Set/Date/String` helpers in domain logic.
-7. Branching logic is exhaustive where appropriate (`Match.exhaustive`, schema `.match`, and `Arr.match` for array emptiness).
-8. No new schema constants end with `Schema`.
-9. For non-class schemas, new schema constants expose `export type X = typeof X.Type`.
-10. Schema annotations are used only where they materially improve docs, errors, or introspection.
-11. `Effect`-returning reusable functions are created with `Effect.fn`/`Effect.fnUntraced`.
-12. Critical flows include logs/spans/metrics instrumentation.
-13. Durations/time windows use `Duration` values.
-14. Nullish schema fields use `Schema.OptionFrom*` helpers when representing absence as `Option`.
-15. Exported helper combinators support dual API via `dual`.
-16. No `JSON.parse` / `JSON.stringify` in Effect-first domain paths.
-17. Prefer `Schema.Class` over `Schema.Struct` for all decoded shapes (domain models, HTTP responses, API payloads).
-18. Required verification commands are green.
-19. `Effect.run*` appears only in runtime boundaries (entrypoint/test harness).
-20. Promise-based APIs are lifted with `Effect.tryPromise`.
-21. Acquired resources use `Effect.acquireUseRelease` or `Effect.scoped`.
-22. Retries are declared with `Effect.retry` + `Schedule`.
-23. Timeouts use `Effect.timeoutOption` / `Effect.timeoutOrElse`.
-24. Forking intent is explicit (`forkChild` default; `forkDetach` justified).
-25. Large fan-out operations specify concurrency deliberately.
-26. Config values come from `Config` / `ConfigProvider`, not direct `process.env` in domain logic.
-27. Secrets are `Redacted` (`Config.Redacted` / `Redacted.make`) and not logged raw.
-28. Recovery uses `catchTag` / `catchFilter` for targeted cases.
-29. Expected failures use `Effect.fail`; defects are reserved for invariants and discarding irrelevant upstream error types via `orDie`.
-30. Isolation-sensitive layer provisioning uses `{ local: true }` or `Layer.fresh`.
-31. All decoded shapes (domain models, HTTP responses, API payloads) are schema-first with `Schema.Class`; plain `type` / `interface` is used only when schema is not a practical fit.
-32. Literal-string discriminant unions use `Schema.Union` + `Schema.toTaggedUnion`. For exhaustive matching over literals, use `Match`. For type guards, use `Schema.is(Schema.Literal(...))`.
-33. Schema defaults use `Schema.withConstructorDefault` / `Schema.withDecodingDefault*`, not ad-hoc fallback objects in handlers/services.
-34. Named or reused domain constraints are modeled as schemas first; built-in schema constructors/checks are preferred before `Schema.makeFilter`.
-35. Guard helpers for domain strings/paths/tags come from branded schemas with `Schema.is(...)`, not ad-hoc `regex.test(...)` predicates.
-36. Reusable schema checks and filter groups carry `identifier`, `title`, and `description`.
-37. Intermediate schemas are exported only when reusable or materially clarifying; otherwise they stay module-local.
-38. Schema-modeled comparisons use `Schema.toEquivalence(...)` where practical.
-39. Deterministic format conversions use `Schema.decodeTo(..., SchemaTransformation.transform(...))`.
-40. Trivial helper wrapper lambdas are collapsed to direct helper refs where safe, and passthrough `pipe(...)` callbacks are expressed with `flow(...)`.
-41. Runtime source avoids `node:fs` / `node:path` / `node:child_process`; use Effect `FileSystem` / `Path` / process services.
-42. Runtime source avoids native `fetch`; HTTP boundaries use `effect/unstable/http` + platform layers (`BunHttpClient.layer`, etc.).
-43. Runtime sorting uses `Arr.sort` with explicit `Order`, not native `Array.prototype.sort`.
-44. Boolean branching prefers `Bool.match` over ad-hoc `if/else` when branching on booleans.
-45. HTTP request/response composition uses Effect HTTP modules (`HttpClientRequest`, `HttpClientResponse`, `Headers`, `UrlParams`, `HttpMethod`, `HttpBody`).
-46. Retried operations have proven idempotency, and exhausted failures remain visible unless a truthful fallback exists.
-47. Provider/network calls do not run inside authoritative database transactions.

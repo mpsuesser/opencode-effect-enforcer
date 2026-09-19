@@ -49,4 +49,4 @@ descending = Arr.sort (Order.reverse byName)
 
 Native `.sort()` mutates the array in place and uses an untyped comparator. `Arr.sort` from `effect/Array` returns a new sorted array using a composable, typed `Order`.
 
-References: EF-38 in effect-first-development.md
+References: EF-5 in effect-first-development.md

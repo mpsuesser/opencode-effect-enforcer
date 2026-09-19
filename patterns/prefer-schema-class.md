@@ -51,4 +51,4 @@ extend = class Admin extends User.extend<Admin>("Admin")({
 
 `Schema.Struct` produces an anonymous schema without a constructor or `instanceof` support. `Schema.Class` provides a named type, constructor, extensibility, and optional annotation support when docs or introspection benefit from it. Prefer `Schema.Class` for decoded domain/API shapes, union members, and values that need identity. `Schema.Struct` remains appropriate for local structural composition, configuration internals, and schemas where class identity adds no value, so review this informational finding in context.
 
-References: EF-3, EF-33 in effect-first-development.md
+References: EF-3 in effect-first-development.md
