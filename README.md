@@ -3,16 +3,38 @@
 [![npm version](https://img.shields.io/npm/v/opencode-effect-enforcer.svg)](https://www.npmjs.com/package/opencode-effect-enforcer)
 [![license](https://img.shields.io/npm/l/opencode-effect-enforcer.svg)](LICENSE)
 
-An opinionated OpenCode V2 plugin that gives coding agents current Effect v4
-guidance and reviews their TypeScript edits for common Effect anti-patterns.
+**Give your coding agent an Effect-first mindset.**
 
-**Supported Effect version: `4.0.0-rc.112`.** See the
-[full rc.111 → rc.112 release notes and audit](docs/effect-4.0.0-rc.112.md)
-for upstream changes, companion-package notes, and repository migration details.
+Better defaults before it writes. The right API knowledge when it needs it.
+Actionable feedback when it slips. An OpenCode V2 plugin that helps your agent
+write idiomatic Effect without you repeating the same corrections.
+
+```mermaid
+flowchart TD
+    Task([Your task]) --> Context[Prepare model context]
+    Guidance["GUIDANCE · always in context"] --> Context
+    Context --> Agent[Agent decides next step]
+    Agent -->|Load a skill| Skills["SKILLS · on-demand API knowledge"]
+    Agent -->|Write or edit| Write[Save changes]
+    Write -->|Successful write| Patterns["PATTERNS · check new code"]
+    Patterns -->|Findings appended| Result[Tool result]
+    Skills --> Result
+    Agent -->|Other tool| Result
+    Result --> Context
+    Agent -->|Finished| Done([Answer])
+
+    classDef support fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+    class Guidance,Skills,Patterns support
+```
+
+**Guidance sets the direction. Skills teach the details. Patterns catch the slips.**
+
+Built for **Effect `4.0.0-rc.112`**.
 
 ## Install
 
-Add the npm package to your global or project `opencode.jsonc`:
+Add the plugin to `opencode.jsonc` in your project, or
+`~/.config/opencode/opencode.jsonc` for all projects:
 
 ```jsonc
 {
@@ -21,71 +43,42 @@ Add the npm package to your global or project `opencode.jsonc`:
 }
 ```
 
-That is the complete installation. OpenCode resolves published package entries
-for you; there is no separate `npm install` step. Use the global config at
-`~/.config/opencode/opencode.jsonc` to enable it everywhere, or a project config
-to enable it only for that project. You can also pin a release, for example
-`"opencode-effect-enforcer@0.2.5"`.
+Start a new session. OpenCode installs the package automatically.
 
-Start a new OpenCode session, then verify the plugin if needed:
+## Fewer Corrections. Better Effect.
 
-```sh
-opencode2 api get /api/plugin
-```
+- **Start with the right instincts.** Four guidance documents keep typed errors,
+  schema-first modeling, and explicit dependencies in the agent's context before
+  every model call.
+- **Reach for the right API.** 53 focused skills give the agent task-specific
+  recipes for everything from services and streams to AI, SQL, and React.
+  The agent loads them through OpenCode's native skill tool.
+- **Catch mistakes while the agent is still working.** 45 tested patterns spot
+  common missteps in TypeScript and TSX, then feed corrections and relevant
+  skill suggestions back into the next turn.
 
-### Local Checkout
+Pattern checks run after successful `write`, `edit`, `patch`, and `apply_patch`
+calls. Edits and patches are checked only in newly added text; full-file writes
+and new files are checked in full. Feedback asks the agent to fix valid findings
+or explain intentional exceptions. Checks are advisory and do not block writes.
 
-When loading this repository directly, configure its `src` directory:
+## Explore What's Included
 
-```jsonc
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugins": ["/absolute/path/opencode-effect-enforcer/src"],
-}
-```
+Browse the guidance, find a skill for your next task, or see what the patterns
+look for.
 
-OpenCode `v0.0.0-beta-19157` resolves local directories by looking for `server`
-or `index` directly inside them, rather than using `package.json` exports.
-Pointing at the repository root silently skips the plugin; pointing at the
-`src/index.ts` file is rejected because configured local paths must be directories.
-
-Verify activation for the session's actual working directory, replacing the
-example path below:
-
-```sh
-opencode2 api post '/api/plugin/await-activation?location[directory]=/path/to/project'
-opencode2 api get '/api/plugin?location[directory]=/path/to/project'
-```
-
-Look for `opencode.effect-enforcer` with `state.status` set to `active`.
-
-## What You Get
-
-- **53 focused skills** registered in OpenCode's native skill catalog, covering
-  Effect's core, platform, AI, RPC, SQL, frontend, and testing APIs.
-- **4 guidance documents** injected into model context so Effect-first
-  boundaries, domain modeling, dependency design, and skill routing stay
-  visible while the agent works.
-- **45 tested patterns** run after successful `write`, `edit`, `patch`, and
-  `apply_patch` calls, reporting only violations in newly added text.
-- **Advisory remediation** appended to the completed tool result so the model
-  reviews and fixes valid findings without a detector blocking the underlying
-  write.
-
-## Source Catalog
-
-Every bundled skill, pattern, and guidance document is linked below. Open only
-the area relevant to your task, or expand a catalog to browse everything
-available.
-
-### Guidance (4)
+<details>
+<summary><strong>Guidance · 4 foundations for Effect-first thinking</strong></summary>
 
 - [Effect-First Development](guidance/effect-first-development.md): Defines the Effect-first operating model, laws, templates, boundaries, and review checklist.
 - [Agent Rules](guidance/progressive-disclosure-guidance.md): Routes agents to the right skills and authoritative Effect v4 source references.
 - [Effect, and the Near-Inexpressible Majesty of Layers](guidance/post__effect-and-the-near-inexpressible-majesty-of-layers.md): Explains services, Layers, typed dependencies, and testable implementations.
 - [Parse, don't validate](guidance/post__parse-dont-validate.md): Shows how refined types preserve validation knowledge and make illegal states unrepresentable.
 
-### Skills (53)
+</details>
+
+<details>
+<summary><strong>Skills · 53 focused guides, loaded when needed</strong></summary>
 
 #### Modeling And Core APIs
 
@@ -161,7 +154,10 @@ available.
 - [`effect-concurrency-testing`](skills/effect-concurrency-testing/SKILL.md): Test fibers, PubSub, Deferred, Latch, SubscriptionRef, and concurrent streams.
 - [`effect-incremental-migration`](skills/effect-incremental-migration/SKILL.md): Migrate Promise-based modules incrementally while preserving required compatibility.
 
-### Patterns (45)
+</details>
+
+<details>
+<summary><strong>Patterns · 45 checks that turn mistakes into feedback</strong></summary>
 
 #### Types, Modeling, And Collections
 
@@ -223,77 +219,7 @@ available.
 - [`avoid-react-hooks`](patterns/avoid-react-hooks.md): Reviews React state and effects for Effect Atom alternatives.
 - [`avoid-expect-in-if`](patterns/avoid-expect-in-if.md): Prevents conditional assertions that allow tests to pass without checking behavior.
 
-## Per-Agent Opt-Out
-
-Set `opencode-effect-enforcer: false` in an agent's `request.body` when that
-agent does not write Effect code. The plugin consumes the setting before the
-request reaches the model provider.
-
-```jsonc
-{
-  "agents": {
-    "researcher": {
-      "description": "Handles non-code research",
-      "mode": "subagent",
-      "request": {
-        "body": {
-          "opencode-effect-enforcer": false,
-        },
-      },
-    },
-  },
-}
-```
-
-For opted-out agents, the plugin does not inject guidance, advertise or allow
-its `effect-*` skills, or run post-write pattern enforcement.
-
-To disable the plugin entirely without removing its package entry, add a later
-selector using the exported plugin ID:
-
-```jsonc
-{
-  "plugins": ["opencode-effect-enforcer", "-opencode.effect-enforcer"],
-}
-```
-
-## Enforcement Semantics
-
-Patterns run only after successful writes. For edits and patches, the plugin
-captures the original files and computes changed spans from the final output,
-so it does not report a pre-existing violation outside newly added text.
-Full-file writes and new files treat the complete result as changed.
-
-The matcher supports TypeScript and TSX ast-grep rules, regex detectors with
-comment filtering, include and ignore globs, severity ordering, and targeted
-skill suggestions. Inspection failures remain advisory and never convert a
-successful write into a failed tool call.
-
-## Development
-
-```sh
-bun install
-bun run check
-bun run test
-```
-
-The tests enforce a bidirectional pattern/test inventory and require every
-skill, pattern, and guidance source to remain linked from this README.
-
-GitHub releases are automatically verified and published to npm with provenance.
-The release tag must exactly match the package version, such as `v0.2.0` for
-`"version": "0.2.0"`.
-
-There is no generated `dist` tree. OpenCode imports the TypeScript entrypoint,
-and npm publishes the authoritative `src/`, `skills/`, `guidance/`, `patterns/`,
-and `docs/` directories directly.
-
-## Credits
-
-This project is the OpenCode V2 port of
-[`pi-effect-harness`](https://github.com/mpsuesser/pi-effect-harness). It keeps
-the source guidance and pattern policy while using OpenCode's native skills,
-context hooks, and package loading.
+</details>
 
 ## License
 

@@ -25,3 +25,12 @@ bun run test
 
 Run both before considering a change complete. Pattern changes must preserve the
 bidirectional inventory enforced by `test/all-patterns-covered.test.ts`.
+
+Every bundled skill, pattern, and guidance source must remain linked from
+`README.md`; the tests enforce this catalog coverage.
+
+## Releases
+
+GitHub releases are automatically verified and published to npm with provenance.
+The release tag must exactly match the package version, such as `v0.2.5` for
+`"version": "0.2.5"`.
