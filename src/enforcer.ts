@@ -1,4 +1,4 @@
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@opencode/plugin"
 
 import { buildPatternFeedback } from "./guidance.ts"
 import { matchesPattern } from "./pattern-matcher.ts"

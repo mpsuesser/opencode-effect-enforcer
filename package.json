@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.schemastore.org/package.json",
   "name": "opencode-effect-enforcer",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "OpenCode V2 plugin for Effect v4 skills, guidance, and pattern enforcement",
   "keywords": [
     "opencode",
@@ -44,7 +44,7 @@
   },
   "dependencies": {
     "@ast-grep/napi": "^0.42.3",
-    "@opencode-ai/plugin": "0.0.0-next-17148",
+    "@opencode/plugin": "2.0.8",
     "diff": "^9.0.0",
     "effect": "4.0.0-rc.112",
     "picomatch": "^4.0.3",
