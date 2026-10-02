@@ -14,7 +14,7 @@ Reference this for:
 
 - `Request` and `Request.Class` definitions (`packages/effect/src/Request.ts`)
 - `RequestResolver` constructors and combinators (`packages/effect/src/RequestResolver.ts`)
-- `SqlResolver` for SQL-specific batching (`packages/effect/src/unstable/sql/SqlResolver.ts`)
+- `SqlResolver` for SQL-specific batching (`packages/effect/src/sql/SqlResolver.ts`)
 - Batching tutorial (`ai-docs/src/05_batching/10_request-resolver.ts`)
 
 ## The N+1 Problem
@@ -440,10 +440,12 @@ class Users extends Context.Service<
 
 ## SQL Integration with SqlResolver
 
-`SqlResolver` (from `effect/unstable/sql`) provides schema-validated, batched SQL resolvers. Import:
+`SqlResolver` (from `effect/sql`) provides schema-validated, batched SQL resolvers.
+It remains marked `@stability unstable` even though its import path has no
+`unstable` segment; check its release-specific contract when upgrading. Import:
 
 ```typescript
-import { SqlResolver } from 'effect/unstable/sql';
+import { SqlResolver } from 'effect/sql';
 ```
 
 ### SqlResolver.ordered

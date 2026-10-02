@@ -3,23 +3,23 @@ name: effect-rpc-client
 description: Consume typed RPC services with Effect's RpcClient — protocol layers (HTTP, WebSocket, TCP, worker, in-memory), RpcSerialization codecs, per-call and ambient headers, streaming calls, interruption, reconnection, and RpcClientError handling. Use when calling an RpcGroup from a client, wiring a client transport + serialization stack, debugging RPC transport failures or reconnects, or testing RPC consumers with RpcTest.
 ---
 
-You are an Effect TypeScript expert specializing in consuming RPC services with `RpcClient` from `effect/unstable/rpc`.
+You are an Effect TypeScript expert specializing in consuming RPC services with `RpcClient` from `effect/rpc`.
 
 This skill covers the client side only: building clients, transports, serialization, headers, streaming consumption, interruption, errors, and testing. Defining `Rpc`/`RpcGroup` contracts is the `effect-rpc-api` skill; serving them is the `effect-rpc-server` skill; cluster entity clients are the `effect-rpc-cluster` skill.
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules are under `unstable` and change between betas.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read the `effect@4.0.0` tag for this skill; main may be newer. These APIs remain `@stability unstable` and may break in minor releases. Keep Effect-family packages on the same release.
 
 Key files:
 
-- `packages/effect/src/unstable/rpc/RpcClient.ts` — `make`, `makeNoSerialization`, the `Protocol` service, `layerProtocolHttp`/`layerProtocolSocket`/`layerProtocolWorker` (+ `makeProtocol*`), `CurrentHeaders`, `withHeaders`, `ConnectionHooks`
-- `packages/effect/src/unstable/rpc/RpcClientError.ts` — `RpcClientError` and `RpcClientDefect`
-- `packages/effect/src/unstable/rpc/RpcSerialization.ts` — JSON, NDJSON, JSON-RPC, SchemaBinary codecs, their layers, the `Parser` interface and `includesFraming`
-- `packages/effect/src/unstable/rpc/RpcTest.ts` — `makeClient` in-process test client
-- `packages/effect/src/unstable/rpc/RpcWorker.ts` — `InitialMessage`, `layerInitialMessage`, `initialMessage`
-- `packages/effect/src/unstable/rpc/RpcMessage.ts` — wire vocabulary: `Request`, `Ack`, `Interrupt`, `Chunk`, `Exit`, `Defect`, `Ping`/`Pong`, `ClientProtocolError`, `RequestId`
-- `packages/effect/src/unstable/socket/Socket.ts` — `Socket` service, `layerWebSocket`, `WebSocketConstructor`
+- `packages/effect/src/rpc/RpcClient.ts` — `make`, `makeNoSerialization`, the `Protocol` service, `layerProtocolHttp`/`layerProtocolSocket`/`layerProtocolWorker` (+ `makeProtocol*`), `CurrentHeaders`, `withHeaders`, `ConnectionHooks`
+- `packages/effect/src/rpc/RpcClientError.ts` — `RpcClientError` and `RpcClientDefect`
+- `packages/effect/src/rpc/RpcSerialization.ts` — JSON, NDJSON, JSON-RPC, SchemaBinary codecs, their layers, the `Parser` interface and `includesFraming`
+- `packages/effect/src/rpc/RpcTest.ts` — `makeClient` in-process test client
+- `packages/effect/src/rpc/RpcWorker.ts` — `InitialMessage`, `layerInitialMessage`, `initialMessage`
+- `packages/effect/src/rpc/RpcMessage.ts` — wire vocabulary: `Request`, `Ack`, `Interrupt`, `Chunk`, `Exit`, `Defect`, `Ping`/`Pong`, `ClientProtocolError`, `RequestId`
+- `packages/effect/src/socket/Socket.ts` — `Socket` service, `layerWebSocket`, `WebSocketConstructor`
 - `packages/platform/node/test/RpcServer.test.ts` + `test/fixtures/rpc-e2e.ts` + `test/fixtures/rpc-schemas.ts` — the best end-to-end reference: every transport × serialization combination, headers, streams, interrupts, defects
 - `packages/platform/browser/test/RpcWorker.test.ts` + `test/fixtures/rpc-worker.ts` — worker transport end to end
 
@@ -58,16 +58,16 @@ import {
 	RpcSerialization,
 	RpcTest,
 	RpcWorker
-} from 'effect/unstable/rpc';
-import { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
-import { FetchHttpClient, Headers, HttpClient, HttpClientRequest } from 'effect/unstable/http';
-import { Socket } from 'effect/unstable/socket';
+} from 'effect/rpc';
+import { RpcClientError } from 'effect/rpc/RpcClientError';
+import { FetchHttpClient, Headers, HttpClient, HttpClientRequest } from 'effect/http';
+import { Socket } from 'effect/socket';
 // Platform transports:
 import { NodeSocket, NodeWorker } from '@effect/platform-node';
 import { BrowserWorker } from '@effect/platform-browser';
 ```
 
-Note the `RpcClientError` import: the `effect/unstable/rpc` barrel exports `RpcClientError` as a *namespace*; import the class from the module path `effect/unstable/rpc/RpcClientError` (this is what the upstream tests do).
+Note the `RpcClientError` import: the `effect/rpc` barrel exports `RpcClientError` as a *namespace*; import the class from the module path `effect/rpc/RpcClientError` (this is what the upstream tests do).
 
 ---
 
@@ -113,7 +113,7 @@ export class UsersClient extends Context.Service<
 
 ### `flatten: true` — single-function client
 
-The client becomes one function `(tag, payload, options?)` instead of a property-per-tag object. Useful for generic proxying (this is what `AtomRpc` uses internally):
+The client becomes one function `(tag, payload, options?)` instead of a property-per-tag object. Useful for generic proxying (this is what `AtomRpc` uses internally). Union-valued tags infer payloads/results from the selected RPCs rather than `never`; retain tag/payload correlation in application dispatch:
 
 ```ts
 const client = yield* RpcClient.make(UserRpcs, { flatten: true });
@@ -122,7 +122,7 @@ const user = yield* client('GetUser', { id: 'u1' });
 
 ### `generateRequestId`
 
-Request ids correlate requests with responses on a shared connection. The default is a process-wide incrementing `number`. Override only when ids need application-specific generation. The function must return `RequestId`, a branded `string | number`; construct it with `RequestId(1)` or `RequestId('1')` from `effect/unstable/rpc/RpcMessage`. `bigint` is not accepted.
+Request ids correlate requests with responses on a shared connection. The default is a process-wide incrementing `number`. Override only when ids need application-specific generation. The function must return `RequestId`, a branded `string | number`; construct it with `RequestId(1)` or `RequestId('1')` from `effect/rpc/RpcMessage`. `bigint` is not accepted.
 
 ### Tracing
 
@@ -311,14 +311,19 @@ full `RpcSerialization.CodecFor` contract.
 | `RpcSerialization.layerJson` | `application/json` | no | HTTP (response decoded once, as an array); WebSocket (each ws message is one frame already) |
 | `RpcSerialization.layerNdjson` | `application/ndjson` | yes (newline) | anything — the safe default; enables streaming over HTTP |
 | `RpcSerialization.layerSchemaBinary(options?)` | `application/vnd.effect.rpc+schema-binary` | yes | schema-derived binary framing and payload codecs; pair on both peers |
+| `RpcSerialization.layerJsonRpc({ contentType? })` | `application/json` | no | JSON-RPC 2.0 interop over HTTP/WebSocket; maps rpc tag ↔ `method`, supports batch arrays |
+| `RpcSerialization.layerNdJsonRpc({ contentType? })` | `application/json-rpc` | yes (newline) | JSON-RPC 2.0 over sockets |
 
 `layerSchemaBinary({ maxFrameSize?, fingerprintPayloads? })` defaults to a
 16 MiB frame limit and no payload fingerprint. Envelopes are fingerprinted and
 dictionary-enabled; payload fingerprints opt into strict layout agreement.
 Workers use
 `Schema.toCodecJson` with structured clone without a serialization layer.
-| `RpcSerialization.layerJsonRpc({ contentType? })` | `application/json` | no | JSON-RPC 2.0 interop over HTTP/WebSocket; maps rpc tag ↔ `method`, supports batch arrays |
-| `RpcSerialization.layerNdJsonRpc({ contentType? })` | `application/json-rpc` | yes (newline) | JSON-RPC 2.0 over sockets |
+
+NDJSON parsers skip malformed lines and continue with subsequent frames.
+JSON-RPC decoding skips non-object values (including batch entries), and guards
+non-string notification methods before interpreting internal protocol methods.
+This framing recovery does not replace payload/schema validation.
 
 Choose serialization according to transport framing:
 
@@ -403,8 +408,8 @@ On the server, a client-initiated interrupt carries the `RpcSchema.ClientAbort` 
 | `reason._tag` | Transport | Meaning |
 |---|---|---|
 | `'HttpError'` | HTTP | `HttpClientErrorSchema`: has `kind: 'EncodeError' \| 'DecodeError' \| 'TransportError' \| 'InvalidUrlError' \| 'StatusCodeError' \| 'EmptyBodyError'` and optional `cause` |
-| `'SocketOpenError'` | socket | failed to (re)connect, includes ping timeouts |
-| `'SocketReadError'` / `'SocketWriteError'` | socket | I/O failure on a live connection |
+| `'SocketOpenError'` | socket | failed to (re)connect, including opening-handshake timeouts |
+| `'SocketReadError'` / `'SocketWriteError'` | socket | I/O failure on a live connection; a missed pong is a read error |
 | `'SocketCloseError'` | socket | connection closed (has `code`) |
 | `'WorkerSpawnError'` / `'WorkerSendError'` / `'WorkerReceiveError'` / `'WorkerUnknownError'` | worker | worker lifecycle failures |
 | `'RpcClientDefect'` | any | protocol bug: undecodable message, empty HTTP response, non-array unframed response; has `message` + `cause` |
@@ -438,11 +443,11 @@ Semantics to remember:
 
 The socket protocol owns a long-lived connection loop:
 
-- **Keepalive** — the client sends `Ping` every 5 seconds; a missing `Pong` by the next tick fails the connection with a `SocketOpenError` (kind `'Timeout'`) and triggers reconnect.
+- **Keepalive** — the client sends `Ping` every 5 seconds; a missing `Pong` by the next tick fails the connection with a `SocketReadError` and triggers reconnect. Every in-flight call fails even with `retryTransientErrors: true`; calls are not replayed automatically.
 - **Reconnect policy** — the loop retries with `Schedule.min([Schedule.exponential("500 millis", 1.5), Schedule.spaced("5 seconds")])`, capped at 5s between attempts, forever, by default. Customize the schedule via `makeProtocolSocket({ retryPolicy })` + `Layer.effect(RpcClient.Protocol)(...)`; both constructors accept `retryTransientErrors` and `onTransientError`.
 - **Failure broadcast** — on a connection error, all in-flight requests fail with `RpcClientError`, and subsequent `send`s fail fast with the same error until the socket reopens.
-- **`retryTransientErrors: true`** — `SocketOpenError` failures (failure to connect, and ping timeouts, which are classified as open errors) are not broadcast: pending requests stay pending across reconnect attempts instead of failing. Read/write/close errors on an established connection still fail in-flight requests.
-- **`onTransientError`** — called for every retried `SocketOpenError` (including ping timeouts) while `retryTransientErrors` is enabled. Its infallible, service-free effect is for logging/metrics; defects in the hook are logged and ignored.
+- **`retryTransientErrors: true`** — connection-establishment `SocketOpenError` failures are not broadcast: pending requests stay pending across those reconnect attempts instead of failing. Established-connection read/write/close errors, including missed pongs, still fail in-flight requests.
+- **`onTransientError`** — called for every retried `SocketOpenError` while `retryTransientErrors` is enabled. Missed pongs do **not** invoke it. Its infallible, service-free effect is for logging/metrics; defects in the hook are logged and ignored.
 
 ```ts
 const ProtocolLive = RpcClient.layerProtocolSocket({ retryTransientErrors: true }).pipe(
@@ -504,7 +509,7 @@ const BrowserClient = UsersClient.layer.pipe(
 
 No `RpcSerialization` is needed — structured clone carries the messages. The worker side runs `RpcServer.layerProtocolWorkerRunner` (see the effect-rpc-server skill).
 
-Transferables: to move binary data instead of copying it, wrap fields in the shared contract with `Transferable` from `effect/unstable/workers` — `Transferable.Uint8Array` transfers the backing `ArrayBuffer`, `Transferable.ImageData`/`Transferable.MessagePort` are prebuilt, and `Transferable.schema(s, (encoded) => [encoded.buffer])` wraps any schema with a custom transfer-list extractor. Transfer only happens on protocols with `supportsTransferables: true` — the worker protocol only.
+Transferables: to move binary data instead of copying it, wrap fields in the shared contract with `Transferable` from `effect/workers` — `Transferable.Uint8Array` transfers the backing `ArrayBuffer`, `Transferable.ImageData`/`Transferable.MessagePort` are prebuilt, and `Transferable.schema(s, (encoded) => [encoded.buffer])` wraps any schema with a custom transfer-list extractor. Transfer only happens on protocols with `supportsTransferables: true` — the worker protocol only.
 
 ### Typed startup config — `RpcWorker.InitialMessage`
 
@@ -578,9 +583,9 @@ The primitive under `RpcTest`: builds a client from a raw decoded-message channe
 ```ts
 // client.ts — UserRpcs comes from the shared contract module (effect-rpc-api skill)
 import { Context, Effect, Layer } from 'effect';
-import { FetchHttpClient } from 'effect/unstable/http';
-import { RpcClient, RpcGroup, RpcSerialization } from 'effect/unstable/rpc';
-import { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
+import { FetchHttpClient } from 'effect/http';
+import { RpcClient, RpcGroup, RpcSerialization } from 'effect/rpc';
+import { RpcClientError } from 'effect/rpc/RpcClientError';
 import { AuthClient, UserRpcs } from './contract.ts';
 
 export class UsersClient extends Context.Service<
@@ -664,7 +669,7 @@ const WorkerClientLive = UsersClient.layer.pipe(
 
 ## Common Mistakes
 
-1. **Importing from `@effect/rpc`.** Gone in v4 — everything is `effect/unstable/rpc`. And `import { RpcClientError } from 'effect/unstable/rpc'` gives you a *namespace*; import the class from `effect/unstable/rpc/RpcClientError`.
+1. **Importing from `@effect/rpc`.** Gone in v4 — everything is `effect/rpc`. And `import { RpcClientError } from 'effect/rpc'` gives you a *namespace*; import the class from `effect/rpc/RpcClientError`.
 2. **Missing `Scope` for `RpcClient.make`.** The constructor is scoped. Build clients inside `Layer.effect(Tag)(RpcClient.make(group))` or under `Effect.scoped` — providing protocol layers alone will not discharge `Scope`.
 3. **Forgetting the client middleware layer.** A group with a `requiredForClient: true` middleware needs `Layer.provide(RpcMiddleware.layerClient(M, ...))` on the client (and in `RpcTest.makeClient`'s context). The compile error points at an unsatisfied `ForClient<M>` requirement — provide the layer, don't cast.
 4. **Wrong codec/transport pairing.** Raw TCP requires `layerNdjson`, `layerSchemaBinary()`, or `layerNdJsonRpc()`. HTTP with unframed JSON buffers the response; use a framed codec for streaming. WebSocket supplies its own framing.

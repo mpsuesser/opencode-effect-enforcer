@@ -5,6 +5,10 @@ description: Master Effect AI streaming response patterns including start/delta/
 
 # Effect AI Streaming
 
+Baseline: `effect@4.0.0`; inspect that tag in the Effect source reference.
+The `effect/ai` APIs remain `@stability unstable` despite their shorter import
+paths and may break in minor releases. Align provider package versions with `effect`.
+
 ## When to Use This Skill
 
 - Real-time streaming responses from language models
@@ -24,7 +28,7 @@ import * as Effect from 'effect/Effect';
 import * as Channel from 'effect/Channel';
 import * as SubscriptionRef from 'effect/SubscriptionRef';
 import * as Match from 'effect/Match';
-import * as Response from 'effect/unstable/ai/Response';
+import * as Response from 'effect/ai/Response';
 ```
 
 ## StreamPart Protocol
@@ -80,8 +84,8 @@ Accumulate stream parts incrementally using mutable state for efficiency:
 ```typescript
 import * as Stream from 'effect/Stream';
 import * as Effect from 'effect/Effect';
-import * as Prompt from 'effect/unstable/ai/Prompt';
-import * as Response from 'effect/unstable/ai/Response';
+import * as Prompt from 'effect/ai/Prompt';
+import * as Response from 'effect/ai/Response';
 import * as SubscriptionRef from 'effect/SubscriptionRef';
 
 const streamWithHistory = Stream.suspend(() => {
@@ -214,14 +218,20 @@ Why checkpoint-based merging:
 - `Prompt.fromResponseParts` routes framework-executed final results into a tool message, but keeps provider-executed final results in the assistant message. It preserves `providerExecuted` and uses `encodedResult` in both cases.
 - Tools requiring approval emit `tool-approval-request`. Append a matching `Prompt.toolApprovalResponsePart` in a tool message and call the model again; approved/denied responses are pre-resolved into final tool results before the next provider call.
 - In OpenAI-specific SSE code, unknown future events decode through `OpenAiSchema.ResponseStreamEvent` and are ignored by `OpenAiLanguageModel`; malformed known events still fail decoding.
+- OpenAI-compatible Chat Completions providers can send null delta fields. The
+  adapter preserves text and tool arguments from the remaining fields; custom
+  adapters should skip null fragments rather than discard the whole chunk.
+- Manual `Toolkit.handle` execution requires handler services on both the outer
+  Effect and its returned Stream. Even return-mode streams can fail with
+  `AiError` during result encoding; keep that error channel when composing streams.
 
 ## Complete Example
 
 <!-- typecheck -->
 ```typescript
-import * as Prompt from 'effect/unstable/ai/Prompt';
-import * as Response from 'effect/unstable/ai/Response';
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
+import * as Prompt from 'effect/ai/Prompt';
+import * as Response from 'effect/ai/Response';
+import * as LanguageModel from 'effect/ai/LanguageModel';
 import * as Stream from 'effect/Stream';
 import * as Channel from 'effect/Channel';
 import * as Effect from 'effect/Effect';
@@ -327,15 +337,20 @@ Stream.mapArrayEffect(Effect.fnUntraced(function* (chunk) {
 ### Source Parts
 
 ```typescript
-{ type: "document-source", id: string, title?: string }
-{ type: "url-source", url: string, title?: string }
+{ type: "source", sourceType: "document", id: string, mediaType: string, title: string }
+{ type: "source", sourceType: "url", id: string, url: URL, title: string }
 ```
+
+The encoded URL source uses a string URL.
 
 ### Metadata Parts
 
 ```typescript
-{ type: "response-metadata", id: string, modelId: string, timestamp: Date }
+{ type: "response-metadata", id?: string, modelId?: string, timestamp?: DateTime.Utc }
 ```
+
+The encoded provider form uses an ISO string for `timestamp`; the decoded part
+uses `DateTime.Utc`.
 
 ### Error Parts
 
@@ -383,9 +398,9 @@ StreamPart types:
 
 Key modules:
 
-- `effect/unstable/ai/Response` - Response part schemas and constructors
-- `effect/unstable/ai/Prompt` - Prompt construction and merging
-- `effect/Stream` - Stream combinators (`mapChunksEffect`, `runForEach`, `runDrain`)
+- `effect/ai/Response` - Response part schemas and constructors
+- `effect/ai/Prompt` - Prompt construction and merging
+- `effect/Stream` - Stream combinators (`mapArrayEffect`, `runForEach`, `runDrain`)
 - `effect/Channel` - Low-level resource management (`acquireUseRelease`)
 - `effect/SubscriptionRef` - Reactive shared state
 - `effect/Match` - Pattern matching (use `Match.when({ type: ... })` for stream parts)

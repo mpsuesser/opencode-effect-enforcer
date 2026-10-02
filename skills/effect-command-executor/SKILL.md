@@ -5,13 +5,16 @@ description: Spawn and manage child processes using Effect's ChildProcess module
 
 # Child Process Execution with Effect v4
 
+Targets **Effect 4.0.0**, checked against the `effect@4.0.0` source tag. Keep platform packages on the same version. The process API is marked `@stability unstable`, so check contracts again before a minor-version upgrade.
+
 ## Overview
 
-Node process-group cleanup waits for the leader and descendants. Without
+On POSIX, Node process-group cleanup waits for the leader and descendants. Without
 `forceKillAfter`, cleanup waits up to one second without escalating. With it,
 the group receives SIGKILL at the deadline, then a final bounded wait. Native
 timers drive escalation even under TestClock. `exitCode` / `isRunning` describe
 the leader, not all descendants; do not use virtual time alone to prove OS cleanup.
+On Windows, Node uses `taskkill` for tree termination and waits for the leader.
 
 The `ChildProcess` module provides type-safe, composable process execution with automatic resource cleanup via `Scope`. Commands are AST values — built first with `make` and `pipeTo`, then executed via the `ChildProcessSpawner` service.
 
@@ -23,12 +26,12 @@ The `ChildProcess` module provides type-safe, composable process execution with 
 - Streaming output from long-running processes
 - Managing process lifecycles with scoped cleanup
 
-**Note:** This skill covers child process execution, NOT `@effect/cli` for building CLI applications.
+**Note:** This skill covers child process execution; use `effect/cli` for building CLI applications.
 
 ## Import Pattern
 
 ```typescript
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 ```
 
 Platform layer (Node.js):
@@ -41,8 +44,9 @@ import { NodeServices } from '@effect/platform-node';
 
 ### Template Literal Form
 
+<!-- typecheck -->
 ```typescript
-import { ChildProcess } from 'effect/unstable/process';
+import { ChildProcess } from 'effect/process';
 
 // Simple command — parsed by whitespace
 const cmd = ChildProcess.make`echo hello world`;
@@ -58,8 +62,9 @@ const cmd3 = ChildProcess.make`oxfmt ${files}`;
 
 ### Options + Template Literal Form
 
+<!-- typecheck -->
 ```typescript
-import { ChildProcess } from 'effect/unstable/process';
+import { ChildProcess } from 'effect/process';
 
 // Options object returns a tagged template function
 const cmd = ChildProcess.make({ cwd: '/tmp' })`ls -la`;
@@ -73,8 +78,9 @@ const cmd2 = ChildProcess.make({
 
 ### Array Form
 
+<!-- typecheck -->
 ```typescript
-import { ChildProcess } from 'effect/unstable/process';
+import { ChildProcess } from 'effect/process';
 
 // Explicit command + args array
 const cmd = ChildProcess.make('git', ['status'], {
@@ -99,8 +105,9 @@ const cmd3 = ChildProcess.make('node', {
 
 ### Command Options
 
+<!-- typecheck -->
 ```typescript
-import { ChildProcess } from 'effect/unstable/process';
+import { ChildProcess } from 'effect/process';
 
 const cmd = ChildProcess.make('node', ['script.js'], {
 	// Working directory
@@ -141,8 +148,9 @@ The `fd3`/`fd4` names configure child-process stdio channels. Process handles ex
 
 ### Combinators
 
+<!-- typecheck -->
 ```typescript
-import { ChildProcess } from 'effect/unstable/process';
+import { ChildProcess } from 'effect/process';
 
 // Set cwd (applies to all commands in a pipeline)
 const cmd = ChildProcess.make`ls -la`.pipe(ChildProcess.setCwd('/tmp'));
@@ -165,7 +173,7 @@ Commands are `Effect` values: `yield*` on a command evaluates through its `Effec
 
 ```typescript
 import { Effect } from 'effect';
-import { ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcessSpawner } from 'effect/process';
 
 const program = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -175,9 +183,10 @@ const program = Effect.gen(function* () {
 
 ### Capture as String
 
+<!-- typecheck -->
 ```typescript
 import { Effect, String } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 const program = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -190,39 +199,45 @@ const program = Effect.gen(function* () {
 
 ### Capture as Lines
 
+<!-- typecheck -->
 ```typescript
 import { Effect } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import * as Arr from 'effect/Array';
+import * as Str from 'effect/String';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 const program = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 	const files = yield* spawner.lines(
 		ChildProcess.make('git', ['diff', '--name-only', 'main...HEAD'])
 	);
-	const tsFiles = files.filter((f) => f.endsWith('.ts'));
+	const tsFiles = Arr.filter(files, Str.endsWith('.ts'));
 });
 ```
 
 ### Progressive Output with Side Effects
 
+<!-- typecheck -->
 ```typescript
 import { Effect, Stream } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 const program = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-	let output = '';
 	const handle = yield* spawner.spawn(
 		ChildProcess.make('bun', ['test'], {
 			extendEnv: true,
 			stdin: 'ignore'
 		})
 	);
-	yield* Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
-		Effect.sync(() => {
-			output += chunk;
-		})
-	).pipe(Effect.forkScoped);
+	// Drain to EOF before leaving the scope, propagating read/progress failures.
+	const output = yield* handle.all.pipe(
+		Stream.decodeText(),
+		Stream.tap((chunk) => Effect.logDebug('Process output').pipe(
+			Effect.annotateLogs({ characters: chunk.length })
+		)),
+		Stream.mkString
+	);
 	const exitCode = yield* handle.exitCode;
 	return { output, exitCode };
 }).pipe(Effect.scoped);
@@ -230,29 +245,41 @@ const program = Effect.gen(function* () {
 
 Use this pattern when you need per-chunk side effects (progress reporting, streaming to UI) during command execution. `spawner.string`/`spawner.lines` cannot provide per-chunk callbacks.
 
+Waiting for `handle.exitCode` alone does not drain output. If you fork a reader, join it before closing the scope and returning captured output. `Stream.mkString` buffers all text; for unbounded output, use `Stream.runForEach` without retaining it. Treat process output as potentially sensitive when choosing a progress callback.
+
 ### Get Exit Code
 
+<!-- typecheck -->
 ```typescript
 import { Effect } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import * as Schema from 'effect/Schema';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+
+class CommandFailed extends Schema.TaggedError<CommandFailed>()('CommandFailed', {
+	exitCode: Schema.Number
+}) {}
 
 const program = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 	const exitCode = yield* spawner.exitCode(
-		ChildProcess.make('test', ['-f', 'package.json'])
+		ChildProcess.make('test', ['-f', 'package.json'], {
+			stdin: 'ignore', stdout: 'ignore', stderr: 'ignore'
+		})
 	);
 	// exitCode: ExitCode (branded number)
 	if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-		yield* Effect.fail(new Error('file not found'));
+		return yield* Effect.fail(new CommandFailed({ exitCode }));
 	}
 });
 ```
+
+`string`, `lines`, and stream helpers collect output; they do **not** reject a nonzero exit code. Use a scoped handle when success requires both captured output and a checked status. When using `exitCode` alone, inherit or ignore stdout/stderr so an unread pipe cannot fill and stall a noisy process. Output helpers default to stdout; pass `{ includeStderr: true }` to consume combined output, or configure stderr as `inherit`/`ignore` when only stdout is needed.
 
 ### Stream Output (Long-Running Processes)
 
 ```typescript
 import { Console, Effect, Stream } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 const program = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -273,9 +300,15 @@ const program = Effect.gen(function* () {
 
 Use `spawner.spawn` when you need the process handle for interactive control, streaming output while running, or checking exit codes.
 
+<!-- typecheck -->
 ```typescript
 import { Console, Effect, Stream } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import * as Schema from 'effect/Schema';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+
+class LintFailed extends Schema.TaggedError<LintFailed>()('LintFailed', {
+	exitCode: Schema.Number
+}) {}
 
 const program = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -298,7 +331,7 @@ const program = Effect.gen(function* () {
 	// Wait for exit
 	const exitCode = yield* handle.exitCode;
 	if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-		yield* Effect.fail(new Error(`lint failed: exit ${exitCode}`));
+		return yield* Effect.fail(new LintFailed({ exitCode }));
 	}
 }).pipe(Effect.scoped); // <-- spawn requires Scope
 ```
@@ -310,7 +343,7 @@ const program = Effect.gen(function* () {
 | `pid`             | `ProcessId`                                    | Process identifier (branded number)                                        |
 | `exitCode`        | `Effect<ExitCode, PlatformError>`              | Waits for exit, returns exit code                                          |
 | `isRunning`       | `Effect<boolean, PlatformError>`               | Check if still running                                                     |
-| `kill(options?)`  | `Effect<void, PlatformError>`                  | Kill with signal; pass `{ forceKillAfter: '3 seconds' }` to ensure cleanup |
+| `kill(options?)`  | `Effect<void, PlatformError>`                  | Kill with signal; `forceKillAfter` bounds graceful waiting before escalation |
 | `stdin`           | `Sink<void, Uint8Array, never, PlatformError>` | Write to process stdin                                                     |
 | `stdout`          | `Stream<Uint8Array, PlatformError>`            | Read process stdout                                                        |
 | `stderr`          | `Stream<Uint8Array, PlatformError>`            | Read process stderr                                                        |
@@ -320,9 +353,10 @@ const program = Effect.gen(function* () {
 
 ## Piping Commands
 
+<!-- typecheck -->
 ```typescript
 import { Effect } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 const program = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -371,12 +405,18 @@ const program = Effect.gen(function* () {
 }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 ```
 
-Or provide just the spawner:
+Or compose the spawner with its FileSystem and Path dependencies:
 
 ```typescript
-import { NodeChildProcessSpawner } from '@effect/platform-node';
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from '@effect/platform-node';
+import { Effect, Layer } from 'effect';
+import { ChildProcessSpawner } from 'effect/process';
 
-const program = myEffect.pipe(Effect.provide(NodeChildProcessSpawner.layer));
+declare const myEffect: Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner>;
+const SpawnerLayer = NodeChildProcessSpawner.layer.pipe(
+	Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))
+);
+const program = myEffect.pipe(Effect.provide(SpawnerLayer));
 ```
 
 ## Complete Example: DevTools Service
@@ -392,7 +432,8 @@ import {
 	Stream,
 	String
 } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import * as Arr from 'effect/Array';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 class DevToolsError extends Schema.TaggedError<DevToolsError>()(
 	'DevToolsError',
@@ -442,7 +483,7 @@ class DevTools extends Context.Service<
 					.pipe(
 						Effect.mapError((cause) => new DevToolsError({ cause }))
 					);
-				return files.filter((file) => file.endsWith('.ts'));
+				return Arr.filter(files, String.endsWith('.ts'));
 			});
 
 			const recentCommitSubjects = spawner
@@ -463,7 +504,7 @@ class DevTools extends Context.Service<
 			const runLintFix = Effect.gen(function* () {
 				const handle = yield* spawner
 					.spawn(
-						ChildProcess.make('bun', ['lint'], {
+						ChildProcess.make('bun', ['lint', '--fix'], {
 							env: { FORCE_COLOR: '1' },
 							extendEnv: true,
 							stdin: 'ignore'
@@ -484,11 +525,9 @@ class DevTools extends Context.Service<
 					Effect.mapError((cause) => new DevToolsError({ cause }))
 				);
 				if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-					return yield* new DevToolsError({
-						cause: new Error(
-							`bun lint failed with exit code ${exitCode}`
-						)
-					});
+					return yield* Effect.fail(new DevToolsError({
+						cause: { command: 'bun lint --fix', exitCode }
+					}));
 				}
 			}).pipe(Effect.scoped);
 
@@ -499,7 +538,9 @@ class DevTools extends Context.Service<
 				runLintFix
 			});
 		})
-	).pipe(Layer.provide(NodeServices.layer));
+	);
+
+	static readonly defaultLayer = DevTools.layer.pipe(Layer.provide(NodeServices.layer));
 }
 ```
 
@@ -516,14 +557,14 @@ const program = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 ```
 
-### DON'T: Use `spawner.spawn` without scoping
+### DON'T: Run a scoped program without providing its Scope
 
 ```typescript
-// Process handle leaks — no scope to manage cleanup
+// This definition is valid and retains Scope in its requirements.
 const program = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 	const handle = yield* spawner.spawn(ChildProcess.make`my-server`);
-	// ❌ no Effect.scoped — process may leak
+	// The caller must own/provide Scope before running this program.
 });
 ```
 
@@ -571,22 +612,15 @@ class MyService extends Context.Service<
 >()('MyService') {}
 ```
 
-### DO: Check `ExitCode` with the branded constructor
+### DO: Check the exit status explicitly
 
 ```typescript
 if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-	yield* Effect.fail(new Error(`command failed: ${exitCode}`));
+	return yield* Effect.fail(new CommandFailed({ exitCode }));
 }
 ```
 
-### DON'T: Compare exit codes as raw numbers
-
-```typescript
-// ❌ ExitCode is a branded type — direct number comparison may not work as expected
-if (exitCode !== 0) {
-	/* ... */
-}
-```
+`ExitCode` is a branded **number**, not a boxed runtime value. Both `exitCode !== 0` and comparison with `ChildProcessSpawner.ExitCode(0)` work. The constructor is useful when supplying an ExitCode to a typed API; the brand does not change numeric comparison semantics.
 
 ### DO: Use `handle.all` for interleaved stdout+stderr
 
@@ -610,9 +644,10 @@ yield* Stream.merge(handle.stdout, handle.all).pipe(Stream.runCollect);
 
 Child process operations fail with `PlatformError`:
 
+<!-- typecheck -->
 ```typescript
 import { Effect } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 const program = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -621,7 +656,9 @@ const program = Effect.gen(function* () {
 		.string(ChildProcess.make`non-existent-command`)
 		.pipe(
 			Effect.catchTag('PlatformError', (error) =>
-				Effect.succeed(`fallback: ${error.message}`)
+				error.reason._tag === 'NotFound'
+					? Effect.succeed('Optional command is unavailable')
+					: Effect.fail(error)
 			)
 		);
 });
@@ -637,6 +674,7 @@ Keep process kill, timeout, and output-drain logic inside the process adapter th
 
 Use `Effect.callback` to convert an `AbortSignal` (or any event-driven API) into an Effect. The cleanup Effect removes the listener, and the already-aborted edge case is handled first:
 
+<!-- typecheck -->
 ```typescript
 import { Effect } from 'effect';
 
@@ -651,16 +689,25 @@ const fromAbortSignal = (signal: AbortSignal) =>
 
 ### Abort / Timeout Multiplexing
 
-Combine `Effect.raceAll` with discriminated result types to handle exit, abort, and timeout in a single expression:
+Combine `Effect.raceAll` with discriminated result types to handle successful exit, abort, and timeout in a single expression. `raceAll` waits for the first success, so turn exit observation into an `Exit` value to preserve a failed exit-code read rather than hiding it behind the timeout:
 
+<!-- typecheck -->
 ```typescript
-import { Effect } from 'effect';
+import { Duration, Effect } from 'effect';
+import { ChildProcessSpawner } from 'effect/process';
 
-const exit =
-	yield*
-	Effect.raceAll([
+declare const fromAbortSignal: (signal: AbortSignal) => Effect.Effect<void>;
+
+// Call within the scope that owns the handle and its output reader.
+const awaitOutcome = Effect.fn('Process.awaitOutcome')(function* (
+	handle: ChildProcessSpawner.ChildProcessHandle,
+	signal: AbortSignal,
+	timeout: Duration.Input
+) {
+	const exit = yield* Effect.raceAll([
 		handle.exitCode.pipe(
-			Effect.map((code) => ({ kind: 'exit' as const, code }))
+			Effect.exit,
+			Effect.map((result) => ({ kind: 'exit' as const, result }))
 		),
 		fromAbortSignal(signal).pipe(
 			Effect.map(() => ({ kind: 'abort' as const }))
@@ -669,10 +716,14 @@ const exit =
 			Effect.map(() => ({ kind: 'timeout' as const }))
 		)
 	]);
-if (exit.kind !== 'exit') {
-	yield* handle.kill({ forceKillAfter: '3 seconds' });
-}
+	if (exit.kind !== 'exit') {
+		yield* handle.kill({ forceKillAfter: '3 seconds' });
+	}
+	return exit;
+});
 ```
+
+Handle `exit.result` with `Exit.match` when `kind === 'exit'`; it includes observation failures. This race only chooses the control outcome: drain/join any output reader separately within the owning scope before returning captured output.
 
 ## Related Skills
 

@@ -7,13 +7,17 @@ description: Build prompts for Effect AI using messages, parts, and composition 
 
 Master the Effect AI Prompt API for building type-safe conversations with language models.
 
+Baseline: `effect@4.0.0`; inspect that tag in the Effect source reference.
+`effect/ai` APIs remain `@stability unstable` and can break in minor releases.
+Keep provider packages on the same version as `effect`.
+
 ## Import Patterns
 
 **CRITICAL**: Always use namespace imports:
 
 ```typescript
-import * as Prompt from 'effect/unstable/ai/Prompt';
-import * as Response from 'effect/unstable/ai/Response';
+import * as Prompt from 'effect/ai/Prompt';
+import * as Response from 'effect/ai/Response';
 import { pipe } from 'effect';
 ```
 
@@ -54,12 +58,13 @@ The Effect v4 module also exports runtime schemas for every part and each role-s
 
 ## Message Types
 
-Each message has `role` and `content`. Content is an array of `Part` objects.
+Each message has `role` and `content`. System content is a string; other roles
+contain arrays of the parts allowed for that role.
 
 ### System Messages
 
 ```typescript
-import * as Prompt from 'effect/unstable/ai/Prompt';
+import * as Prompt from 'effect/ai/Prompt';
 
 // String content only
 const system = Prompt.makeMessage('system', {
@@ -368,7 +373,7 @@ const appended = pipe(prompt, Prompt.appendSystem(' Be concise.'));
 ### Convert AI Response to Prompt
 
 ```typescript
-import * as Response from 'effect/unstable/ai/Response';
+import * as Response from 'effect/ai/Response';
 
 const responseParts: ReadonlyArray<Response.AnyPart> = [
 	Response.makePart('text-start', { id: 'text_1' }),
@@ -400,7 +405,13 @@ const responseParts: ReadonlyArray<Response.AnyPart> = [
 const historyPrompt = Prompt.fromResponseParts(responseParts);
 ```
 
-`Prompt.fromResponseParts` folds streaming text/reasoning only when the matching start/delta/end parts are present in the same input, places tool calls and approval requests in assistant messages, and skips preliminary tool results. For final tool results it always uses `encodedResult`: framework-executed results (`providerExecuted: false`) become tool messages, while provider-executed results (`providerExecuted: true`) remain in the assistant message with that flag preserved.
+`Prompt.fromResponseParts` folds streaming text/reasoning by matching IDs and
+emits the accumulated part on its end marker. Pass complete start/delta/end
+sequences rather than isolated deltas. It places tool calls and approval requests
+in assistant messages and skips preliminary tool results. For final tool results
+it always uses `encodedResult`: framework-executed results
+(`providerExecuted: false`) become tool messages, while provider-executed results
+(`providerExecuted: true`) remain in the assistant message with that flag preserved.
 
 This distinction matters for hosted tools such as provider web search or code execution. Moving their results into a tool message changes the conversation shape expected by the provider.
 
@@ -426,7 +437,7 @@ This keeps prompt assembly inside the Effect graph instead of forcing Promise is
 ```typescript
 import { Effect } from 'effect';
 import * as SubscriptionRef from 'effect/SubscriptionRef';
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
+import * as LanguageModel from 'effect/ai/LanguageModel';
 
 const chat = Effect.gen(function* () {
 	const history = yield* SubscriptionRef.make(Prompt.empty);
@@ -456,7 +467,7 @@ const chat = Effect.gen(function* () {
 ### Generate Text
 
 ```typescript
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
+import * as LanguageModel from 'effect/ai/LanguageModel';
 import { Effect } from 'effect';
 
 const program = Effect.gen(function* () {
@@ -474,7 +485,7 @@ const program = Effect.gen(function* () {
 ### Stream Text
 
 ```typescript
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
+import * as LanguageModel from 'effect/ai/LanguageModel';
 import { Effect, Stream } from 'effect';
 
 const program = Effect.gen(function* () {
@@ -493,7 +504,7 @@ const program = Effect.gen(function* () {
 ### Generate Object
 
 ```typescript
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
+import * as LanguageModel from 'effect/ai/LanguageModel';
 import { Effect, Schema } from 'effect';
 
 const Contact = Schema.Struct({
@@ -525,8 +536,8 @@ may reject it. Provider config uses snake_case; Prompt metadata uses camelCase.
 ```typescript
 import { OpenAiLanguageModel } from '@effect/ai-openai';
 import { Effect } from 'effect';
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
-import * as Prompt from 'effect/unstable/ai/Prompt';
+import * as LanguageModel from 'effect/ai/LanguageModel';
+import * as Prompt from 'effect/ai/Prompt';
 
 const program = LanguageModel.generateText({
 	prompt: Prompt.make([
@@ -552,7 +563,7 @@ OpenAI client layer at the runtime boundary (see `effect-ai-provider`).
 
 ```typescript
 // Augment options interfaces via module augmentation
-declare module 'effect/unstable/ai/Prompt' {
+declare module 'effect/ai/Prompt' {
 	interface TextPartOptions {
 		readonly anthropic?: {
 			readonly cache_control?: {
@@ -703,7 +714,7 @@ const toolInteraction = Prompt.make([
 ## Type Guards
 
 ```typescript
-import * as Prompt from 'effect/unstable/ai/Prompt';
+import * as Prompt from 'effect/ai/Prompt';
 
 declare const value: unknown;
 

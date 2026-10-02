@@ -31,7 +31,7 @@ Use `Context.Service` for service definitions. Replace these legacy spellings:
 | Legacy API                  | Era       | Replacement                |
 | --------------------------- | --------- | -------------------------- |
 | `Context.Tag` / `GenericTag` | pre-v4    | `Context.Service`          |
-| `Effect.Service`            | early v4  | `Context.Service`          |
+| `Effect.Service`            | v3        | `Context.Service`          |
 | `ServiceMap.Service` / `.*` | prerelease | `Context.Service` / `Context.*` |
 
 ```haskell
@@ -47,21 +47,24 @@ class ParallelClient extends Effect.Service<ParallelClient>()(...)
 class MyService extends ServiceMap.Service<MyService>()("@app/MyService", { ... })
 
 -- Fix: Context.Service
-class ParallelClient extends Context.Service<ParallelClient>()(
+class ParallelClient extends Context.Service<ParallelClient, Interface>()(
   "@parallel/ParallelClient"
 )
 ```
 
+<!-- typecheck -->
 ```typescript
-// Concrete service (single implementation)
-export class ParallelClient extends Context.Service<ParallelClient>()(
+import { Context, Effect, Layer } from 'effect';
+
+class ParallelClient extends Context.Service<ParallelClient, {
+	readonly ping: Effect.Effect<string>;
+}>()(
 	'@parallel/ParallelClient'
 ) {}
 
-// Interface-style service (multiple implementations, config, infrastructure)
-export class Clipboard extends Context.Service<Clipboard>()(
-	'@Clipboard/Clipboard'
-) {}
+const layer = Layer.succeed(ParallelClient, {
+	ping: Effect.succeed('pong')
+});
 ```
 
 When migrating from `ServiceMap`, also update the corresponding module accessors:

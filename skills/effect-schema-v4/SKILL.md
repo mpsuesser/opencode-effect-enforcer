@@ -35,7 +35,7 @@ schema helpers so concrete schema operations are retained.
 | `typeSchema(schema)`          | `toType(schema)`                    |                                           |
 | `asSchema(schema)`            | `revealCodec(schema)`               |                                           |
 | `equivalence()`               | `toEquivalence()`                   |                                           |
-| `arbitrary()`                 | `Arbitrary.schema(schema)`          | Native `effect/unstable/arbitrary`; fast-check bridge removed |
+| `arbitrary()`                 | `Arbitrary.schema(schema)`          | Native `effect/Arbitrary`; fast-check bridge removed |
 | `pretty()`                    | `toFormatter()`                     |                                           |
 | `parseJson()`                 | `fromJsonString(Schema.Unknown)`    | Public unknown-JSON codec |
 | `parseJson(schema)`           | `fromJsonString(schema)`            | With-schema version                       |
@@ -145,9 +145,34 @@ Schema.Number.check(Schema.isGreaterThan(0));
 | `finite`                  | `isFinite()`                      |
 | `minLength(n)`            | `isMinLength(n)`                  |
 | `maxLength(n)`            | `isMaxLength(n)`                  |
-| `length(n)`               | `isLengthBetween(n, n)`           |
+| `length(n)`               | `isBetweenLength(n, n)`           |
 | `pattern(regex)`          | `isPattern(regex)`                |
 | `nonEmptyString`          | `isNonEmpty()`                    |
+
+Use `isBetweenLength`, `isBetweenCodePoints`, `isBetweenSize`, and
+`isBetweenProperties` for range checks, and `isStartingWith`, `isEndingWith`,
+and `isIncluding` for string checks. Their `SchemaRepresentation.*Reviver`
+exports and persisted `effect/schema/...` check IDs use these same names;
+update persisted representations as well as source calls.
+
+### String length semantics
+
+`isMinLength`, `isMaxLength`, and `isBetweenLength` count UTF-16 code units on
+strings and elements on arrays. Use `isMinCodePoints`, `isMaxCodePoints`, and
+`isBetweenCodePoints` for Unicode code point counts, matching JSON Schema length
+keywords. Code points are not grapheme clusters; these checks do not normalize
+strings, and unpaired surrogates each count as one code point. Cardinality bounds
+must be finite; they are rounded down and clamped to zero.
+
+<!-- typecheck -->
+```ts
+import * as Schema from 'effect/Schema';
+
+const OneCodePoint = Schema.String.check(Schema.isBetweenCodePoints(1, 1));
+const OneCodeUnit = Schema.String.check(Schema.isBetweenLength(1, 1));
+Schema.is(OneCodePoint)('😀'); // true
+Schema.is(OneCodeUnit)('😀'); // false
+```
 
 ### Removed Filters (no v4 equivalent)
 
@@ -252,11 +277,11 @@ import {
 
 const NumberFromString = Schema.String.pipe(
 	Schema.decodeTo(Schema.Number, {
-		decode: SchemaGetter.transformEffect((s) =>
+		decode: SchemaGetter.transformEffect((s, options) =>
 			Option.match(Number.parse(s), {
 				onNone: () =>
 					Effect.fail(
-						new SchemaIssue.InvalidValue(Option.some(s))
+						new SchemaIssue.InvalidValue({ expected: 'a number' }, s, options)
 					),
 				onSome: (n) => Effect.succeed(n)
 			})
@@ -276,6 +301,35 @@ Schema.transformLiterals([0, 'a'], [1, 'b']);
 // v4
 Schema.Literal(0).transform('a');
 Schema.Literals([0, 1]).transform(['a', 'b']);
+```
+
+### Brands are type-only
+
+`Schema.brand('UserId')` adds a nominal TypeScript distinction, not a runtime
+check or AST annotation. Apply checks before branding. The identifier must be
+one concrete string literal: widened strings, unions, and open template literal
+types are rejected. Compose distinct brands by applying `brand` repeatedly.
+For an enum key, pass the enum member rather than its underlying string value.
+
+`Schema.fromBrand(identifier, constructor)` requires the constructor's sole
+concrete brand key and applies its checks. Compose distinct constructors through
+repeated `fromBrand` calls; use `Schema.Union` for alternatives.
+
+Representations and generated schema code do not retain type-only brands.
+Reapply branding after rebuilding a schema when the nominal type is required;
+checks supplied by `fromBrand` remain represented. Use an explicit `identifier`
+annotation for reference naming instead of relying on the brand name.
+
+<!-- typecheck -->
+```ts
+import * as Schema from 'effect/Schema';
+
+const UserId = Schema.NonEmptyString.pipe(Schema.brand('UserId'));
+const TenantUserId = UserId.pipe(Schema.brand('TenantScoped'));
+type TenantUserId = typeof TenantUserId.Type;
+
+const id: TenantUserId = Schema.decodeUnknownSync(TenantUserId)('user-1');
+// Both brands are static distinctions; runtime validation is NonEmptyString.
 ```
 
 ## 5. Schema.Data Removal
@@ -387,7 +441,7 @@ const fallback = SchemaGetter.withDefault(Effect.succeed('viewer'));
 - `Schema.resolveAnnotationsKey(schema)` returns key-level annotations.
 - `Schema.annotateEncoded({...})` annotates the encoded side of a transformed schema; use `Schema.annotate({...})` for the decoded Type side.
 - Schemas are directly extendable as classes.
-- Derive native generators with `Arbitrary.schema(schema)` from `effect/unstable/arbitrary`. See `effect-testing` for sampling, bounded generation, shrinking, and replay.
+- Derive native generators with `Arbitrary.schema(schema)` from `effect/Arbitrary`. See `effect-testing` for sampling, bounded generation, shrinking, and replay.
 - New built-in schemas:
     - `Schema.DateFromString`
     - `Schema.BigIntFromString`
@@ -404,7 +458,7 @@ const fallback = SchemaGetter.withDefault(Effect.succeed('viewer'));
 
 ```ts
 import { Effect, Schema } from 'effect';
-import { Arbitrary } from 'effect/unstable/arbitrary';
+import * as Arbitrary from 'effect/Arbitrary';
 
 class UserName extends Schema.NonEmptyString {
 	static readonly decodeUnknownSync = Schema.decodeUnknownSync(this);
@@ -509,13 +563,40 @@ Neither matcher decodes unknown input. See `effect-pattern-matching` for a check
 
 ### JSON Schema import, conversion, and Standard Schema
 
+- `Schema.toJsonSchemaDocument(schema)` describes the encoded side of
+  `Schema.toCodecJson(schema)`. Decode matching JSON through that codec: for
+  example, its optional string field accepts JSON `null` as `undefined`, while
+  the original `Schema.optional(Schema.String)` rejects `null`.
+- Export is best-effort, and successful JSON Schema validation is not proof that
+  Effect decoding will succeed. Known approximate branches cause `oneOf` to
+  export as `anyOf`; unions with only exact branches retain `oneOf`. Approximation propagates
+  through nested schemas, check dependencies, and recursive references.
+- Custom check `toJsonSchema` callbacks return a fragment for exact semantics,
+  `[fragment, true]` for a safe, looser approximation, or `[{}, true]` to omit a
+  constraint. The compiler trusts that declaration. Approximate record-key
+  patterns cannot select `patternProperties` values; with excess-property mode
+  `"error"`, generated `propertyNames` and permissive candidate value schemas
+  still leave exact key/value associations to the Effect decoder.
+- String code-unit minima export as `Math.ceil(minimum / 2)` code points, and
+  maxima use the same numeric bound but count code points. Code-point checks
+  export exact string bounds. Direct `isPattern` exports omit patterns unless
+  the regex has `u` and only optional `d`, `g`, or `y` flags; sticky patterns are
+  anchored at the start. Casing, safe integers, size, uniqueness, and non-number
+  ranges may also have looser or omitted exported constraints.
 - `SchemaRepresentation.fromJsonSchemaDocument` rejects unsupported references,
   validation keywords, object/array `const` or `enum` values, and intersections
   it cannot represent faithfully. Do not discard the failing constraint to make
   an import succeed.
 - A keyword such as `minLength` does not imply `type: 'string'`. Constraints beside
-  `const`, `enum`, and `$ref` are applied. Imported `oneOf` remains `oneOf` on export,
-  and tuple imports preserve `minItems` even when `prefixItems` alone is insufficient.
+  `const`, `enum`, and `$ref` are applied. Imports preserve `oneOf` mode; re-export
+  follows the approximation rules above. Tuple imports preserve `minItems` even
+  when `prefixItems` alone is insufficient.
+- Imports assume a valid Draft 2020-12 document, without meta-schema validation,
+  and JSON-compatible instance values. Imported string lengths count code points;
+  `patterns: "apply"` compiles in ECMAScript Unicode (`u`) mode and rejects patterns
+  invalid in that mode with their source path. Patterns default to rejection;
+  ignoring them can also reject valid inputs by creating overlapping `oneOf`
+  branches. Import/re-export is not a lossless equivalence guarantee.
 - `JsonSchema` dialect conversion preserves custom keywords and representable
   conditionals, contains, dependencies, identifiers, and tuples; it relocates
   local references and throws for unsupported conversions. These synchronous
@@ -523,7 +604,7 @@ Neither matcher decodes unknown input. See `effect-pattern-matching` for a check
 - Import vendored V1 interoperability types from `effect/StandardSchema`, for
   example `StandardSchemaV1` and `StandardJSONSchemaV1`. Continue to adapt Effect
   schemas with `Schema.toStandardSchemaV1`; the new module is not a schema builder.
-- Binary encoding is available from `effect/unstable/encoding` as `SchemaBinary`.
+- Binary encoding is available from `effect/encoding` as `SchemaBinary`.
   See `effect-schema-composition` for codecs and `effect-stream` for framing.
 
 ## Parsing and compilation contracts
@@ -540,6 +621,9 @@ Neither matcher decodes unknown input. See `effect-pattern-matching` for a check
 - Declared fields may be inherited and are copied to own output properties;
   dynamic record keys remain own-only and `__proto__` remains own-only. Enforce
   ownership at the boundary when the protocol requires own declared fields.
+  Excess-property checks ignore non-enumerable own properties; dynamic string
+  and symbol index signatures skip them too. Declare a field explicitly or make
+  it enumerable when it must survive decoding or encoding.
 - Class `make`, `makeOption`, and `makeEffect` preserve existing instances. Use
   `new MyClass(fields)` for a distinct instance. Class equivalence now compares
   declared fields, excluding unrelated runtime properties.
@@ -562,7 +646,7 @@ Neither matcher decodes unknown input. See `effect-pattern-matching` for a check
   `$id` are rejected; flatten references or explicitly choose to ignore constraints.
 
 Experimental JIT/AOT compilation uses the existing `SchemaParser` APIs. Opt in
-globally with `effect/unstable/schema/SchemaJITCompiler/enable` or selectively with
+globally with `effect/schema/SchemaJITCompiler/enable` or selectively with
 `SchemaJITCompiler.enable(ast)`. AOT's `SchemaAOTCompiler/Build` discovers direct
 schema exports from explicit loaders and writes a self-installing module via
 FileSystem/Path. Choose prepared operations explicitly: omitted operations use

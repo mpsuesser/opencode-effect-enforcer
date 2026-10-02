@@ -346,7 +346,7 @@ const detached = Effect.gen(function* () {
 
 Whichever lifetime you pick, **a forked fiber's failure is observed by nobody unless you arrange it**: `join`/`await` the fiber, supervise it via `FiberHandle`/`FiberMap`/`FiberSet` `join`, or attach `Effect.catchCause`/`Effect.onError` plus logging inside the forked effect. v4 removed `Effect.forkWithErrorHandler`, and the runtime does not log unhandled fiber failures.
 
-`Effect.awaitAllChildren` only waits for children forked while the wrapped effect runs — children that existed beforehand are not awaited.
+`Effect.awaitAllChildren` only waits for children forked while the wrapped effect runs — children that existed beforehand are not awaited. The child wait respects the surrounding interruptibility. If interrupted while waiting after the wrapped effect failed, the resulting cause retains both the original failure and interruption; an enclosing uninterruptible region keeps the wait uninterruptible.
 
 `forkIn`/`forkScoped` register an interruption finalizer on the scope and remove it when the fiber completes on its own. Forking into an already-closed scope interrupts the new fiber immediately. The same applies to `Fiber.runIn(fiber, scope)`, which only registers the finalizer — it does not wait for the fiber.
 
@@ -380,7 +380,7 @@ const program = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 ```
 
-`run` options: `{ onlyIfMissing?: boolean; propagateInterruption?: boolean }`. The type also accepts `startImmediately`, but it is a no-op — collection fibers are forked via `Effect.runForkWith` and always start synchronously (see "How collection fibers relate to the caller" in section 8).
+`run` options: `{ onlyIfMissing?: boolean; propagateInterruption?: boolean; startImmediately?: boolean }`. Startup is immediate by default; `startImmediately: false` defers it (see "How collection fibers relate to the caller" in section 8).
 
 ### join vs awaitEmpty
 
@@ -462,7 +462,7 @@ const program = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 ```
 
-`run` options are the same as FiberHandle's: `{ onlyIfMissing?, propagateInterruption? }` (`startImmediately` is in the type but is a no-op here too). `set`/`setUnsafe` install existing fibers under a key with `{ onlyIfMissing?, propagateInterruption? }`.
+`run` options are the same as FiberHandle's: `{ onlyIfMissing?, propagateInterruption?, startImmediately? }`. Startup defaults to immediate; `false` defers it. `set`/`setUnsafe` install existing fibers under a key with `{ onlyIfMissing?, propagateInterruption? }`.
 
 Runtime helpers take the key as the first runner argument:
 
@@ -482,7 +482,7 @@ Closed-map behavior matches FiberHandle: `FiberMap.run` interrupts the caller; r
 
 ## 8. FiberSet — Grow-Only Fiber Collections
 
-`FiberSet<A, E>` tracks an unkeyed set of fibers. No replacement semantics — every `run`/`add` grows the set; completed fibers remove themselves; scope close interrupts all. Nothing limits admission: unbounded `run` calls on a production ingest path are a hazard — gate them with a `Semaphore` (see the bounded pattern under Key Patterns).
+`FiberSet<A, E>` tracks an unkeyed set of fibers. No replacement semantics — every `run`/`add` grows the set; completed fibers remove themselves; scope close interrupts all. Nothing limits admission. For a finite work list, prefer bounded `Effect.forEach`; for ongoing ingestion, use a bounded queue with a fixed set of workers.
 
 ```ts
 const program = Effect.gen(function* () {
@@ -504,7 +504,7 @@ const program = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 ```
 
-`run` options: `{ propagateInterruption? }` (no `onlyIfMissing` — there is no key; `startImmediately` is in the type but is a no-op). On a closed set, `FiberSet.run` returns an already-interrupted fiber (it does **not** interrupt the caller, unlike FiberHandle/FiberMap).
+`run` options: `{ propagateInterruption?, startImmediately? }` (no `onlyIfMissing` — there is no key). Startup defaults to immediate; `false` defers it. On a closed set, `FiberSet.run` returns an already-interrupted fiber (it does **not** interrupt the caller, unlike FiberHandle/FiberMap).
 
 Runtime helpers mirror the others in shape. `FiberSet.runtime` and `runtimePromise` forward `propagateInterruption` when registering the managed fiber:
 
@@ -519,10 +519,13 @@ const runPromise2 = yield* FiberSet.makeRuntimePromise();
 
 ### How collection fibers relate to the caller
 
-Fibers forked via `FiberHandle/FiberMap/FiberSet.run` (and the runtime runners) are created with `Effect.runForkWith(parent.context)` — they are **root fibers carrying the caller's services, not children of the calling fiber**. Consequences:
+Fibers forked via `FiberHandle/FiberMap/FiberSet.run` carry the caller's context but are **detached from its child lifetime** and owned by the collection. Consequences:
 
-- They start executing **immediately and synchronously** up to their first suspension (no lazy start, unlike `Effect.forkChild`).
+- `run` starts them **immediately** by default; pass `{ startImmediately: false }` to defer startup. This differs from `Effect.forkChild`, whose default is deferred.
 - The calling fiber's completion does not interrupt them — only key replacement, `remove`/`clear`, or the collection's scope close does.
+
+The captured `runtime()` runners instead use `Effect.runForkWith` at the callback
+boundary. Those runners start synchronously and do not expose `startImmediately`.
 
 ---
 
@@ -647,27 +650,19 @@ const webhookProcessor = Effect.gen(function* () {
 
 To fail fast when any background task crashes, run the service's main loop against `FiberSet.join(tasks)` (it fails with the first non-interruption failure).
 
-### Bounded background task set (FiberSet + Semaphore)
+### Bounded work lists
 
-`FiberSet` never applies backpressure on its own. Bound admission by taking a semaphore permit before `run` and releasing it when the task fiber settles:
+`FiberSet` never applies backpressure on its own. For a work list, let
+`Effect.forEach` own both admission and cleanup. A manual `Semaphore.take`
+followed by `FiberSet.run` has an interruption gap, and a closed collection or a
+fiber interrupted before startup may never install the intended release handler.
 
 ```ts
 const boundedProcessor = Effect.gen(function* () {
-	const tasks = yield* FiberSet.make<void, WebhookError>();
-	const permits = yield* Semaphore.make(16); // at most 16 in flight
-
-	for (const event of events) {
-		yield* Semaphore.take(permits, 1); // waits while 16 tasks are in flight
-		yield* FiberSet.run(
-			tasks,
-			handleWebhook(event).pipe(
-				// runs on success, failure, AND interruption — permits never leak
-				Effect.ensuring(Semaphore.release(permits, 1))
-			)
-		);
-	}
-
-	yield* FiberSet.awaitEmpty(tasks);
+	yield* Effect.forEach(events, handleWebhook, {
+		concurrency: 16,
+		discard: true
+	});
 }).pipe(Effect.scoped);
 ```
 
@@ -723,7 +718,7 @@ const handoff = Effect.gen(function* () {
 9. **Expecting external interruption to fail `join`** — by default it doesn't. Pass `{ propagateInterruption: true }` to `run`/`set`/`add`; the collection's own internal interruptions (replacement, `clear`, scope close) never fail `join` either way.
 10. **Expecting `onlyIfMissing: true` to error when occupied** — it succeeds, returning a shared already-interrupted fiber while keeping the existing one. Check `Exit.hasInterrupts(yield* Fiber.await(fiber))` to detect the rejected start.
 11. **Calling `run` on a closed collection** — `FiberHandle.run`/`FiberMap.run` interrupt the *calling* fiber; `FiberSet.run` and all `runtime()` runners return a pre-interrupted fiber instead. Neither throws.
-12. **Assuming collection fibers are children of the caller** — they are root fibers created via `Effect.runForkWith` with the caller's context: they start immediately and survive the calling fiber; only the collection (scope close, replacement, remove/clear) interrupts them.
+12. **Assuming collection fibers are children of the caller** — they carry the caller's context but survive its completion; the collection owns their lifetime. `run` starts immediately by default and honors `startImmediately: false`; callback runtime runners start synchronously.
 13. **Relying on `Effect.runFork`/`runPromise` to keep Node alive** — a fiber suspended on `Deferred.await`/`Effect.never` won't hold the process open. Use `NodeRuntime.runMain` (built on `Runtime.makeRunMain`).
 14. **Letting interruption leak through acquire/release** — wrap the whole sequence in `Effect.uninterruptibleMask` and `restore` only the use phase; pending interruption is delivered as soon as the region ends, so cleanup still runs exactly once.
 15. **Leaving collection type parameters off** — `FiberHandle.make()` defaults to `<unknown, unknown>`, making `join` surface `unknown` errors. Always pass them: `FiberHandle.make<A, E>()`, `FiberMap.make<K, A, E>()`, `FiberSet.make<A, E>()`.

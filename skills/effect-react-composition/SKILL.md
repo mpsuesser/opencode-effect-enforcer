@@ -7,15 +7,19 @@ description: Build composable React components using Effect Atom for state manag
 
 Build React UIs using compositional patterns, Effect Atom for state management, and the component module pattern. Use this skill when creating React applications that integrate with Effect's ecosystem.
 
+`@effect/atom-react@4.0.0` requires React `>=19.0.0 <20.0.0` and the same version
+of `effect`. Core `effect/reactivity` APIs remain `@stability unstable` and can
+change incompatibly in minor releases.
+
 ## Effect Source Reference
 
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
-Browse and read files there directly to look up APIs, types, and implementations.
+Use `git show effect@4.0.0:<path>` there for this baseline; main may be ahead.
 
 Reference this for:
 
-- Atom reactivity: `packages/effect/src/unstable/reactivity/`
-- AsyncResult source: `packages/effect/src/unstable/reactivity/AsyncResult.ts`
+- Atom reactivity: `packages/effect/src/reactivity/`
+- AsyncResult source: `packages/effect/src/reactivity/AsyncResult.ts`
 - Effect source: `packages/effect/src/`
 
 ## When to Use This Skill
@@ -291,11 +295,20 @@ function ExternalButton() {
 
 Effect Atom provides reactive state management that integrates seamlessly with React.
 
+Share a `RegistryProvider` across components that should share atom state. Its
+registry options are initialization-only; changing them after first render does
+not rebuild the registry. Cleanup is delayed briefly on unmount and canceled on
+quick remount, supporting React's development lifecycle. Unused atoms follow
+their idle TTL/registry policy, so an unmount is not a synchronous reset signal.
+Use `Atom.keepAlive` intentionally for state that should outlive subscriptions,
+and keep external-resource cleanup in atom finalizers. See `effect-atom-state`
+for SWR, concurrent function atoms, and batching semantics.
+
 ### Pattern: Basic Atom State
 
 ```typescript
 // state/Cart.ts
-import * as Atom from 'effect/unstable/reactivity/Atom';
+import * as Atom from 'effect/reactivity/Atom';
 import { Effect } from 'effect';
 
 /**
@@ -496,7 +509,7 @@ Use `runtime.atom` and `Atom.family` for query-like data. The runtime wraps the 
 
 ```typescript
 // state/User.ts
-import * as Atom from 'effect/unstable/reactivity/Atom';
+import * as Atom from 'effect/reactivity/Atom';
 import { Effect } from 'effect';
 import { UserService } from '@/services/UserService';
 
@@ -522,7 +535,7 @@ export const userData = Atom.family((userId: string) =>
 
 ```tsx
 import { useAtomValue } from '@effect/atom-react';
-import * as AsyncResult from 'effect/unstable/reactivity/AsyncResult';
+import * as AsyncResult from 'effect/reactivity/AsyncResult';
 import * as User from '@/state/User';
 
 function UserProfile({ userId }: { userId: string }) {

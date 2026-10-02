@@ -89,7 +89,7 @@ Reference this for:
 
 ## Core Error Handling Philosophy
 
-Effect distinguishes between two types of failures:
+Effect distinguishes expected errors from defects:
 
 1. **Expected Errors (Error Channel)** - Business logic failures that should be handled
     - Type-safe and tracked in the effect signature: `Effect<A, E, R>`
@@ -100,6 +100,12 @@ Effect distinguishes between two types of failures:
     - Not tracked in the type system
     - Result from programming mistakes (null refs, unhandled cases, assertions)
     - Usually should NOT be caught; use catchDefect only at boundaries
+
+Interruption is cancellation, a separate `Cause` reason rather than a typed
+business error. A cause can retain several reasons: if work fails and its
+finalizer throws, both the original failure and the finalizer defect remain.
+Inspect the full `Cause` at supervision boundaries rather than assuming one
+reason or discarding cancellation during cleanup.
 
 ### Runtime Adapter Boundaries and Invariants
 
@@ -1047,6 +1053,13 @@ The `instanceof` guard prevents double-wrapping when an upstream operation alrea
 
 ## Error Recovery Patterns
 
+For per-item typed outcomes, `Effect.partition(items, work, { concurrency })`
+returns `[successes, failures]`, in that order. Both arrays preserve input order.
+`Effect.all(..., { mode: 'result' })` instead preserves the input structure with
+one `Result` per slot. Their `never` error channel means typed failures are
+collected; defects and interruption still propagate. Use `Effect.validate` when
+any item failure must fail the entire batch with all typed errors.
+
 Retry timing and recurrence design belong in the dedicated effect-scheduling skill. This skill determines which failures are typed and recoverable; scheduling determines whether, when, and how often an idempotent operation is retried.
 
 ### Translate at Service Boundaries
@@ -1388,7 +1401,7 @@ Model ambiguous HTTP responses (where the body structure differs for success vs 
 
 ```typescript
 import { Effect, Schema } from 'effect';
-import { HttpClientResponse } from 'effect/unstable/http';
+import { HttpClientResponse } from 'effect/http';
 
 class TokenSuccess extends Schema.Class<TokenSuccess>('TokenSuccess')({
 	access_token: AccessToken,

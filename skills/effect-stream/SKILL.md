@@ -15,7 +15,7 @@ Reference this for:
 - Stream constructors and combinators (`packages/effect/src/Stream.ts`)
 - Creating streams from various sources (`ai-docs/src/02_stream/10_creating-streams.ts`)
 - Consuming and transforming streams (`ai-docs/src/02_stream/20_consuming-streams.ts`)
-- Encoding/decoding with NDJSON and SchemaBinary (`packages/effect/src/unstable/encoding/`)
+- Encoding/decoding with NDJSON and SchemaBinary (`packages/effect/src/encoding/`)
 
 ## Core Model
 
@@ -25,7 +25,7 @@ Use a stream when values are naturally many-valued and ordered over time. For on
 
 ```ts
 import { Effect, Schedule, Schema, Sink, Stream } from 'effect';
-import { Ndjson, SchemaBinary } from 'effect/unstable/encoding';
+import { Ndjson, SchemaBinary } from 'effect/encoding';
 ```
 
 For Node.js readable streams:
@@ -83,6 +83,11 @@ const samples = Stream.fromEffectSchedule(
 // Repeat an effect forever (no schedule delay)
 const forever = Stream.fromEffectRepeat(Effect.succeed('tick'));
 ```
+
+`Stream.repeat(source, schedule)` and `Stream.forever(source)` repeat the whole
+source, closing each completed run's scope before starting the next one. Keep
+per-run acquisitions inside the source so they release between iterations;
+resources that must span repetitions belong to an outer owning scope.
 
 ### Paginated APIs
 
@@ -151,6 +156,35 @@ const callbackStream = Stream.callback<PointerEvent>(
 ```
 
 Options: `{ bufferSize?: number, strategy?: "sliding" | "dropping" | "suspend" }`
+
+### Queue completion and terminal batches
+
+For a queue-backed source, `Queue.end` stops new offers but lets buffered values
+drain before `Cause.Done`; `Queue.fail` likewise drains before its error.
+`Queue.takeN` / `takeBetween` can return a final batch smaller than their requested
+minimum once closing begins. An open queue with a partial batch stays suspended
+until its batching threshold is reached; it does not busy-loop on each offer.
+Do not interpret a short terminal batch as malformed input.
+
+<!-- typecheck -->
+```ts
+import { Cause, Effect, Queue } from 'effect';
+
+const program = Effect.gen(function* () {
+	const queue = yield* Queue.bounded<number, Cause.Done>(8);
+	yield* Queue.offerAll(queue, [1, 2]);
+	yield* Queue.end(queue);
+	const finalBatch = yield* Queue.takeN(queue, 5); // [1, 2]
+	const terminal = yield* Effect.exit(Queue.take(queue)); // Done
+	return { finalBatch, terminal };
+});
+```
+
+Interrupted pending `offer` / `offerAll` producers withdraw their unaccepted
+values even during closing, allowing the queue to finish. `Queue.shutdown`
+discards buffered messages immediately; `shutdownUnsafe` is the synchronous
+callback equivalent. Both return `false` if already completed or shut down.
+They preserve an existing closing cause; an open queue shuts down by interruption.
 
 ### From ReadableStream (DOM/Web)
 
@@ -227,6 +261,10 @@ stream.pipe(
 	Stream.mapEffect((order) => enrichOrder(order), { concurrency: 4 })
 );
 ```
+
+A synchronous throw from a concurrent mapping callback is reported as a defect
+inside its worker fiber; it does not become a typed mapping error. Lift expected
+throwable operations with `Effect.try` / `tryPromise` at their boundary.
 
 ### FlatMap
 
@@ -357,10 +395,10 @@ stream.pipe(
 
 ## 4. Encoding & Decoding (NDJSON / SchemaBinary)
 
-Use `Stream.pipeThroughChannel` with codec channels from `effect/unstable/encoding`.
+Use `Stream.pipeThroughChannel` with codec channels from `effect/encoding`.
 
 ```ts
-import { Ndjson, SchemaBinary } from 'effect/unstable/encoding';
+import { Ndjson, SchemaBinary } from 'effect/encoding';
 ```
 
 ### Schema-derived binary frames
@@ -369,7 +407,7 @@ import { Ndjson, SchemaBinary } from 'effect/unstable/encoding';
 ```ts
 import { Stream } from 'effect';
 import * as Schema from 'effect/Schema';
-import { SchemaBinary } from 'effect/unstable/encoding';
+import { SchemaBinary } from 'effect/encoding';
 
 class Reading extends Schema.Class<Reading>('Reading')({
 	id: Schema.String,
@@ -617,6 +655,13 @@ Effect.scoped(
 Options: `{ capacity: number | "unbounded", strategy?: "sliding" | "dropping" | "suspend", replay?: number }`
 
 Because the producer starts immediately, subscribers that attach after the source has already emitted will miss earlier values unless `replay` is configured (and `replay` only retains the most recent N values — it is not a full log). For a **fixed, known set of consumers**, prefer `broadcastN`: it subscribes all downstream streams before starting the source, so none of them miss values.
+
+Completion and failure are retained separately from ordinary values:
+`broadcast`, `broadcastN`, `share`, and `toPubSubTake` end their underlying PubSub
+with the source's terminal exit. Current and late subscribers observe that exit
+after buffered/replayed values, even if a dropping buffer was full. This does
+not replay earlier data. For `toPubSubTake`, consume with `Stream.fromPubSubTake`
+so the terminal `Take` is interpreted as completion/failure.
 
 ### broadcastN
 

@@ -8,14 +8,14 @@ description: Use Effect platform abstractions for cross-platform file I/O, proce
 ## Effect Source Reference
 
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
-Browse and read files there directly to look up APIs, types, and implementations.
+This guide targets **Effect 4.0.0**. Inspect the `effect@4.0.0` tag when the checkout is ahead. Keep `effect` and every `@effect/*` package on the same version. APIs explicitly tagged `@stability unstable` can change in minor releases, including third-party Redis/client options.
 
 Reference this for:
 
 - FileSystem source: `packages/effect/src/FileSystem.ts`
 - Path source: `packages/effect/src/Path.ts`
 - Crypto source: `packages/effect/src/Crypto.ts`
-- Socket source: `packages/effect/src/unstable/socket/`
+- Socket source: `packages/effect/src/socket/`
 - Platform layers: `packages/platform/node/`, `packages/platform/bun/`, and `packages/platform/browser/`
 - Migration guide: `MIGRATION.md`
 - Effect source: `packages/effect/src/`
@@ -83,6 +83,7 @@ const program = Effect.gen(function* () {
 
 Easy to mock and stub services:
 
+<!-- typecheck -->
 ```typescript
 import { Effect, FileSystem, Layer } from 'effect';
 
@@ -90,7 +91,7 @@ declare const myProgram: Effect.Effect<void, never, FileSystem.FileSystem>;
 
 const TestFileSystem = Layer.succeed(
 	FileSystem.FileSystem,
-	FileSystem.make({
+	FileSystem.makeNoop({
 		readFile: () => Effect.succeed(new Uint8Array())
 	})
 );
@@ -102,11 +103,12 @@ const test = myProgram.pipe(Effect.provide(TestFileSystem));
 
 Integrates naturally with Effect's service system:
 
+<!-- typecheck -->
 ```typescript
-import { Effect, FileSystem, Layer, Path, Context } from 'effect';
+import { Effect, FileSystem, Layer, Path, PlatformError, Context } from 'effect';
 
 interface ConfigService {
-	readonly load: (name: string) => Effect.Effect<string>;
+	readonly load: (name: string) => Effect.Effect<string, PlatformError.PlatformError>;
 }
 
 const ConfigService = Context.Service<ConfigService>('ConfigService');
@@ -118,11 +120,10 @@ const ConfigServiceLive = Layer.effect(
 		const path = yield* Path.Path;
 
 		return {
-			load: (name: string) =>
-				Effect.gen(function* () {
-					const configPath = path.join('configs', name);
-					return yield* fs.readFileString(configPath);
-				})
+			load: Effect.fn('Config.load')(function* (name: string) {
+				const configPath = path.join('configs', name);
+				return yield* fs.readFileString(configPath);
+			})
 		};
 	})
 );
@@ -155,21 +156,22 @@ const content = await file.text();
 
 **Correct Pattern - FileSystem Service:**
 
+<!-- typecheck -->
 ```typescript
 import { Effect, FileSystem } from 'effect';
 
 // ✅ CORRECT - Cross-platform, type-safe, testable
-const readFile = (path: string) =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem.FileSystem;
-		return yield* fs.readFileString(path);
-	});
+const readFile = Effect.fn('File.read')(function* (path: string) {
+	const fs = yield* FileSystem.FileSystem;
+	return yield* fs.readFileString(path);
+});
 
 // Effect<string, PlatformError, FileSystem>
 ```
 
 **Common Operations:**
 
+<!-- typecheck -->
 ```typescript
 import { Effect, FileSystem } from 'effect';
 
@@ -210,6 +212,7 @@ const fileOperations = Effect.gen(function* () {
 
 **Streaming Files:**
 
+<!-- typecheck -->
 ```typescript
 import { Effect, FileSystem, Stream } from 'effect';
 
@@ -224,7 +227,7 @@ const processLargeFile = Effect.gen(function* () {
 
 	// Process stream
 	yield* stream.pipe(
-		Stream.mapEffect((chunk) => processChunk(chunk)),
+		Stream.tap(processChunk),
 		Stream.run(fs.sink('output.txt'))
 	);
 });
@@ -252,6 +255,7 @@ const joined = path.join('src', 'components', 'Button.tsx');
 
 **Correct Pattern - Path Service:**
 
+<!-- typecheck -->
 ```typescript
 import { Effect, Path } from 'effect';
 
@@ -281,6 +285,7 @@ const buildPath = (filename: string) =>
 
 **Path Operations:**
 
+<!-- typecheck -->
 ```typescript
 import { Effect, Path } from 'effect';
 
@@ -315,7 +320,7 @@ In Effect v4, `Migrator.fromFileSystem` requires both `FileSystem.FileSystem` an
 
 ### ChildProcess - Process Execution
 
-The `ChildProcess` and `ChildProcessSpawner` services enable safe process spawning.
+`ChildProcess` builds command values; the `ChildProcessSpawner` service executes them with scoped resource ownership. Output helpers do not reject nonzero exit codes: use a handle and check `exitCode` when status determines success. Drain combined output with `handle.all`, or consume stdout/stderr concurrently, before leaving the scope.
 
 **Anti-Pattern - Direct child_process:**
 
@@ -341,8 +346,9 @@ const output = await new Response(proc.stdout).text();
 
 **Correct Pattern - ChildProcess + ChildProcessSpawner:**
 
+<!-- typecheck -->
 ```typescript
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { Effect, Stream } from 'effect';
 
 // ✅ CORRECT - Cross-platform command execution
@@ -358,8 +364,9 @@ const runCommand = Effect.gen(function* () {
 
 **Advanced ChildProcess Usage:**
 
+<!-- typecheck -->
 ```typescript
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { Console, Effect, Stream } from 'effect';
 
 const commandExamples = Effect.gen(function* () {
@@ -398,7 +405,7 @@ const commandExamples = Effect.gen(function* () {
 	const exitCode = yield* handle.exitCode;
 
 	return exitCode;
-});
+}).pipe(Effect.scoped);
 ```
 
 ### Terminal - Terminal I/O
@@ -428,6 +435,7 @@ const input = prompt('Enter name:');
 
 **Correct Pattern - Terminal Service:**
 
+<!-- typecheck -->
 ```typescript
 import { Effect, Terminal } from 'effect';
 
@@ -451,6 +459,7 @@ const interactiveProgram = Effect.gen(function* () {
 
 **For Simple Logging - Use Console or Effect.log:**
 
+<!-- typecheck -->
 ```typescript
 import { Console, Effect } from 'effect';
 
@@ -480,6 +489,7 @@ const structuredLog = Effect.gen(function* () {
 
 The `Crypto.Crypto` service provides platform-backed cryptographic random bytes, UUIDv4/v7 generation, and message digests. Prefer it over `globalThis.crypto`, `crypto.randomUUID()`, or ad-hoc randomness when code should stay platform-abstract and testable.
 
+<!-- typecheck -->
 ```typescript
 import { Crypto, Effect } from 'effect';
 
@@ -522,8 +532,9 @@ const result = await axios.get('https://api.example.com/data');
 
 **Correct Pattern - HttpClient Service:**
 
+<!-- typecheck -->
 ```typescript
-import { HttpClient, HttpClientResponse } from 'effect/unstable/http';
+import { HttpClient, HttpClientResponse } from 'effect/http';
 import { Effect, Schema } from 'effect';
 
 // ✅ CORRECT - Integrated with Effect type system
@@ -545,12 +556,13 @@ Name the adapter service and its effects after the upstream operation. The adapt
 
 **Advanced HTTP Operations:**
 
+<!-- typecheck -->
 ```typescript
 import {
 	HttpClient,
 	HttpClientRequest,
 	HttpClientResponse
-} from 'effect/unstable/http';
+} from 'effect/http';
 import { Effect, Schema, Schedule } from 'effect';
 
 class User extends Schema.Class<User>('User')({
@@ -597,20 +609,9 @@ const httpExamples = Effect.gen(function* () {
 	// Error handling — all HttpClient errors are "HttpClientError" with a reason field
 	const safeRequest = client.get('https://api.example.com/data').pipe(
 		Effect.flatMap(HttpClientResponse.filterStatusOk),
-		Effect.catchTag('HttpClientError', (error) => {
-			switch (error.reason._tag) {
-				case 'TransportError':
-					return Effect.succeed({ error: 'Network error' });
-				case 'StatusCodeError':
-					return Effect.succeed({
-						error: `HTTP ${error.response?.status}`
-					});
-				default:
-					return Effect.succeed({
-						error: `Client error: ${error.reason._tag}`
-					});
-			}
-		})
+		Effect.tapError((error) => Effect.logWarning('Provider request failed').pipe(
+			Effect.annotateLogs({ reason: error.reason._tag })
+		))
 	);
 
 	// Retries with backoff: GET is idempotent and attempts are bounded.
@@ -618,7 +619,9 @@ const httpExamples = Effect.gen(function* () {
 		Effect.flatMap(HttpClientResponse.filterStatusOk),
 		Effect.retry({
 			times: 3,
-			schedule: Schedule.exponential('100 millis')
+			schedule: Schedule.exponential('100 millis'),
+			while: (error) => error.reason._tag === 'TransportError' ||
+				(error.reason._tag === 'StatusCodeError' && error.reason.response.status >= 500)
 		}),
 		Effect.tapError((error) =>
 			Effect.logError('Provider read exhausted retries').pipe(
@@ -665,8 +668,9 @@ const value2 = fs.readFileSync('.cache/key', 'utf-8');
 
 **Correct Pattern - KeyValueStore Service:**
 
+<!-- typecheck -->
 ```typescript
-import { KeyValueStore } from 'effect/unstable/persistence';
+import { KeyValueStore } from 'effect/persistence';
 import { Effect, Schema } from 'effect';
 
 // ✅ CORRECT - Works on all platforms
@@ -697,8 +701,9 @@ const cacheData = Effect.gen(function* () {
 
 **Schema-Based Store:**
 
+<!-- typecheck -->
 ```typescript
-import { KeyValueStore } from 'effect/unstable/persistence';
+import { KeyValueStore } from 'effect/persistence';
 import { Effect, Schema } from 'effect';
 
 class User extends Schema.Class<User>('User')({
@@ -727,12 +732,14 @@ const typedStore = Effect.gen(function* () {
 
 ### Redis - Commands and Scoped Subscriptions
 
-The portable `Redis.Redis` service in `effect/unstable/persistence` provides `send`, cached script evaluation, and scoped pub/sub. Platform-specific layers provide the client: `NodeRedis.layer(...)`, `DenoRedis.layer(...)`, or `BunRedis.layer(...)`. These are specialized layers and are not included in `NodeServices.layer` or `BunServices.layer`.
+The portable `Redis.Redis` service in `effect/persistence` provides `send`, cached script evaluation, and scoped pub/sub. Platform-specific layers provide the client: `NodeRedis.layer(...)`, `DenoRedis.layer(...)`, or `BunRedis.layer(...)`. These are specialized layers and are not included in `NodeServices.layer` or `BunServices.layer`.
+
+The platform Redis APIs expose third-party options and are marked `@stability unstable`; inspect the installed package's contracts before minor-version upgrades.
 
 ```typescript
 import { NodeRedis } from '@effect/platform-node';
 import { Effect, Queue } from 'effect';
-import { Redis } from 'effect/unstable/persistence';
+import { Redis } from 'effect/persistence';
 
 const RedisLayer = NodeRedis.layer({
 	database: 1,
@@ -748,9 +755,9 @@ const receiveOne = Effect.gen(function* () {
 
 `redis.subscribe(channel)` requires `Scope` and returns a `Queue.Dequeue<RedisMessage, RedisError>`. Closing the scope shuts down the queue and releases the dedicated subscriber. Node and Deno subscribers reconnect and re-subscribe after interruptions, which can leave message-delivery gaps; Bun subscriptions do not reconnect, so a dropped connection fails the dequeue and callers must subscribe again.
 
-### CLI Arguments - effect/unstable/cli
+### CLI Arguments - effect/cli
 
-For CLI applications, use `effect/unstable/cli` instead of direct `process.argv`.
+For CLI applications, use `effect/cli` instead of direct `process.argv`.
 
 **Anti-Pattern - Direct process.argv:**
 
@@ -770,10 +777,10 @@ declare const yargs: (args: string[]) => { argv: Record<string, unknown> };
 const argv = yargs(process.argv.slice(2)).argv;
 ```
 
-**Correct Pattern - effect/unstable/cli:**
+**Correct Pattern - effect/cli:**
 
 ```typescript
-import { Argument, Command as CliCommand, Flag } from 'effect/unstable/cli';
+import { Argument, Command as CliCommand, Flag } from 'effect/cli';
 import { NodeServices, NodeRuntime } from '@effect/platform-node';
 import { Console, Effect } from 'effect';
 
@@ -816,20 +823,20 @@ Complete reference table of platform abstractions:
 | ------------------------- | -------------------------------------- | ---------------------------- | ----------------------------- |
 | **File I/O**              | `FileSystem.FileSystem`                | `fs`, `Bun.file`             | `effect`                      |
 | **Path Operations**       | `Path.Path`                            | `path`, string concat        | `effect`                      |
-| **Process Spawning**      | `ChildProcess` + `ChildProcessSpawner` | `child_process`, `Bun.spawn` | `effect/unstable/process`     |
+| **Process Spawning**      | `ChildProcess` + `ChildProcessSpawner` | `child_process`, `Bun.spawn` | `effect/process`     |
 | **Terminal I/O**          | `Terminal.Terminal`                    | `process.stdin/stdout`       | `effect`                      |
 | **Console Logging**       | `Console.log` or `Effect.log`          | `console.log`                | `effect`                      |
 | **Crypto**                | `Crypto.Crypto`                        | `globalThis.crypto`, `crypto.randomUUID()` | `effect`          |
-| **HTTP Client**           | `HttpClient.HttpClient`                | `fetch`, `axios`             | `effect/unstable/http`        |
-| **HTTP Server**           | `HttpServer.HttpServer`                | `http.createServer`          | `effect/unstable/http`        |
-| **Sockets**               | `Socket.Socket` / `SocketServer.SocketServer` | raw TCP/WebSocket APIs | `effect/unstable/socket`      |
-| **Key-Value Store**       | `KeyValueStore.KeyValueStore`          | `localStorage`, manual files | `effect/unstable/persistence` |
-| **Redis**                 | `Redis.Redis`                          | direct Redis clients         | `effect/unstable/persistence` |
-| **CLI Arguments**         | `Argument` + `Flag` + `Command`        | `process.argv`, `yargs`      | `effect/unstable/cli`         |
+| **HTTP Client**           | `HttpClient.HttpClient`                | `fetch`, `axios`             | `effect/http`        |
+| **HTTP Server**           | `HttpServer.HttpServer`                | `http.createServer`          | `effect/http`        |
+| **Sockets**               | `Socket.Socket` / `SocketServer.SocketServer` | raw TCP/WebSocket APIs | `effect/socket`      |
+| **Key-Value Store**       | `KeyValueStore.KeyValueStore`          | `localStorage`, manual files | `effect/persistence` |
+| **Redis**                 | `Redis.Redis`                          | direct Redis clients         | `effect/persistence` |
+| **CLI Arguments**         | `Argument` + `Flag` + `Command`        | `process.argv`, `yargs`      | `effect/cli`         |
 | **Environment Variables** | `Config` from effect                   | `process.env`                | `effect`                      |
 | **Streams**               | `Stream`                               | Node streams, ReadableStream | `effect`                      |
 
-Socket services live in `effect/unstable/socket`. Use `Socket.Socket` for scoped bidirectional string/binary frame transports and `SocketServer.SocketServer` for accepting connections. Provide service-specific layers such as `BrowserSocket.layerWebSocket(url)`, `NodeSocket.layerWebSocket(url)`, `NodeSocket.layerNet(options)`, `BunSocket.layerWebSocket(url)`, or Node/Bun socket-server layers; `NodeServices.layer` and `BunServices.layer` do not provide sockets.
+Socket services live in `effect/socket`. Use `Socket.Socket` for scoped bidirectional string/binary frame transports and `SocketServer.SocketServer` for accepting connections. Provide service-specific layers such as `BrowserSocket.layerWebSocket(url)`, `NodeSocket.layerWebSocket(url)`, `NodeSocket.layerNet(options)`, `BunSocket.layerWebSocket(url)`, or Node/Bun socket-server layers; `NodeServices.layer` and `BunServices.layer` do not provide sockets.
 
 ## Setting Up Platform-Specific Layers
 
@@ -871,7 +878,7 @@ program.pipe(Effect.provide(BunServices.layer), BunRuntime.runMain);
 import { NodeServices, NodeRuntime } from '@effect/platform-node';
 import { BunServices, BunRuntime } from '@effect/platform-bun';
 import { Console, Effect, FileSystem, Path, Schema } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 class FileProcessorConfig extends Schema.Class<FileProcessorConfig>(
 	'FileProcessorConfig'
@@ -879,6 +886,11 @@ class FileProcessorConfig extends Schema.Class<FileProcessorConfig>(
 	inputDir: Schema.String,
 	outputDir: Schema.String,
 	compress: Schema.Boolean
+}) {}
+
+class CompressionFailed extends Schema.TaggedError<CompressionFailed>()('CompressionFailed', {
+	file: Schema.String,
+	exitCode: Schema.Number
 }) {}
 
 const processFiles = Effect.gen(function* () {
@@ -913,9 +925,14 @@ const processFiles = Effect.gen(function* () {
 
 				// Optionally compress
 				if (config.compress) {
-					yield* spawner.string(
-						ChildProcess.make('gzip', [outputPath])
+					const exitCode = yield* spawner.exitCode(
+						ChildProcess.make('gzip', [outputPath], {
+							stdin: 'ignore', stdout: 'ignore', stderr: 'inherit'
+						})
 					);
+					if (exitCode !== 0) {
+						return yield* Effect.fail(new CompressionFailed({ file, exitCode }));
+					}
 				}
 
 				yield* Console.log(`Processed: ${file}`);
@@ -937,8 +954,9 @@ processFiles.pipe(Effect.provide(BunServices.layer), BunRuntime.runMain);
 
 One major benefit of platform abstractions is testability:
 
+<!-- typecheck -->
 ```typescript
-import { Effect, FileSystem, Layer } from 'effect';
+import { Effect, FileSystem, Layer, PlatformError } from 'effect';
 
 declare const myFileProcessor: Effect.Effect<
 	void,
@@ -950,14 +968,16 @@ declare const myFileProcessor: Effect.Effect<
 const TestFileSystem = Layer.succeed(
 	FileSystem.FileSystem,
 	FileSystem.makeNoop({
-		readFile: (path) => {
+		readFileString: (path) => {
 			if (path === 'config.json') {
-				const data = JSON.stringify({ key: 'value' });
-				return Effect.succeed(new TextEncoder().encode(data));
+				return Effect.succeed('{"key":"value"}');
 			}
-			return Effect.fail(new Error('File not found'));
+			return Effect.fail(PlatformError.systemError({
+				_tag: 'NotFound', module: 'FileSystem', method: 'readFileString',
+				pathOrDescriptor: path
+			}));
 		},
-		exists: (path) => Effect.succeed(true)
+		exists: (path) => Effect.succeed(path === 'config.json')
 	})
 );
 
@@ -967,6 +987,8 @@ const testProgram = myFileProcessor.pipe(Effect.provide(TestFileSystem));
 Effect.runPromise(testProgram);
 ```
 
+`makeNoop` does not derive `readFileString` from an overridden `readFile`; override the methods your program calls. Most missing operations fail with NotFound, `exists` defaults to false, `remove` succeeds, and directory/temp creation defects unless overridden. `make` is for implementing the full set of core operations and deriving conveniences, not for partial test doubles.
+
 ## Quality Checklist
 
 Before completing code that uses platform operations:
@@ -975,7 +997,7 @@ Before completing code that uses platform operations:
 - [ ] All path operations use `Path.Path` service
 - [ ] Process spawning uses `ChildProcess` + `ChildProcessSpawner`
 - [ ] Console output uses `Console.log` or `Effect.log` (not `console.log`)
-- [ ] CLI arguments parsed with `effect/unstable/cli` (not `process.argv`)
+- [ ] CLI arguments parsed with `effect/cli` (not `process.argv`)
 - [ ] HTTP requests use `HttpClient.HttpClient` (not `fetch`/`axios`)
 - [ ] Any raw `fetch` is isolated in a named low-level platform adapter with documented justification
 - [ ] HTTP status is classified before success-body schema decoding
@@ -1026,7 +1048,7 @@ const program = Effect.gen(function* () {
 	return yield* fs.readFileString('file.txt');
 });
 
-Effect.runPromise(program); // Runtime error!
+Effect.runPromise(program); // Type error: FileSystem requirement is unsatisfied
 
 // ✅ CORRECT - Provide platform layer
 program.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);
@@ -1093,7 +1115,7 @@ import {
 	HttpClient,
 	HttpClientRequest,
 	HttpClientResponse
-} from 'effect/unstable/http';
+} from 'effect/http';
 
 // Before (fetch)
 declare const fetch: (
@@ -1140,7 +1162,7 @@ This POST is intentionally not retried. Add retry only if the provider offers a 
 
 ```typescript
 import { Effect } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 

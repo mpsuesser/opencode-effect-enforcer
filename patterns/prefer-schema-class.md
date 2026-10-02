@@ -16,7 +16,7 @@ suggestSkills:
 
 ```haskell
 -- Transformation
-Schema.Struct :: { fields } -> Schema { fields }     -- anonymous, no constructor
+Schema.Struct :: { fields } -> Schema { fields }     -- structural value with make helpers
 Schema.Class  :: String -> { fields } -> Class        -- named, constructable, extensible
 
 -- Pattern
@@ -25,7 +25,7 @@ bad = Schema.Struct({
   id: Schema.String,
   name: Schema.String
 })
--- anonymous type, no constructor, no instanceof
+-- structural type, make helpers, no class identity / instanceof
 
 good :: Schema
 good = class User extends Schema.Class<User>("User")({
@@ -49,6 +49,6 @@ extend = class Admin extends User.extend<Admin>("Admin")({
 }) {}
 ```
 
-`Schema.Struct` produces an anonymous schema without a constructor or `instanceof` support. `Schema.Class` provides a named type, constructor, extensibility, and optional annotation support when docs or introspection benefit from it. Prefer `Schema.Class` for decoded domain/API shapes, union members, and values that need identity. `Schema.Struct` remains appropriate for local structural composition, configuration internals, and schemas where class identity adds no value, so review this informational finding in context.
+Every schema, including `Schema.Struct`, has `make`, `makeOption`, and `makeEffect` construction helpers. `Schema.Class` additionally provides a named class, `new` / `instanceof` identity, and class extension. Prefer it for decoded domain/API shapes, union members, and values that need identity. `Schema.Struct` remains appropriate for local structural composition, configuration internals, and schemas where class identity adds no value, so review this informational finding in context.
 
 References: EF-3 in effect-first-development.md

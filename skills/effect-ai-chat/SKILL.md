@@ -8,14 +8,17 @@ You are an Effect TypeScript expert specializing in the `Chat` module for statef
 ## Effect Source Reference
 
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
-Browse and read files there directly to look up APIs, types, and implementations.
+Use `git show effect@4.0.0:<path>` in that checkout for this skill's baseline;
+main may be ahead. Keep `effect` and `@effect/*` packages on the same version.
+The `effect/ai` APIs are tagged `@stability unstable`: minor releases may break
+them even though the import path no longer contains `unstable`.
 
 Reference this for:
 
-- Chat module source: `packages/effect/src/unstable/ai/Chat.ts`
+- Chat module source: `packages/effect/src/ai/Chat.ts`
 - Chat usage examples: `ai-docs/src/71_ai/30_chat.ts`
 - Tool integration examples: `ai-docs/src/71_ai/20_tools.ts`
-- Prompt construction: `packages/effect/src/unstable/ai/Prompt.ts`
+- Prompt construction: `packages/effect/src/ai/Prompt.ts`
 
 ## Core Imports
 
@@ -28,7 +31,7 @@ import {
 	Tool,
 	Toolkit,
 	AiError
-} from 'effect/unstable/ai';
+} from 'effect/ai';
 ```
 
 ## What Chat Provides
@@ -122,7 +125,10 @@ yield* session.generateText({ prompt: [] });
 
 ## Streaming Text
 
-`streamText` returns a `Stream` of `Response.StreamPart` values. History is updated when the stream finalizes. Consume the stream to completion if the full assistant response should become history; if the stream is interrupted early, only the parts emitted before finalization are recorded.
+`streamText` returns a `Stream` of `Response.StreamPart` values. History is updated
+when the stream finalizes by folding the parts received so far. Consume to
+completion to preserve the full response: interrupted text/reasoning sequences
+without an end marker are not folded into history.
 
 ```ts
 yield*
@@ -215,7 +221,7 @@ const restored = yield* Chat.fromExport(data);
 For automatic persistence (save after every generation), use `Chat.Persistence`:
 
 ```ts
-import { Persistence } from 'effect/unstable/persistence';
+import { Persistence } from 'effect/persistence';
 
 // Create a persistence layer and provide a BackingPersistence implementation
 const PersistenceLayer = Chat.layerPersisted({ storeId: 'my-chats' }).pipe(
@@ -459,7 +465,7 @@ Each `Chat` instance uses an internal semaphore with 1 permit, ensuring that onl
 
 1. **Always provide `LanguageModel.LanguageModel`** — `generateText`, `streamText`, and `generateObject` all require it in context. Provide via `Effect.provide(modelLayer)`.
 2. **Use `prompt: []` in agentic loops** — After the initial prompt, pass an empty prompt to let the model respond based on accumulated history including tool results.
-3. **Import from `effect/unstable/ai`** — Chat, Prompt, Tool, Toolkit, LanguageModel, and AiError all come from this path.
+3. **Import from `effect/ai`** — Chat, Prompt, Tool, Toolkit, LanguageModel, and AiError all come from this path.
 4. **One session = one conversation** — Create separate `Chat` instances for independent conversations. Don't share a session across unrelated threads.
 5. **Export before shutdown** — Use `exportJson` to persist state. Restore with `Chat.fromJson`.
 6. **Provide toolkit handlers** — When using tools, the toolkit's handler layer must be provided (e.g., `Layer.provide(ToolsLayer)`).

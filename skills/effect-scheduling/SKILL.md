@@ -7,7 +7,11 @@ You are an Effect TypeScript expert specializing in `Schedule`, retry, repeat, p
 
 ## Source Of Truth
 
-Verify APIs against `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/packages/effect/src/Schedule.ts` and `Effect.ts`. In Effect v4, `Schedule.concat` is current, `Schedule.tapInput` is absent, and `Schedule.tap` receives full metadata.
+Verify APIs against `packages/effect/src/Schedule.ts` and `Effect.ts` at the
+installed release tag in `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
+The `effect@4.0.0` tag has no `cookbooks/schedule.md`; its runnable schedule guide
+is `ai-docs/src/06_schedule/10_schedules.ts`. In Effect v4, `Schedule.concat` is
+current, `Schedule.tapInput` is absent, and `Schedule.tap` receives full metadata.
 
 ## Semantics
 
@@ -22,12 +26,14 @@ incorrect delay, retryAfter, and resetAfter values.
 - `Effect.repeat` reruns successes. A typed failure stops repetition unless the pass handles it first.
 - The source effect runs once before the schedule is stepped.
 - `Schedule.recurs(3)` permits three recurrences after the initial evaluation: at most four evaluations total.
+- `Schedule.once` permits one immediate recurrence and outputs `void` on both recurrence and completion. `Effect.repeat(task, Schedule.once)` evaluates `task` twice, not once.
 - Schedules can require services and fail; schedule errors join the resulting effect's error channel.
 - Retry only the narrowest idempotent operation. Never retry non-idempotent writes unless an idempotency key, transaction, or equivalent guarantee makes replay safe.
 
 ## Policy Chooser
 
 - Counter only: `Schedule.recurs(n)`.
+- One immediate recurrence, no counter output: `Schedule.once` (a value, not a function).
 - Delay after each completed run: `Schedule.spaced(duration)`.
 - Cadence aligned to time boundaries: `Schedule.fixed(interval)`; slow work may make the next run immediate, and missed ticks are not replayed.
 - Backoff: `Schedule.exponential(base)` or `Schedule.fibonacci(base)`.
@@ -74,6 +80,28 @@ const numericDates = mixed.pipe(
 ```
 
 ## Polling And Item Failure Policy
+
+### Bounded repetition and refinement
+
+With predicate-only `Effect.repeat`, an `until` refinement narrows the final
+result to the matched type; a `while` refinement excludes the continuing type.
+Adding `times` or `schedule` preserves the **full source result type** because
+the bound can stop repetition before the predicate does. This also applies when
+`times` is optional in the options type. Check the returned value before using
+fields that only exist on the desired terminal variant.
+
+<!-- typecheck -->
+```ts
+import { Effect, Schedule } from 'effect';
+import * as Option from 'effect/Option';
+
+declare const poll: Effect.Effect<Option.Option<string>>;
+
+const bounded: Effect.Effect<Option.Option<string>> = poll.pipe(
+	Effect.repeat({ until: Option.isSome, times: 3 })
+);
+const twice = Effect.repeat(Effect.succeed('tick'), Schedule.once);
+```
 
 Use `Effect.repeat(pass, Schedule.spaced(...))` for a worker that emits no meaningful values. Use `Stream.fromEffectSchedule` when each result is part of a stream pipeline.
 

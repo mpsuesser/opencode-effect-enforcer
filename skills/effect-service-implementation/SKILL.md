@@ -291,7 +291,7 @@ Promote it into its own service when any of these are true:
 
 ```typescript
 // git.ts
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { Context, Effect, Layer } from 'effect';
 
 export interface Interface {

@@ -33,28 +33,30 @@ good url = pipe(
 
 ```haskell
 -- Composable request building
-request :: Effect HttpClientRequest HttpBodyError
+request :: HttpClientRequest
 request = pipe(
-  HttpClientRequest.post("/api/users"),
-  HttpClientRequest.bodyJson({ name: "Alice" })
+  HttpClientRequest.get("https://api.example.com/users"),
+  HttpClientRequest.setHeader("accept", "application/json")
 )
 
 -- With retry, timeout, tracing
 resilient :: Effect Response HttpError (HttpClient | Scope)
 resilient = pipe(
-  request,
-  Effect.flatMap(HttpClient.execute),
+  HttpClient.execute(request),
   Effect.retry(Schedule.recurs(3)),
   Effect.timeout(Duration.seconds(10))
 )
 
 -- Platform layer at entry point
 main = program.pipe(
-  Effect.provide(BunHttpClient.layer)    -- or NodeHttpClient.layer
+  Effect.provide(BunHttpClient.layer)    -- or NodeHttpClient.layerUndici
 )
 ```
 
 Native `fetch` produces untyped Promise rejections. Use `HttpClientRequest`, `HttpClientResponse`, and `HttpClient` from Effect for typed errors, composable request building, and testability via layer substitution.
+
+Import the HTTP modules from `effect/http`. Retry only proven-idempotent requests;
+do not copy a retry policy onto ordinary non-idempotent POST/PATCH operations.
 
 Exception: an explicit low-level platform implementation that cannot use Effect HTTP. Keep it isolated, lift it with `Effect.tryPromise`, propagate the supplied `AbortSignal`, classify status before decoding, and decode unknown bodies with `Schema`.
 

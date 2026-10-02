@@ -73,12 +73,12 @@ good = do
 | `node:fs/promises`   | `FileSystem.FileSystem`                                               |
 | `node:path`          | `Path.Path`                                                           |
 | `node:os`            | `FileSystem.makeTempFileScoped` / `Path.Path` / platform layer        |
-| `node:child_process` | `ChildProcessSpawner` + `ChildProcess` from `effect/unstable/process` |
+| `node:child_process` | `ChildProcessSpawner` + `ChildProcess` from `effect/process` |
 | `node:http`          | `HttpClient.HttpClient`                                               |
 | `node:https`         | `HttpClient.HttpClient`                                               |
 | `node:stream`        | `Stream` from effect                                                  |
 | `node:readline`      | `Terminal.Terminal`                                                   |
-| `node:crypto`        | `Crypto` from `effect/unstable/crypto` or a wrapped Effect service    |
+| `node:crypto`        | `Crypto.Crypto` from `effect/Crypto` or a wrapped Effect service |
 
 **Exceptions:**
 

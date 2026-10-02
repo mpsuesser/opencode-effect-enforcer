@@ -7,16 +7,20 @@ description: Master the Effect AI LanguageModel service for text generation, str
 
 Pattern guide for working with the LanguageModel service from Effect AI for type-safe LLM interactions with Effect's functional patterns.
 
+Baseline: `effect@4.0.0`. Inspect that tag in the Effect source reference, not
+unreleased main. Keep Effect-family packages on the same version. `effect/ai`
+APIs carry `@stability unstable` and may change incompatibly in minor releases.
+
 ## Import Patterns
 
 **CRITICAL**: Always use namespace imports:
 
 ```typescript
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
-import * as Prompt from 'effect/unstable/ai/Prompt';
-import * as Response from 'effect/unstable/ai/Response';
-import * as Toolkit from 'effect/unstable/ai/Toolkit';
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as LanguageModel from 'effect/ai/LanguageModel';
+import * as Prompt from 'effect/ai/Prompt';
+import * as Response from 'effect/ai/Response';
+import * as Toolkit from 'effect/ai/Toolkit';
+import * as Tool from 'effect/ai/Tool';
 import * as Effect from 'effect/Effect';
 import * as Stream from 'effect/Stream';
 import * as Schema from 'effect/Schema';
@@ -56,7 +60,7 @@ LanguageModel ∈ R → Effect.gen(function*() {
 Basic text generation with optional tool calling:
 
 ```typescript
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
+import * as LanguageModel from 'effect/ai/LanguageModel';
 import * as Effect from 'effect/Effect';
 
 // Simple text generation
@@ -104,6 +108,12 @@ For `Schema.NumberFromString`, manual calls contain `{ count: '3' }`.
 
 Pass those encoded params directly to `toolkit.handle(name, params, toolCallId)` when resolving manually. `Toolkit.handle` now accepts `Tool.ParametersEncoded<T>` and performs the decode before the handler receives `Tool.Parameters<T>`.
 
+Provide `Tool.HandlerServices<T>` to both the outer `handle` Effect and the
+returned Stream; parameter decoding can need services before streaming starts.
+The outer Effect can fail with `AiError`, and the Stream can fail with
+`Tool.HandlerError<T> | AiError`, including in `failureMode: 'return'` when
+result encoding fails.
+
 ### Response Accessors
 
 ```typescript
@@ -129,7 +139,7 @@ When converting `response.content` back into history, `Prompt.fromResponseParts`
 Force schema-validated output from the model:
 
 ```typescript
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
+import * as LanguageModel from 'effect/ai/LanguageModel';
 import * as Schema from 'effect/Schema';
 import * as Effect from 'effect/Effect';
 
@@ -178,8 +188,9 @@ const extractEvent = LanguageModel.generateObject({
 
 Real-time streaming text generation:
 
+<!-- typecheck -->
 ```typescript
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
+import * as LanguageModel from 'effect/ai/LanguageModel';
 import * as Stream from 'effect/Stream';
 import * as Effect from 'effect/Effect';
 import * as Console from 'effect/Console';
@@ -196,7 +207,7 @@ const program = streamStory.pipe(
 			return Console.log(part.delta);
 		}
 		if (part.type === 'tool-params-delta') {
-			return Console.log('Tool params:', part.paramsDelta);
+			return Console.log('Tool params:', part.delta);
 		}
 		return Effect.void;
 	})
@@ -214,7 +225,7 @@ Common StreamPart shapes include (non-exhaustive):
   | { type: "reasoning-delta", id, delta }
   | { type: "reasoning-end", id }
   | { type: "tool-params-start", id, name }
-  | { type: "tool-params-delta", id, paramsDelta }
+  | { type: "tool-params-delta", id, delta }
   | { type: "tool-params-end", id }
   | { type: "tool-call", id, name, params }
   | { type: "tool-result", id, name, result, isFailure, preliminary? }
@@ -289,7 +300,7 @@ toolChoice: {
 ## Error Handling
 
 ```typescript
-import * as AiError from 'effect/unstable/ai/AiError';
+import * as AiError from 'effect/ai/AiError';
 
 const robust = LanguageModel.generateText({
 	prompt: 'Analyze this...'
@@ -311,10 +322,22 @@ remain explicit and provider/validation failures use `AiError`. Classification
 requires at least two labels, rating requires at least two distinct ordered
 levels, and a definition requires at least one decision.
 
+`Decision.probability({ instructions })` estimates the probability of `true`.
+Its `criteria` is optional; when supplied it must describe both `false` and
+`true`. Guard `decision.criteria` before reading outcome descriptions.
+
+Custom adapters can set `DecisionModel.make({ decide, probabilityPrecision })`
+to accept rounding drift in classification/rating distributions. At precision
+`p`, the allowed sum drift is half a unit of the last decimal place per label
+(plus the core numerical tolerance); accepted drift is rescaled to sum to one.
+Zero sums, invalid probabilities, and larger drift still fail with
+`InvalidOutputError`. Omit the option for strict sum validation. OpenRouter and
+TypeSafe adapters use precision `2`.
+
 <!-- typecheck -->
 ```ts
 import * as Schema from 'effect/Schema';
-import { Decision, DecisionModel } from 'effect/unstable/ai';
+import { Decision, DecisionModel } from 'effect/ai';
 
 class Ticket extends Schema.Class<Ticket>('Ticket')({ body: Schema.String }) {}
 const triage = Decision.make({
@@ -323,7 +346,8 @@ const triage = Decision.make({
 		team: Decision.classify({
 			instructions: 'Choose the team responsible for this request',
 			criteria: { billing: 'Payments and invoices', support: 'Product support' }
-		})
+		}),
+		urgent: Decision.probability({ instructions: 'The ticket needs immediate attention' })
 	}
 });
 const result = DecisionModel.decide(triage, { input: new Ticket({ body: 'Invoice question' }) });
@@ -332,7 +356,7 @@ const result = DecisionModel.decide(triage, { input: new Ticket({ body: 'Invoice
 ## Type Extraction Utilities
 
 ```typescript
-import type * as LanguageModel from 'effect/unstable/ai/LanguageModel';
+import type * as LanguageModel from 'effect/ai/LanguageModel';
 
 // Extract error types from options
 type MyError = LanguageModel.ExtractError<typeof options>;
@@ -360,9 +384,14 @@ make :: ConstructorParams → Effect Service
 
 When implementing a custom LanguageModel provider, return encoded parts: `Array<Response.PartEncoded>` for `generateText` and `Stream<Response.StreamPartEncoded>` for `streamText`. If you emit `response-metadata`, encode timestamps as ISO strings. Providers that support provider-side conversations should honor `ProviderOptions.previousResponseId` and `ProviderOptions.incrementalPrompt`; providers that cannot should intentionally ignore them.
 
+`ProviderOptions.incrementalFallback` is `true` when the core retries a rejected
+incremental request with the full prompt. The fallback clears
+`previousResponseId` and `incrementalPrompt`; use that signal to reset adapter
+turn state without unnecessarily closing a healthy connection.
+
 ```typescript
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
-import * as Response from 'effect/unstable/ai/Response';
+import * as LanguageModel from 'effect/ai/LanguageModel';
+import * as Response from 'effect/ai/Response';
 
 const makeCustomProvider = Effect.gen(function* () {
 	const service = yield* LanguageModel.make({
@@ -655,7 +684,7 @@ const generated = LanguageModel.generateText({ prompt: '...' }).pipe(
 Inside an effect that runs with a language model provider, you can retrieve the current provider name:
 
 ```typescript
-import * as Model from 'effect/unstable/ai/Model';
+import * as Model from 'effect/ai/Model';
 
 const program = Effect.gen(function* () {
 	const providerName = yield* Model.ProviderName;
@@ -672,7 +701,7 @@ const program = Effect.gen(function* () {
 
 ## References
 
-- Source: `packages/effect/src/unstable/ai/LanguageModel.ts`
-- Chat integration: `packages/effect/src/unstable/ai/Chat.ts`
-- Response types: `effect/unstable/ai/Response`
-- Tool system: `effect/unstable/ai/Tool`, `effect/unstable/ai/Toolkit`
+- Source: `packages/effect/src/ai/LanguageModel.ts`
+- Chat integration: `packages/effect/src/ai/Chat.ts`
+- Response types: `effect/ai/Response`
+- Tool system: `effect/ai/Tool`, `effect/ai/Toolkit`

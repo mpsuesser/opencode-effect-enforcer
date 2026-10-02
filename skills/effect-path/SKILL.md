@@ -7,6 +7,8 @@ description: Use effect Path for platform-abstract file path operations includin
 
 Use effect Path abstraction for platform-abstract file path operations. Apply this skill when working with file paths, joining segments, resolving absolute paths, or converting between file URLs and paths. `Path.layer` supplies POSIX semantics from `effect`; Node.js and Bun platform layers provide host-specific path semantics. `@effect/platform-browser` does not provide a `BrowserPath` layer, so browser code should provide `Path.layer` or a custom layer explicitly.
 
+Targets **Effect 4.0.0** (`effect@4.0.0` source tag). In browsers without `process.cwd()`, supply an absolute POSIX base to `resolve`/`toFileUrl` when using `Path.layer`; it does not invent a browser working directory.
+
 ## Import Pattern
 
 ```typescript
@@ -195,6 +197,7 @@ Both operations can fail with `BadArgument` error.
 
 ### fromFileUrl - Convert file URL to path
 
+<!-- typecheck -->
 ```typescript
 import { Path } from 'effect';
 import { Effect } from 'effect';
@@ -205,12 +208,13 @@ const program = Effect.gen(function* () {
 		new URL('file:///home/user/file.txt')
 	);
 	// "/home/user/file.txt" on Unix
-	// "C:\home\user\file.txt" on Windows
+	// On Windows, use a drive-qualified URL such as file:///C:/home/user/file.txt.
 });
 ```
 
 ### toFileUrl - Convert path to file URL
 
+<!-- typecheck -->
 ```typescript
 import { Path } from 'effect';
 import { Effect } from 'effect';
@@ -224,6 +228,7 @@ const program = Effect.gen(function* () {
 
 ## Complete Example
 
+<!-- typecheck -->
 ```typescript
 import { Path } from 'effect';
 import { Effect } from 'effect';
@@ -253,9 +258,10 @@ const buildOutputPath = Effect.gen(function* () {
 
 In Effect v4, `Migrator.fromFileSystem(directory)` requires both `FileSystem.FileSystem` and `Path.Path`. Migration modules are imported through `path.toFileUrl(path.join(directory, file))` so absolute Windows paths are valid ESM specifiers.
 
+<!-- typecheck -->
 ```typescript
 import { FileSystem, Path } from 'effect';
-import * as Migrator from 'effect/unstable/sql/Migrator';
+import * as Migrator from 'effect/sql/Migrator';
 
 const loader: Migrator.Loader<FileSystem.FileSystem | Path.Path> =
 	Migrator.fromFileSystem('./migrations');

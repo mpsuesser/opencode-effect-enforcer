@@ -8,13 +8,15 @@ You are an Effect TypeScript expert specializing in building MCP (Model Context 
 ## Effect Source Reference
 
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
-Browse and read files there directly to look up APIs, types, and implementations.
+Inspect `git show effect@4.0.0:<path>` in that checkout for this baseline; main
+may be ahead. Keep Effect-family package versions aligned. The MCP/AI APIs remain
+`@stability unstable` and can change incompatibly in minor releases.
 
 Reference these files:
 
 - `packages/effect/MCP.md` — primary MCP guide with full examples
-- `packages/effect/src/unstable/ai/McpServer.ts` — server implementation and API
-- `packages/effect/src/unstable/ai/McpSchema.ts` — schema types, param helper, error classes
+- `packages/effect/src/ai/McpServer.ts` — server implementation and API
+- `packages/effect/src/ai/McpSchema.ts` — schema types, param helper, error classes
 
 ## What is MCP
 
@@ -25,7 +27,7 @@ Model Context Protocol (MCP) is a standard protocol for LLM tool integration. It
 ```typescript
 import { Cause, Context, Effect, Layer, Logger } from 'effect';
 import { Schema } from 'effect';
-import { McpProtocol, McpServer, McpSchema, Tool, Toolkit } from 'effect/unstable/ai';
+import { McpProtocol, McpServer, McpSchema, Tool, Toolkit } from 'effect/ai';
 ```
 
 For platform-specific transports:
@@ -72,7 +74,8 @@ const protocols = [
 - `2024-11-05` and `2025-03-26` are compatibility revisions.
 - `2025-06-18` supports form elicitation.
 - `2025-11-25` adds sampling with tools, independently advertised form/URL elicitation modes, descriptor icons, and elicitation-complete notifications.
-- `2026-07-28` is available as `McpProtocol.v2026_07_28`.
+- `2026-07-28` is available as `McpProtocol.v2026_07_28`; it uses stateless
+  request-scoped execution rather than the older initialized-session lifecycle.
 - Duplicate versions or an empty protocol declaration fail layer construction with `Cause.IllegalArgumentError`.
 - `v2024_11_05` over `layerHttp` uses Effect's single-endpoint Streamable HTTP compatibility transport. It does not recreate the historical two-endpoint HTTP+SSE transport, GET SSE, event resumption, session expiry, or client session termination.
 
@@ -84,34 +87,60 @@ Server options accept `instructions` for initialization/discovery. Prompt
 registration accepts `title`; callbacks receive decoded prompt parameters.
 
 `Tool.Strict` controls MCP input schema generation and argument validation.
-Strict dynamic tools require Effect schemas; raw JSON Schema is rejected at
-registration. Non-strict tools may use identified input schemas. Invalid arguments
-produce `InvalidParams` before protocol 2025-11-25 and `isError: true` on newer
-protocols. Declared handler failures return `isError: true` without
-`structuredContent`; only JSON objects are valid structured content.
-Declared failures are distinct from internal diagnostics. Defects and encoding
-failures are logged/reported while client-facing messages stay generic.
+Strict tools reject unknown keys; non-strict tools ignore them during decoding.
+Both report all missing/invalid fields together (`errors: 'all'`), including
+unknown keys for strict tools. Strict dynamic tools require Effect schemas;
+raw JSON Schema cannot supply runtime strict validation and is rejected at registration.
+
+Parameters must encode to a JSON Schema with `type: 'object'` at the root. Use
+`Schema.Class` or `Schema.Struct`, or omit parameters/use `Tool.EmptyParams` for
+parameterless tools. Identified object schemas are supported: the adapter inlines
+top-level references for input/output schemas and form elicitation, retaining
+referenced definitions. It does not turn primitive result types into objects.
+
+Tool failure projection depends on the negotiated protocol:
+
+| Failure | 2024-11-05 through 2025-06-18 | 2025-11-25 and 2026-07-28 |
+| --- | --- | --- |
+| Invalid arguments | `-32602 Invalid params` | `isError: true` tool result |
+| Internal handler/encoding failure | `-32603 Internal error` | `isError: true` tool result |
+| Declared tool failure | `isError: true` tool result | `isError: true` tool result |
+
+Declared failures omit `structuredContent`; an error with an empty `message`
+uses its encoded failure value rather than returning empty text. Internal defects
+and encoding failures are reported internally with generic client-facing messages.
+
+Success projection is also version-specific. The 2024-11-05/2025-03-26 adapters
+omit structured output. The 2025-06-18/2025-11-25 adapters expose object-root
+output schemas and object-valued `structuredContent`, omitting primitive/array
+structured values. The 2026-07-28 adapter supports JSON-valued structured output.
+When a protocol omits string structured content, a single text block that exactly
+mirrors its JSON encoding is unquoted to plain text; other text blocks are preserved.
 
 ### Defining Tools
 
 Tools are defined with `Tool.make` specifying a name, description, parameter schemas, and success schema:
 
+<!-- typecheck -->
 ```typescript
+import * as Schema from 'effect/Schema';
+import { Tool } from 'effect/ai';
+
 const GreetTool = Tool.make('GreetTool', {
 	description: 'Generate a greeting message',
-	parameters: {
+	parameters: Schema.Struct({
 		name: Schema.String,
 		style: Schema.Union([
 			Schema.Literal('formal'),
 			Schema.Literal('casual')
 		])
-	},
+	}),
 	success: Schema.String
 });
 
 const CalculatorTool = Tool.make('CalculatorTool', {
 	description: 'Perform basic arithmetic',
-	parameters: {
+	parameters: Schema.Struct({
 		operation: Schema.Union([
 			Schema.Literal('add'),
 			Schema.Literal('subtract'),
@@ -120,16 +149,16 @@ const CalculatorTool = Tool.make('CalculatorTool', {
 		]),
 		a: Schema.Number,
 		b: Schema.Number
-	},
+	}),
 	success: Schema.Number
 });
 
 const NotifyTool = Tool.make('NotifyTool', {
 	description: 'Send an optional notification',
-	parameters: {
+	parameters: Schema.Struct({
 		message: Schema.String,
 		channel: Schema.optionalKey(Schema.String)
-	},
+	}),
 	success: Schema.Void
 });
 ```
@@ -184,6 +213,8 @@ Effect tool annotations are emitted as MCP tool hints:
 - `Tool.Destructive` → `destructiveHint`, default `true`
 - `Tool.Idempotent` → `idempotentHint`, default `false`
 - `Tool.OpenWorld` → `openWorldHint`, default `true`
+- `Tool.Title` → annotation title; 2025-06-18 and 2025-11-25 preserve it in
+  `tools/list` alongside the descriptor's top-level title and behavioral hints
 
 These hints help clients decide how to present tools, but they are not authorization decisions. Always enforce access control in your server handlers.
 
@@ -282,6 +313,8 @@ const result = McpServer.elicit({
 - Returns `Effect<S["Type"], ElicitationDeclined, McpServerClient>`
 - Handle `ElicitationDeclined` with `catchTag` for fallback behavior
 - If the user cancels, the effect is interrupted
+- Identified object schemas (including named `Schema.Class` values) are accepted;
+  the requested form still has to fit the negotiated revision's supported field shapes.
 - The negotiated client must advertise form elicitation. In `2025-11-25`, an empty `elicitation` capability is treated as form support; explicit `elicitation.form` and `elicitation.url` capabilities are otherwise gated independently.
 
 URL elicitation is a `2025-11-25` reverse-client operation. Use the scoped client facade, then notify that specific client when the external flow completes:
@@ -380,6 +413,9 @@ For stdio transport, route logs to stderr with `Logger.LogToStderr`. Stdout is
 reserved for protocol messages. `Logger.consolePretty` controls formatting;
 the context reference controls its destination.
 
+With a stateful protocol configured, pre-initialization stdio `ping` returns an
+empty result without creating a session, even when a stateless adapter is listed first.
+
 ### HTTP Transport
 
 For web-based MCP servers using Streamable HTTP:
@@ -396,7 +432,9 @@ McpServer.layerHttp({
 - Requires `HttpRouter.HttpRouter` in the context
 - Implements single-endpoint Streamable HTTP with JSON-RPC
 - The `path` parameter sets the HTTP endpoint path
-- Non-`initialize` HTTP requests with no session id return `400`; an unknown `Mcp-Session-Id` returns `404`. Clients must keep and resend the session id from initialization.
+- For stateful revisions, non-`initialize` HTTP requests with no session id return
+  `400`; an unknown `Mcp-Session-Id` returns `404`. Keep and resend the session id
+  from initialization. The 2026-07-28 stateless adapter uses request metadata instead.
 
 ### Type signatures
 
@@ -442,7 +480,7 @@ Use `McpSchema.EnabledWhen` to conditionally list prompts, resources, resource t
 ```typescript
 import { Context, Effect, Layer } from 'effect';
 import { Schema } from 'effect';
-import { McpSchema, McpServer, Tool } from 'effect/unstable/ai';
+import { McpSchema, McpServer, Tool } from 'effect/ai';
 
 const requiresRoots = Context.make(
 	McpSchema.EnabledWhen,
@@ -481,12 +519,12 @@ const WorkspaceResource = Layer.effectDiscard(
 import { NodeRuntime, NodeStdio } from '@effect/platform-node';
 import { Effect, Layer, Logger } from 'effect';
 import { Schema } from 'effect';
-import { McpProtocol, McpSchema, McpServer, Tool, Toolkit } from 'effect/unstable/ai';
+import { McpProtocol, McpSchema, McpServer, Tool, Toolkit } from 'effect/ai';
 
 // --- Tools ---
 const GreetTool = Tool.make('GreetTool', {
 	description: 'Generate a greeting',
-	parameters: { name: Schema.String },
+	parameters: Schema.Struct({ name: Schema.String }),
 	success: Schema.String
 });
 
@@ -555,7 +593,7 @@ Layer.launch(ServerLayer).pipe(NodeRuntime.runMain);
 ```typescript
 const FetchTool = Tool.make('FetchData', {
 	description: 'Fetch data from database',
-	parameters: { id: Schema.String },
+	parameters: Schema.Struct({ id: Schema.String }),
 	success: Schema.String
 });
 
@@ -617,7 +655,9 @@ const ConfigResource = McpServer.resource({
 2. **Provide transport last** — `Layer.provide(McpServer.layerStdio(...))` or `Layer.provide(McpServer.layerHttp(...))`
 3. **stderr for stdio** — Never log to stdout when using stdio transport
 4. **Toolkit pattern** — `McpServer.toolkit(tk).pipe(Layer.provideMerge(tk.toLayer({...})))` is the canonical pattern
-5. **Schema for parameters** — All tool parameters and resource template params use Effect Schema
+5. **Schema for parameters** — `Tool.make` takes a schema with an encoded object
+   root, not a raw field record. `McpServer.prompt` still takes a field record;
+   resource template parameters take individual codecs.
 6. **`McpSchema.param`** — Use for resource URI template parameters with automatic string codec
 7. **`Effect.fn`** — Use for resource template content handlers that receive multiple arguments
 8. **Launch with `Layer.launch`** — The server runs as a long-lived layer: `Layer.launch(ServerLayer).pipe(NodeRuntime.runMain)`

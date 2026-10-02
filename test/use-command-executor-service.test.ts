@@ -12,8 +12,8 @@ testPattern({
     "const cp = await import('child_process')"
   ],
   shouldNotMatch: [
-    "import { ChildProcess } from 'effect/unstable/process'",
-    "import { ChildProcessSpawner } from 'effect/unstable/process'",
+    "import { ChildProcess } from 'effect/process'",
+    "import { ChildProcessSpawner } from 'effect/process'",
     "import { spawn } from 'other-lib/child_process'",
     // Strings / comments mentioning the banned module
     "const note = 'wrap node:child_process with ChildProcessSpawner'",

@@ -15,6 +15,9 @@ the yielded service and `get` / `contextEffect` / `contextEffectOption`: an entr
 can fail when reacquired after successful preloading. Invalidating an active
 RcMap/LayerMap entry releases it after its last borrower closes; a replacement
 entry remains independently owned.
+Preload keys with zero `idleTimeToLive` are skipped, including the default TTL.
+Set a non-zero TTL when construction must eagerly acquire and validate them;
+otherwise acquisition failures surface on first use.
 
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
 Browse and read files there directly to look up APIs, types, and implementations.
@@ -47,7 +50,7 @@ interface Cache<Key, A, E = never, R = never> {
 How to think about it:
 
 - **Entries store the lookup `Exit`** — successes *and failures* are cached. A failed lookup keeps failing from cache until the entry expires, is invalidated, or is refreshed.
-- **Concurrent `get`s of the same missing key share one lookup.** The first caller runs the lookup on its own fiber; the rest await the same `Deferred`.
+- **Concurrent `get`s of the same missing key share one lookup fiber.** Each caller waits independently; interrupting one waiter does not cancel work still needed by another. The last departing waiter interrupts a pending lookup.
 - **Insertion-ordered map = LRU.** Reads move the entry to the back; when capacity is exceeded the oldest entries are evicted.
 - **TTL is computed per entry** from the lookup `Exit` and the key, against the fiber's `Clock` — `TestClock` works. Expiry is lazy: entries are removed when next touched.
 - **`ScopedCache`** is the same model where each entry additionally owns a `Scope`: resources acquired during the lookup live exactly as long as the entry is cached.
@@ -191,7 +194,7 @@ If an older in-flight lookup is interrupted after `set` installs a newer value, 
 yield* Cache.invalidate(cache, 'k'); // remove one key; no-op if absent
 yield* Cache.invalidateAll(cache); // clear everything
 
-// Conditional: removes only a *resolved successful* value matching the predicate.
+// Conditional: awaits a pending entry, then removes a successful value matching the predicate.
 // Returns false for missing, expired, failed, or non-matching entries.
 const removed: boolean = yield* Cache.invalidateWhen(cache, 'k', (v) => v.stale);
 ```
@@ -205,7 +208,7 @@ const fresh = yield* Cache.refresh(cache, 'k');
 - Always invokes the lookup, even for an unexpired entry, and resets the TTL from the new exit.
 - For an **existing** key, the old entry keeps serving `get` callers until the new lookup completes — built-in stale-while-revalidate.
 - For a **missing** key, a pending entry is inserted immediately; concurrent `get`s wait on it.
-- Concurrent `refresh` calls are **not deduplicated** — each runs the lookup independently (only `get` dedups).
+- `Cache.refresh` calls are **not deduplicated** — each runs the lookup independently. `ScopedCache.refresh` of a missing key delegates to `get` and shares that pending lookup; refreshes of existing keys run independently.
 
 ---
 
@@ -233,6 +236,11 @@ yield* Cache.get(cache, 'd'); // evicts 'b'
 - Expiry is **lazy**: an expired entry stays in the map until some operation touches it (`get` re-runs the lookup; `has`/`getOption`/`keys`/`entries`/`values` treat-and-remove it as absent).
 - `Duration.infinity` (the default) means no expiry. `Duration.zero` means the entry expires immediately — effectively "do not cache this result".
 - `refresh` and re-`get`-after-expiry both restart the TTL clock; plain `get` hits do not extend it (no sliding expiration).
+
+`Cache.get` does not retain a zero-TTL result after completion. A synchronous
+zero-TTL lookup does not occupy capacity and evict a live entry; a pending lookup
+still occupies capacity while it is shared. `ScopedCache` has the distinct lazy
+resource-release behavior described in section 8.
 
 Per-key and per-result TTL via `makeWith`:
 
@@ -274,7 +282,7 @@ const robust = yield* Cache.makeWith(fetchUser, {
 });
 ```
 
-**Interruption poisons entries the same way**: the lookup runs on the fiber of the caller that triggered the miss. If that fiber is interrupted mid-lookup, the entry's deferred completes with the interrupt exit — concurrent waiters fail with it, and with an infinite TTL later `get`s keep replaying the interrupt instead of retrying. The exit-aware TTL above also fixes this, because an interrupt is a non-success exit (`Exit.isSuccess(exit) === false`) and gets a zero/short TTL.
+**Interruption is not cached.** Missing-key lookups run in daemon fibers, shared by their waiters. One caller's interruption leaves the lookup alive while another caller is waiting. When the last waiter leaves before completion, the lookup is interrupted and its entry removed; a later `get` starts again. `ScopedCache` also closes that lookup's entry scope. Children forked with `forkChild` inside the lookup end with the lookup fiber, not with the requesting caller; use the entry scope for resource-lifetime background work.
 
 `getSuccess`, `values`, and `entries` skip failed entries; `getOption` and `get` propagate the cached error; `invalidateWhen` returns `false` for failed entries (the predicate only sees successes).
 
@@ -340,6 +348,10 @@ The entry's scope is closed — releasing everything the lookup acquired — whe
 3. **expired and then touched** (`get` re-lookup, `has`, `getOption`, `getSuccess`, `keys`, `values`, `entries` all purge expired entries and close their scopes),
 4. **replaced** (`set` over an existing key; `refresh` closes the old entry's scope after the new lookup completes),
 5. **orphaned by cache close** (the owning scope closes).
+
+A pending shared lookup also closes its entry scope when its last waiter leaves.
+Interrupting an existing-key `refresh` closes the replacement scope and leaves
+the previous entry intact.
 
 ```ts
 const tracker: Array<string> = [];
@@ -434,7 +446,7 @@ const cacheB = yield* Cache.make({
 const row = yield* Cache.get(cacheB, 1).pipe(Effect.provideService(Db, dbImpl));
 ```
 
-At runtime the lookup always sees the construction-time context merged with the caller's context (the caller's services win on conflicts). Tracing is connected: the lookup runs on the calling fiber, so spans created inside the lookup are children of the caller's current span. Remember the lookup runs **once per miss** — only the first caller's context matters for a given entry.
+At runtime the lookup sees the construction-time context merged with the initiating caller's context (the caller's services win on conflicts). The shared lookup fiber inherits that caller's tracing context. Remember the lookup runs **once per miss** — later waiters do not replace the context for a pending entry.
 
 The same option exists on `ScopedCache.make`/`makeWith`.
 
@@ -597,9 +609,9 @@ it.effect('expires entries after the TTL', () =>
 2. **v4 renames type parameters, it does not reorder them** — v3's `Cache<Key, Value, Error>` becomes `Cache<Key, A, E, R>`: same value-before-error order with a services parameter appended. Only the pre-v3 `@effect/io` era used `Cache<Key, Error, Value>`.
 3. **`Cache.makeWith(lookup, options)` vs `ScopedCache.makeWith({ lookup, ...options })`** — `Cache.makeWith` takes the lookup as a separate first argument; `ScopedCache.makeWith` (and both `make`s) take one options object containing `lookup`.
 4. **Failures are cached with the default infinite TTL** — one transient lookup error fails that key forever. Use `makeWith` with an exit-aware TTL (`Exit.isSuccess(exit) ? ttl : Duration.zero`).
-5. **Interrupting the fiber that started a lookup poisons the entry** — the lookup runs on the first caller's fiber; if it is interrupted, the interrupt exit is cached and replayed to waiters and later `get`s. The exit-aware TTL in (4) also covers interrupts.
+5. **Confusing caller cancellation with lookup cancellation** — a shared missing-key lookup survives while any waiter remains. The last departing waiter interrupts pending work; interrupted entries are removed, and `ScopedCache` closes their scopes. Failure TTL policy is still needed for ordinary failures.
 6. **`timeToLive` in `make` is a `Duration.Input` value, not a function** — the `(exit, key) => Duration.Input` form only exists on `makeWith`; passing a function to `make` won't compile.
-7. **`refresh` is not deduplicated** — concurrent `refresh` calls each run the lookup; only `get` shares in-flight lookups. Serialize refreshes yourself if the lookup is expensive.
+7. **Assuming all refreshes deduplicate** — `Cache.refresh` and existing-key `ScopedCache.refresh` run independently. Only missing-key `ScopedCache.refresh` delegates to the shared `get` path. Serialize expensive refreshes if needed.
 8. **Don't mutate key objects after first use** — plain objects compare structurally in v4 (equal-content literals do hit), but `Equal`/`Hash` cache their results per object, so a mutated key misbehaves silently. Prefer primitives or immutable `Data.Class`/`Schema.Class` keys.
 9. **Don't `Effect.acquireRelease` inside a plain `Cache` lookup** — `Scope` leaks into `R` and finalizers attach to whatever outer scope is around, not to the entry: nothing is released on eviction/invalidation. Use `ScopedCache`, which provides a per-entry scope.
 10. **ScopedCache values die with their entry** — after `invalidate`/eviction/expiry-purge the value's finalizers have run. Don't hold the value beyond the entry's lifetime; use `effect/Pool` for checkout semantics.

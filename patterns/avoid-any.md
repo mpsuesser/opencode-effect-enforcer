@@ -30,8 +30,8 @@ generics   :: ∀ a. Constraint a ⇒ a → F a
 bad  :: Unknown → T
 bad x = x `as` T                    -- trust me bro
 
-good :: Unknown → Either ParseError T
-good x = Schema.decode schemaT x    -- prove it
+good :: Unknown → Effect T SchemaError
+good x = Schema.decodeUnknownEffect schemaT x    -- decode and retain the proof
 ```
 
 Using `as any` bypasses type checking entirely. The `as unknown as T` pattern is equivalent—casting through `unknown` still erases type information. Note: `as const` is acceptable—it narrows to literal types without erasing type safety.

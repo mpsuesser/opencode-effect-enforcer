@@ -192,33 +192,40 @@ const make = Effect.gen(function* () {
 
 ## Pattern: Graceful Shutdown Event
 
-Publish a final event before shutting down PubSub channels so subscribers can perform cleanup:
+Use `PubSub.end(pubsub, finalEvent)` to deliver a terminal event after buffered
+messages. The terminal event occupies no capacity, cannot be dropped by a full
+bounded channel, and reaches future subscribers too (after any replay values).
+Pending backpressured publishers and later publishes return `false`.
 
+The terminal event is **sticky**: further `take` calls return it again. Raw
+subscribers must stop, and `Stream.fromPubSub` consumers must use a terminal
+predicate such as `Stream.takeUntil`. `take`, `takeAll`, and `takeBetween` deliver
+it; non-suspending `takeUpTo` does not.
+
+<!-- typecheck -->
 ```typescript
-yield*
-	Effect.addFinalizer(() =>
-		Effect.gen(function* () {
-			// Notify all subscribers that the bus is shutting down
-			yield* PubSub.publish(
-				wildcard,
-				new InstanceDisposed({ reason: 'scope-closed' })
-			);
-			// Then shut down the channel
-			yield* PubSub.shutdown(wildcard);
-		})
-	);
+import { Effect, PubSub } from 'effect';
+
+const program = Effect.gen(function* () {
+	const pubsub = yield* PubSub.bounded<string>(1);
+	yield* Effect.addFinalizer(() => PubSub.shutdown(pubsub));
+	const subscription = yield* PubSub.subscribe(pubsub);
+	yield* PubSub.publish(pubsub, 'work');
+	yield* PubSub.end(pubsub, 'finished'); // succeeds even with the buffer full
+	const work = yield* PubSub.take(subscription);
+	const terminal = yield* PubSub.take(subscription);
+	const late = yield* PubSub.subscribe(pubsub);
+	const lateTerminal = yield* PubSub.take(late);
+	return { work, terminal, lateTerminal };
+}).pipe(Effect.scoped);
 ```
 
-Subscribers can detect this event and perform teardown:
-
-```typescript
-yield*
-	bus.subscribeAll.pipe(
-		Stream.takeUntil((evt) => evt instanceof InstanceDisposed),
-		Stream.runForEach(handleEvent),
-		Effect.forkScoped
-);
-```
+For a domain bus, use a tagged terminal variant rather than a string sentinel.
+End the bus while consumers are still alive, then await their completion before
+closing their scope. `PubSub.shutdown` interrupts subscribers and discards their
+ability to drain; calling it immediately after publishing or ending does not
+guarantee the final event is handled. Keep shutdown as the final cleanup step,
+not the graceful notification mechanism.
 
 ## Redis Pub/Sub
 
@@ -226,7 +233,7 @@ For cross-process pub/sub, use the portable `Redis.Redis` service rather than mo
 
 ```typescript
 import { Effect, Stream } from 'effect';
-import { Redis } from 'effect/unstable/persistence';
+import { Redis } from 'effect/persistence';
 
 declare const handleRedisMessage: (
 	channel: string,
@@ -249,54 +256,38 @@ The subscription uses a dedicated client and is released when the enclosing scop
 
 ## Testing PubSub Services
 
-Testing PubSub subscriptions requires specific choreography:
-
-1. Fork the consumer fiber
-2. Wait for subscriber readiness explicitly when possible; otherwise use a tiny registration barrier
-3. Publish events
-4. Gate on a `Deferred` for synchronization
+Acquire the subscription before publishing, then fork consumption if needed.
+For a service that exposes only `Stream`, provide a test seam that signals actual
+subscription readiness. Starting a fiber, or signaling before the subscription
+is acquired, is not a registration barrier.
 
 ```typescript
-import { Deferred, Effect, PubSub, Stream } from 'effect';
+import { Effect, Fiber, PubSub, Stream } from 'effect';
+import * as Arr from 'effect/Array';
 
 it.effect('should receive published events', () =>
 	Effect.gen(function* () {
-		const bus = yield* Bus.Service;
-		const received: Array<string> = [];
-		const done = yield* Deferred.make<void>();
-
-		// 1. Fork the consumer
-		yield* bus.subscribe(FileChanged).pipe(
-			Stream.runForEach((evt) =>
-				Effect.gen(function* () {
-					received.push(evt.path);
-					if (received.length === 2) {
-						yield* Deferred.succeed(done, undefined);
-					}
-				})
-			),
-			Effect.forkScoped
+		const pubsub = yield* PubSub.unbounded<FileChanged>();
+		yield* Effect.addFinalizer(() => PubSub.shutdown(pubsub));
+		const subscription = yield* PubSub.subscribe(pubsub);
+		const consumer = yield* Stream.fromEffectRepeat(PubSub.take(subscription)).pipe(
+			Stream.take(2),
+			Stream.runCollect,
+			Effect.forkChild
 		);
 
-		// 2. Registration barrier
-		yield* Effect.sleep('10 millis');
-
-		// 3. Publish events
-		yield* bus.publish(new FileChanged({ path: 'a.ts', kind: 'modified' }));
-		yield* bus.publish(new FileChanged({ path: 'b.ts', kind: 'created' }));
-
-		// 4. Wait for events to be received
-		yield* Deferred.await(done);
-
-		expect(received).toEqual(['a.ts', 'b.ts']);
-	}).pipe(Effect.provide(Bus.layer))
+		yield* PubSub.publish(pubsub, new FileChanged({ path: 'a.ts', kind: 'modified' }));
+		yield* PubSub.publish(pubsub, new FileChanged({ path: 'b.ts', kind: 'created' }));
+		const received = yield* Fiber.join(consumer);
+		expect(Arr.map(received, (event) => event.path)).toEqual(['a.ts', 'b.ts']);
+	})
 );
 ```
 
 **Notes:**
 
-- The `runForEach` handler is effectful, so complete the gate with `yield* Deferred.succeed(done, undefined)`. There is no `Deferred.unsafeDone` in v4; reach for the low-level `Deferred.doneUnsafe(done, Effect.void)` only inside a truly synchronous callback that has no surrounding effect.
-- The tiny sleep above is an acceptable fallback for `Stream.fromPubSub` registration when no explicit readiness hook exists. If you control the consumer stream, prefer a readiness `Deferred` or latch instead.
+- `PubSub.subscribe` is already scoped; `it.effect` supplies its lifetime. No manual unsubscribe or sleeps are needed.
+- If a service uses a readiness `Deferred`, complete it only after `PubSub.subscribe` has returned. Acquiring a stream pull alone does not prove its lazy subscription has started.
 - To drain a `PubSub` subscription for assertions, prefer `PubSub.takeUpTo(sub, n)`: it returns immediately with whatever is buffered (possibly an empty array). `PubSub.takeAll(sub)` **suspends when the subscription is empty** and returns a `NonEmptyArray`, so it cannot be used to assert “no more events” — it would hang waiting for one.
 
 ## PubSub Configuration
@@ -329,6 +320,11 @@ Choose based on your use case:
 - **`dropping`** — when burst absorption is needed but current events take priority
 
 **PubSub is not an event log.** Messages are delivered to *active* subscribers only. A subscriber that attaches after a value was published does not see that value unless a `replay` buffer is configured, and `replay` only retains the most recent N values — it is bounded, recent-only, and not durable storage. If you need every consumer to observe the full history, subscribe before publishing (see the testing choreography above) or persist events separately.
+
+The final value passed to `PubSub.end` is the exception: every subscriber sees
+it even without replay. An `Infinity` capacity behaves as unbounded; use
+`PubSub.unbounded` when that is the intended policy. `PubSub.isPubSub(value)` is
+the runtime guard for unknown values.
 
 ## DO / DON'T
 

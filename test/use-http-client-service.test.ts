@@ -16,8 +16,8 @@ testPattern({
     "const http = await import('node:http')"
   ],
   shouldNotMatch: [
-    "import { HttpClient } from 'effect/unstable/http'",
-    "import { HttpClientRequest, HttpClientResponse } from 'effect/unstable/http'",
+    "import { HttpClient } from 'effect/http'",
+    "import { HttpClientRequest, HttpClientResponse } from 'effect/http'",
     "import { BunHttpClient } from '@effect/platform-bun'",
     "import { NodeHttpClient } from '@effect/platform-node'",
     "import { something } from 'other-lib/http'",

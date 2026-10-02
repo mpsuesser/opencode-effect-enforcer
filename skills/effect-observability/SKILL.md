@@ -8,14 +8,17 @@ You are an Effect TypeScript expert specializing in observability — structured
 ## Effect Source Reference
 
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
-Browse and read files there directly to look up APIs, types, and implementations.
+Inspect `git show effect@4.0.0:<path>` there for this baseline; main may be ahead.
+Keep `effect` and `@effect/*` packages on the same version. The OTLP modules and
+`@effect/opentelemetry` APIs are tagged `@stability unstable` and may break in
+minor releases; the shorter `effect/observability` import path is not a stability guarantee.
 
 Reference this for:
 
 - `Logger` module: `packages/effect/src/Logger.ts`
 - `Tracer` module: `packages/effect/src/Tracer.ts`
 - `Metric` module: `packages/effect/src/Metric.ts`
-- OTLP export: `packages/effect/src/unstable/observability/`
+- OTLP export: `packages/effect/src/observability/`
 - Observability examples: `ai-docs/src/08_observability/`
 
 ---
@@ -178,7 +181,7 @@ const BatchedLoggerLayer = Logger.layer([batchedLogger]);
 
 ### File Logging
 
-Write logs directly to a file (requires `FileSystem` from `@effect/platform`):
+Write logs directly to a file (requires the `FileSystem` service from `effect`):
 
 ```ts
 import { NodeFileSystem } from '@effect/platform-node';
@@ -395,7 +398,7 @@ for (const metric of snapshots) {
 
 ## 5. OTLP Export
 
-Effect v4 includes built-in OTLP exporters in `effect/unstable/observability`. No external OpenTelemetry SDK needed.
+Effect v4 includes built-in OTLP exporters in `effect/observability`. No external OpenTelemetry SDK needed.
 
 ### All-in-One: `Otlp.layerJson`
 
@@ -403,8 +406,8 @@ The simplest setup — exports traces, logs, and metrics to a single OTLP endpoi
 
 ```ts
 import { Layer } from 'effect';
-import { FetchHttpClient } from 'effect/unstable/http';
-import { Otlp } from 'effect/unstable/observability';
+import { FetchHttpClient } from 'effect/http';
+import { Otlp } from 'effect/observability';
 
 const ObservabilityLayer = Otlp.layerJson({
 	baseUrl: 'http://localhost:4318',
@@ -426,19 +429,26 @@ Variants:
 - `Otlp.layerProtobuf` — Protobuf serialization (more efficient)
 - `Otlp.layer` — requires you to provide `OtlpSerialization` separately
 
+Use `Otlp.layerFromConfig()` for standard OpenTelemetry environment
+configuration (`OTEL_EXPORTER_OTLP_ENDPOINT`, signal-specific endpoints,
+headers, exporter selection, and `OTEL_SDK_DISABLED`). Provide both
+`OtlpSerialization.layerJson` (or protobuf) and an `HttpClient` layer. Explicit
+`layerJson({ baseUrl })` is the programmatic endpoint path; it is not the
+environment-selected exporter setup.
+
 ### Individual OTLP Exporters
 
 For fine-grained control, configure each exporter independently:
 
 ```ts
 import { Layer } from 'effect';
-import { FetchHttpClient } from 'effect/unstable/http';
+import { FetchHttpClient } from 'effect/http';
 import {
 	OtlpLogger,
 	OtlpMetrics,
 	OtlpSerialization,
 	OtlpTracer
-} from 'effect/unstable/observability';
+} from 'effect/observability';
 
 const OtlpTracingLayer = OtlpTracer.layer({
 	url: 'http://localhost:4318/v1/traces',
@@ -482,7 +492,7 @@ Each OTLP signal layer now outputs the shared `OtlpExporter.Flusher` service. Us
 
 ```ts
 import { Effect } from 'effect';
-import { OtlpExporter } from 'effect/unstable/observability';
+import { OtlpExporter } from 'effect/observability';
 
 const flushTelemetry = Effect.gen(function* () {
 	const flusher = yield* OtlpExporter.Flusher;
@@ -490,7 +500,42 @@ const flushTelemetry = Effect.gen(function* () {
 });
 ```
 
-All signal layers in the same memoized layer graph share one flusher registry, so one call drains logs, traces, and metrics concurrently. `flush` cannot fail and has no built-in timeout; it waits only for exports it starts, not an export already in flight.
+All signal layers in the same memoized layer graph share one flusher registry, so
+one call requests exports concurrently. `flush` cannot fail and has no built-in
+timeout; it waits only for exports it starts, not exports already in flight.
+Exporters in their temporary-disable window are skipped, so completion is not a
+delivery acknowledgement. Successful delta-metric flushes advance their aggregation window.
+
+The combined `Otlp.layer*` signatures expose `never` as their output service.
+To access `Flusher` with the combined layer, merge `OtlpExporter.layerFlusher`
+explicitly; memoization shares that registry with the signal layers:
+
+<!-- typecheck -->
+```ts
+import { Effect, Layer } from 'effect';
+import { FetchHttpClient } from 'effect/http';
+import { Otlp, OtlpExporter } from 'effect/observability';
+
+const telemetry = Layer.mergeAll(
+	Otlp.layerJson({ baseUrl: 'http://localhost:4318' }),
+	OtlpExporter.layerFlusher
+).pipe(Layer.provide(FetchHttpClient.layer));
+
+const flush = Effect.gen(function* () {
+	const flusher = yield* OtlpExporter.Flusher;
+	return yield* flusher.flush.pipe(Effect.timeoutOption('5 seconds'));
+}).pipe(Effect.provide(telemetry));
+```
+
+### Exporter lifecycle
+
+Keep the exporter layer alive for the application's lifetime. Scope finalization
+starts a final export and waits for tracked in-flight exports, bounded by
+`shutdownTimeout`; a manual flush has the narrower semantics described above.
+The HTTP exporter drains response bodies before completing or retrying requests,
+including error responses that carry a body. Custom/mock HTTP clients must
+supply a consumable response body rather than only a status code. This releases
+connections between export attempts; callers need no separate drain step.
 
 ### OTLP Layer Options
 
@@ -547,7 +592,7 @@ Export Effect metrics in Prometheus exposition format:
 
 ```ts
 import { Effect, Metric } from 'effect';
-import * as PrometheusMetrics from 'effect/unstable/observability/PrometheusMetrics';
+import * as PrometheusMetrics from 'effect/observability/PrometheusMetrics';
 
 const program = Effect.gen(function* () {
 	const counter = Metric.counter('http_requests_total', {
@@ -572,7 +617,7 @@ const program = Effect.gen(function* () {
 Automatically register a `/metrics` endpoint on your HTTP router:
 
 ```ts
-import * as PrometheusMetrics from 'effect/unstable/observability/PrometheusMetrics';
+import * as PrometheusMetrics from 'effect/observability/PrometheusMetrics';
 
 // Default: GET /metrics
 const PrometheusLayer = PrometheusMetrics.layerHttp();
@@ -633,8 +678,8 @@ Use a test tracer or assert on span attributes captured via `Effect.withSpan`.
 
 ```ts
 import { Config, Effect, Layer, Logger, References } from 'effect';
-import { FetchHttpClient } from 'effect/unstable/http';
-import { Otlp } from 'effect/unstable/observability';
+import { FetchHttpClient } from 'effect/http';
+import { Otlp } from 'effect/observability';
 
 const DevObservability = Logger.layer([Logger.consolePretty()]);
 
@@ -715,5 +760,6 @@ class Checkout extends Context.Service<
 7. **Metric names should follow conventions** — snake_case with units suffix (e.g., `http_request_duration_ms`).
 8. **`Metric.withAttributes` creates a tagged variant** — it does not mutate the original metric.
 9. **`OtlpMetrics` temporality** — use `"delta"` for backends like Datadog/Dynatrace, `"cumulative"` (default) for Prometheus-style backends.
-10. **All OTLP modules are under `effect/unstable/observability`** — the API may evolve but the patterns are stable.
+10. **OTLP modules are under `effect/observability`** — they remain tagged
+    `@stability unstable`; inspect the matching release when upgrading.
 11. **Use `OtlpExporter.Flusher` for manual drains** — bound `flusher.flush` with `Effect.timeoutOption` when shutdown latency must be capped.

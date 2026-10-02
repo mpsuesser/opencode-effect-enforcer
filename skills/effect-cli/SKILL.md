@@ -20,8 +20,11 @@ scalars containing colon-whitespace or a trailing colon: quote those values.
 
 ## Import Pattern
 
+The CLI APIs are marked `@stability unstable` even at the stable package release.
+Inspect `effect@4.0.0:packages/effect/src/cli/` for this baseline's contracts.
+
 ```typescript
-import { Argument, Command, Flag, Prompt } from 'effect/unstable/cli';
+import { Argument, Command, Flag, Prompt } from 'effect/cli';
 ```
 
 Platform services and runtime for the entry point:
@@ -37,7 +40,7 @@ Positional arguments are parsed in order. Use `Flag.Boolean` for toggles or `Arg
 ### Constructors
 
 ```typescript
-import { Argument } from 'effect/unstable/cli';
+import { Argument } from 'effect/cli';
 
 Argument.String('name'); // string
 Argument.Int('count'); // number (integer)
@@ -64,7 +67,7 @@ Argument.FileSchema('config', MySchema); // reads and validates file via Schema
 ### Combinators
 
 ```typescript
-import { Argument } from 'effect/unstable/cli';
+import { Argument } from 'effect/cli';
 
 // Description for help text
 Argument.String('file').pipe(Argument.withDescription('Input file'));
@@ -121,10 +124,16 @@ Argument.Int('count').pipe(
 
 Flags are named options with `--name` or `-alias` syntax.
 
+Negative numeric tokens such as `-3`, `-3.70`, `-.5`, and `-1e-3` are values,
+not short-option bundles: `--lon -3.70` works with `Flag.Finite('lon')`.
+Use `--` to pass trailing operands that otherwise look like options; a lone
+`-` is also retained as a value. Numeric lexing does not replace the chosen
+primitive's validation.
+
 ### Constructors
 
 ```typescript
-import { Flag } from 'effect/unstable/cli';
+import { Flag } from 'effect/cli';
 
 Flag.Boolean('verbose'); // required: --verbose / --no-verbose; omission fails
 Flag.String('config'); // --config value
@@ -152,7 +161,7 @@ Flag.KeyValuePair('env'); // --env FOO=bar → Record<string, string>
 ### Combinators
 
 ```typescript
-import { Flag } from 'effect/unstable/cli';
+import { Flag } from 'effect/cli';
 
 // Alias
 Flag.Boolean('verbose').pipe(
@@ -217,7 +226,7 @@ Bare boolean flags are required. `--verbose` produces `true`, `--no-verbose` pro
 <!-- typecheck -->
 ```typescript
 import { Effect } from 'effect';
-import { Prompt } from 'effect/unstable/cli';
+import { Prompt } from 'effect/cli';
 
 Prompt.Int({ message: 'Count', default: 42 });
 Prompt.File({ message: 'Pick file', default: '/workspace/config.json' });
@@ -253,7 +262,7 @@ choice values rather than pre-escaping your domain values.
 
 ```typescript
 import { Console, Effect } from 'effect';
-import { Argument, Command, Flag } from 'effect/unstable/cli';
+import { Argument, Command, Flag } from 'effect/cli';
 
 // Simple command (no config, no handler)
 const version = Command.make('version');
@@ -509,7 +518,7 @@ Command.provideSync(MyService, (config) => makeMyService(config.env));
 ```typescript
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
-import { Command, Flag } from 'effect/unstable/cli';
+import { Command, Flag } from 'effect/cli';
 
 const myCommand = Command.make(
 	'myapp',

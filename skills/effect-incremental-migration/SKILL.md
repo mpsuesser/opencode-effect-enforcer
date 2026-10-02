@@ -85,7 +85,7 @@ export namespace MyModule {
 				return yield* db.findById(cfg.table, id);
 			});
 
-			const list = Effect.fn('MyModule.list')(function* () {
+			const list = Effect.gen(function* () {
 				const cfg = yield* config.get();
 				return yield* db.listAll(cfg.table);
 			});
@@ -127,6 +127,7 @@ export const defaultLayer = Layer.suspend(() =>
 
 A shared `memoMap` ensures layers are deduplicated across all per-service runtimes. Define the bridge utility once and reuse it across migrated modules.
 
+<!-- typecheck -->
 ```typescript
 import { Layer, ManagedRuntime } from 'effect';
 import type { Effect, Context } from 'effect';
@@ -137,13 +138,13 @@ export function makeRuntime<I, S, E>(
 	service: Context.Service<I, S>,
 	layer: Layer.Layer<I, E>
 ) {
-	let rt: ManagedRuntime.ManagedRuntime<I, E> | undefined;
-	const getRuntime = () => (rt ??= ManagedRuntime.make(layer, { memoMap }));
+	const runtime = ManagedRuntime.make(layer, { memoMap });
 	return {
 		runPromise: <A, Err>(fn: (svc: S) => Effect.Effect<A, Err, I>) =>
-			getRuntime().runPromise(service.use(fn)),
+			runtime.runPromise(service.use(fn)),
 		runSync: <A, Err>(fn: (svc: S) => Effect.Effect<A, Err, I>) =>
-			getRuntime().runSync(service.use(fn))
+			runtime.runSync(service.use(fn)),
+		dispose: () => runtime.dispose()
 	};
 }
 ```
@@ -151,8 +152,14 @@ export function makeRuntime<I, S, E>(
 Then in the module namespace, create the bridge from the service and its default layer:
 
 ```typescript
-const { runPromise } = makeRuntime(MyModule.Service, MyModule.defaultLayer);
+const { runPromise, dispose } = makeRuntime(MyModule.Service, MyModule.defaultLayer);
 ```
+
+`ManagedRuntime.make` builds the layer lazily on first use, so no separate lazy
+runtime variable is needed. The host owns the bridge: stop admitting work and
+await `dispose()` on shutdown. Disposal interrupts managed fibers and waits for
+their cleanup before releasing layer resources. A shared memo map deduplicates
+acquisition, but does not remove each runtime's disposal obligation.
 
 > **Memo-map nuance:** Keep the bridge `memoMap` shared (the root `Layer.makeMemoMapUnsafe()` above) so every per-service runtime reuses the same layer allocations. Do not `Layer.forkMemoMap` it unless a specific child runtime intentionally needs isolated allocations — a forked memo map can read the parent's existing allocations but builds new ones in isolation, which defeats the deduplication this bridge exists to provide.
 
@@ -297,7 +304,7 @@ export namespace Items {
 				});
 			});
 
-			const list = Effect.fn('Items.list')(function* () {
+			const list = Effect.gen(function* () {
 				const cfg = yield* config.load();
 				const res = yield* Effect.tryPromise({
 					try: () => fetch(`${cfg.apiUrl}/items`),
@@ -321,7 +328,9 @@ export namespace Items {
 	);
 
 	// Step 5: Runtime bridge
-	const { runPromise } = makeRuntime(Service, defaultLayer);
+	const runtime = makeRuntime(Service, defaultLayer);
+	const { runPromise } = runtime;
+	export const dispose = runtime.dispose; // host awaits this at shutdown
 
 	// Step 6: Async facades (remove once all callers migrate)
 	export async function get(id: string): Promise<Item> {

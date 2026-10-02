@@ -13,7 +13,7 @@ and `effect-typeclass-design` for reusable predicate/order APIs.
 
 ## Source Reference
 
-Baseline: **Effect 4.0.0-rc.116**. In the Effect source reference, consult
+Baseline: **Effect 4.0.0**. In the Effect source reference, consult
 `packages/effect/SCHEMA.md` and `packages/effect/src/{Schema,Match,DateTime,Order}.ts`.
 Verify the installed version and source tag before applying newer APIs.
 
@@ -37,6 +37,13 @@ fields to a decoder and assume they have the same shape.
 when encoded values or service requirements matter; do not erase them with `any`.
 
 ## Complete Model: Task Lifecycle
+
+`Schema.brand` is a type-only distinction with no runtime AST metadata or extra
+checks. Each call takes one concrete string literal (not a widened string,
+union, or open template); compose brands with repeated calls. A brand does not
+prove a domain invariant unless the underlying schema checks it. Representations
+and generated schema code omit brands, so reapply them after rebuilding a model.
+`Schema.fromBrand` preserves constructor checks and requires its sole brand key.
 
 This module demonstrates brands, class variants, exhaustive/partial matching,
 schema guards, equivalence, orders, dual helpers, and legal transitions.

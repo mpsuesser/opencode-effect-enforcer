@@ -16,12 +16,15 @@ This skill provides patterns for testing Effect's concurrency primitives: fibers
 | Simple fiber yield                | `Effect.yieldNow`                                                                     |
 | Wait for subscriber ready         | `Deferred.make()` + `Deferred.await`                                                  |
 | Wait for stream element           | `Latch.make()` + `Stream.tap(() => latch.open)`                                       |
-| Passive subscription registration | explicit readiness signal if possible; otherwise a tiny one-tick yield/sleep fallback |
+| Passive subscription registration | acquire `PubSub.subscribe` before publishing, or expose a readiness signal             |
 | Time-dependent behavior           | `TestClock.adjust`                                                                    |
 | Verify events published           | `PubSub.subscribe` + `PubSub.takeUpTo`                                                |
 | Check fiber status                | `fiber.pollUnsafe()`                                                                  |
 
-For `Stream.fromPubSub` subscription registration, prefer an explicit readiness signal when you control the stream. If the API offers no readiness hook and you only need registration to settle before publishing, a tiny `Effect.yieldNow()` or very short sleep is an acceptable last resort. Avoid broad polling or arbitrary delays.
+For `Stream.fromPubSub` registration, signal readiness after acquiring the actual
+subscription, not merely before starting the stream. A scheduler yield is not a
+general readiness guarantee; a sleep under `it.effect` also needs `TestClock`
+advancement. Prefer a subscription-first test seam to arbitrary delays.
 
 ## Fiber Coordination Patterns
 
@@ -39,7 +42,7 @@ it.effect('fiber polling with yieldNow', () =>
 
 		const fiber = yield* latch.await.pipe(Effect.forkChild);
 
-		yield* Effect.yieldNow();
+		yield* Effect.yieldNow;
 
 		expect(fiber.pollUnsafe()).toBeUndefined();
 
@@ -67,7 +70,7 @@ it.effect('latch coordination', () =>
 			return 'completed';
 		}).pipe(Effect.forkChild);
 
-		yield* Effect.yieldNow();
+		yield* Effect.yieldNow;
 		expect(fiber.pollUnsafe()).toBeUndefined();
 
 		yield* latch.open;
@@ -436,6 +439,23 @@ it.effect('should run finalizers', () =>
 
 ## Interruption Testing
 
+Test cancellation at the resource-owning boundary, using a `Deferred` to prove
+work has started before interrupting it:
+
+- Shared `ScopedCache` lookup: cancel one of two waiters and let the other
+  finish; then cancel the last waiter on another pending lookup and verify its
+  resource finalizer ran and a later `get` reacquires.
+- `race` / `raceFirst` / iterable variants: assert loser cleanup is complete when
+  the race returns, including cancellation while contenders are starting.
+- `Scope.close`: gate a finalizer, interrupt the closing fiber, release the gate,
+  and verify remaining finalizers still run.
+- `ManagedRuntime.dispose`: verify request cleanup can use layer services before
+  those services are released.
+- Queue batches: offer fewer than `takeN` requests, verify the taker remains
+  pending, then `end` or `fail` and assert the short final batch precedes the
+  terminal outcome. For PubSub, test the `end` value with `take`, not `takeUpTo`,
+  including a late subscriber and a full dropping buffer.
+
 ### Testing Fiber Interruption
 
 ```typescript
@@ -518,7 +538,7 @@ Effect.gen(function* () {
 // GOOD - Use yieldNow for simple yielding
 Effect.gen(function* () {
 	const fiber = yield* someEffect.pipe(Effect.forkChild);
-	yield* Effect.yieldNow();
+	yield* Effect.yieldNow;
 	yield* Fiber.join(fiber);
 });
 ```
@@ -538,7 +558,7 @@ while (fiber.pollUnsafe() === undefined) {
 // GOOD - Yield between polls or use Fiber.await
 Effect.gen(function* () {
 	while (fiber.pollUnsafe() === undefined) {
-		yield* Effect.yieldNow();
+		yield* Effect.yieldNow;
 	}
 });
 

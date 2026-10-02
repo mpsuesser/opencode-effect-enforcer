@@ -31,6 +31,9 @@ Every bundled skill, pattern, and guidance source must remain linked from
 
 ## Releases
 
-GitHub releases are automatically verified and published to npm with provenance.
-The release tag must exactly match the package version, such as `v0.2.5` for
-`"version": "0.2.5"`.
+Pushes to `main` verify and publish unpublished package versions to npm with
+provenance. Bump `package.json` before pushing a release; already-published
+versions are skipped. Publishing is serialized across push and release events.
+
+GitHub releases also trigger this workflow. The release tag must exactly match
+the package version, such as `v0.3.0` for `"version": "0.3.0"`.

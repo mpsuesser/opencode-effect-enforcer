@@ -30,7 +30,7 @@ suggestSkills:
 
 ```haskell
 -- Transformation
-throw :: Error -> ⊥                        -- untyped, uncatchable by Effect
+throw :: Error -> ⊥                        -- defect, outside the typed error channel
 yield* Effect.fail :: TaggedError -> E ⊥ E  -- typed, catchable via catchTag
 ```
 

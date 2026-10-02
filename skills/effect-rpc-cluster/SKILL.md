@@ -3,39 +3,39 @@ name: effect-rpc-cluster
 description: Build typed RPC endpoints and cluster-distributed entities, singletons, cron jobs, and durable workflows with Effect's RPC and Cluster modules (Rpc/RpcGroup/RpcServer/RpcClient, Entity/Sharding/Singleton, Node/Bun bundles). Use when building RPC services or distributed/clustered Effect systems.
 ---
 
-You are an Effect TypeScript expert specializing in `effect/unstable/rpc` and `effect/unstable/cluster`.
+You are an Effect TypeScript expert specializing in `effect/rpc` and `effect/cluster`.
 
-These modules live under `effect/unstable/*`. There are no `@effect/rpc` or `@effect/cluster` packages in v4 — everything ships from the `effect` package. APIs may move between betas.
+These modules live under `effect/*`. There are no `@effect/rpc` or `@effect/cluster` packages in v4 — everything ships from the `effect` package. They remain `@stability unstable` and may break in minor releases. Keep Effect-family packages on the same release.
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — the shape of these modules changes more often than the website docs.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Inspect the `effect@4.0.0` tag for this skill; main may be newer.
 
 Key files:
 
-- `packages/effect/src/unstable/rpc/Rpc.ts` — `Rpc.make`, custom constructors, `Wrapper`, `ServerClient`, `exitSchema`
-- `packages/effect/src/unstable/rpc/RpcGroup.ts` — group construction, handler wiring (`toLayer` / `toHandlers` / `toLayerHandler` / `accessHandler`), prefixing, omit/merge, annotations
-- `packages/effect/src/unstable/rpc/RpcServer.ts` — `make`, `layer`, `layerHttp`, every `layerProtocol*` and `toHttpEffect*`
-- `packages/effect/src/unstable/rpc/RpcClient.ts` — `make`, `Protocol`, every `layerProtocol*`, `withHeaders`, `CurrentHeaders`, `ConnectionHooks`
-- `packages/effect/src/unstable/rpc/RpcMiddleware.ts` — `Service` constructor, `layerClient`
-- `packages/effect/src/unstable/rpc/RpcSerialization.ts` — JSON/NDJSON/JSON-RPC/SchemaBinary codecs and layers
-- `packages/effect/src/unstable/rpc/RpcTest.ts` — in-process test client
-- `packages/effect/src/unstable/rpc/RpcWorker.ts` — `InitialMessage` for worker transports
-- `packages/effect/src/unstable/rpc/RpcSchema.ts` — `Stream` schema marker, `ClientAbort` cause annotation
-- `packages/effect/src/unstable/rpc/RpcClientError.ts` — client-side error union
-- `packages/effect/src/unstable/cluster/Entity.ts` — `Entity.make` / `fromRpcGroup`, handler envelopes, `Replier`, `CurrentAddress`, `keepAlive`, `makeTestClient`
-- `packages/effect/src/unstable/cluster/ClusterSchema.ts` — `Persisted`, `Uninterruptible`, `WithTransaction`, `ShardGroup`, `ClientTracingEnabled`, `Dynamic`
-- `packages/effect/src/unstable/cluster/ClusterError.ts` — `MailboxFull`, `AlreadyProcessingMessage`, `PersistenceError`, `EntityNotAssignedToRunner`, `MalformedMessage`, `RunnerUnavailable`, `RunnerNotRegistered`
-- `packages/effect/src/unstable/cluster/Sharding.ts` — the `Sharding` service surface
-- `packages/effect/src/unstable/cluster/ShardingConfig.ts` — config schema + env loader
-- `packages/effect/src/unstable/cluster/Singleton.ts` — singleton-per-cluster effects
-- `packages/effect/src/unstable/cluster/ClusterCron.ts` — cron-driven singletons
-- `packages/effect/src/unstable/cluster/SingleRunner.ts` — single-node sql-backed bundle
-- `packages/effect/src/unstable/cluster/TestRunner.ts` — in-memory testing bundle
-- `packages/effect/src/unstable/cluster/EntityProxy.ts` + `EntityProxyServer.ts` — entity ↔ RPC/HTTP bridge
-- `packages/effect/src/unstable/workflow/WorkflowProxy.ts` + `WorkflowProxyServer.ts` — workflow ↔ RPC/HTTP bridge
-- `packages/effect/src/unstable/cluster/ClusterWorkflowEngine.ts` — production workflow engine backed by sharding + storage
-- `packages/effect/src/unstable/reactivity/AtomRpc.ts` — reactive RPC client for Atom UIs (see also `effect-atom-rpc` skill)
+- `packages/effect/src/rpc/Rpc.ts` — `Rpc.make`, custom constructors, `Wrapper`, `ServerClient`, `exitSchema`
+- `packages/effect/src/rpc/RpcGroup.ts` — group construction, handler wiring (`toLayer` / `toHandlers` / `toLayerHandler` / `accessHandler`), prefixing, omit/merge, annotations
+- `packages/effect/src/rpc/RpcServer.ts` — `make`, `layer`, `layerHttp`, every `layerProtocol*` and `toHttpEffect*`
+- `packages/effect/src/rpc/RpcClient.ts` — `make`, `Protocol`, every `layerProtocol*`, `withHeaders`, `CurrentHeaders`, `ConnectionHooks`
+- `packages/effect/src/rpc/RpcMiddleware.ts` — `Service` constructor, `layerClient`
+- `packages/effect/src/rpc/RpcSerialization.ts` — JSON/NDJSON/JSON-RPC/SchemaBinary codecs and layers
+- `packages/effect/src/rpc/RpcTest.ts` — in-process test client
+- `packages/effect/src/rpc/RpcWorker.ts` — `InitialMessage` for worker transports
+- `packages/effect/src/rpc/RpcSchema.ts` — `Stream` schema marker, `ClientAbort` cause annotation
+- `packages/effect/src/rpc/RpcClientError.ts` — client-side error union
+- `packages/effect/src/cluster/Entity.ts` — `Entity.make` / `fromRpcGroup`, handler envelopes, `Replier`, `CurrentAddress`, `keepAlive`, `makeTestClient`
+- `packages/effect/src/cluster/ClusterSchema.ts` — `Persisted`, `Uninterruptible`, `WithTransaction`, `ShardGroup`, `ClientTracingEnabled`, `Dynamic`
+- `packages/effect/src/cluster/ClusterError.ts` — `MailboxFull`, `AlreadyProcessingMessage`, `PersistenceError`, `EntityNotAssignedToRunner`, `MalformedMessage`, `RunnerUnavailable`, `RunnerNotRegistered`
+- `packages/effect/src/cluster/Sharding.ts` — the `Sharding` service surface
+- `packages/effect/src/cluster/ShardingConfig.ts` — config schema + env loader
+- `packages/effect/src/cluster/Singleton.ts` — singleton-per-cluster effects
+- `packages/effect/src/cluster/ClusterCron.ts` — cron-driven singletons
+- `packages/effect/src/cluster/SingleRunner.ts` — single-node sql-backed bundle
+- `packages/effect/src/cluster/TestRunner.ts` — in-memory testing bundle
+- `packages/effect/src/cluster/EntityProxy.ts` + `EntityProxyServer.ts` — entity ↔ RPC/HTTP bridge
+- `packages/effect/src/workflow/WorkflowProxy.ts` + `WorkflowProxyServer.ts` — workflow ↔ RPC/HTTP bridge
+- `packages/effect/src/cluster/ClusterWorkflowEngine.ts` — production workflow engine backed by sharding + storage
+- `packages/effect/src/reactivity/AtomRpc.ts` — reactive RPC client for Atom UIs (see also `effect-atom-rpc` skill)
 - `packages/platform/node/src/NodeClusterHttp.ts` / `NodeClusterSocket.ts` — Node "all-in-one" cluster layers
 - `packages/platform/bun/src/BunClusterHttp.ts` / `BunClusterSocket.ts` — Bun equivalents
 - `packages/platform/node/test/RpcServer.test.ts` + `test/fixtures/rpc-{schemas,e2e}.ts` — best end-to-end reference for real RPC wiring
@@ -55,8 +55,8 @@ import {
 	RpcServer,
 	RpcTest,
 	RpcWorker
-} from 'effect/unstable/rpc';
-import { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
+} from 'effect/rpc';
+import { RpcClientError } from 'effect/rpc/RpcClientError';
 
 // Cluster
 import {
@@ -77,7 +77,7 @@ import {
 	SqlMessageStorage,
 	SqlRunnerStorage,
 	TestRunner
-} from 'effect/unstable/cluster';
+} from 'effect/cluster';
 
 // Workflow (see effect-workflow skill for the full surface)
 import {
@@ -87,8 +87,8 @@ import {
 	Workflow,
 	WorkflowProxy,
 	WorkflowProxyServer
-} from 'effect/unstable/workflow';
-import { ClusterWorkflowEngine } from 'effect/unstable/cluster';
+} from 'effect/workflow';
+import { ClusterWorkflowEngine } from 'effect/cluster';
 
 // Platform "all-in-one" cluster bundles
 import { NodeClusterHttp, NodeClusterSocket } from '@effect/platform-node';
@@ -133,7 +133,7 @@ Two big invariants:
 
 ```ts
 import { Schema } from 'effect';
-import { Rpc } from 'effect/unstable/rpc';
+import { Rpc } from 'effect/rpc';
 
 // Style A — const value. Compact, fine for ad-hoc rpcs.
 export const Ping = Rpc.make('Ping', { success: Schema.String });
@@ -151,7 +151,9 @@ Both styles are official. The platform-node test fixtures and the cluster test f
 - `class extends` when the rpc is shared across many modules and the nominal type helps documentation/imports
 - `const` when you're listing a dozen rpcs in one file and the boilerplate hurts more than the nominal type helps
 
-> Note: this is **not** the same as `Workflow.make`, `Activity.make`, `Entity.make`, or `RpcGroup.make` — those all return plain values you assign with `const`. The class-extends pattern is unique to `Rpc.make` (and to `Schema.Class`-style constructors) because `Rpc` declares `new (_: never): {}` in its interface.
+`RpcGroup.make` and `Workflow.make` also support class-extends declarations;
+`Activity.make` and `Entity.make` use plain values. Prefer the convention already
+used by the shared contract package.
 
 ### `Rpc.make` options
 
@@ -273,7 +275,7 @@ Returns a `Schema.Exit<Success, Error, Defect>` for the rpc that includes any mi
 Rare but powerful: build a constructor that transforms every rpc's success/error schemas. Lets you encode a convention like "every list endpoint returns a paginated wrapper":
 
 ```ts
-import { Rpc } from 'effect/unstable/rpc';
+import { Rpc } from 'effect/rpc';
 import { Schema } from 'effect';
 
 interface PaginatedRpc extends Rpc.Custom {
@@ -434,8 +436,8 @@ Returns an `Effect<Context.Context<Rpc.ToHandler<R>>>` — the unprovided form o
 Returns an Effect that resolves to a single handler function with `services` already provided. The handler is callable as `(payload, options)` directly. This is the easiest way to unit-test one rpc handler in isolation:
 
 ```ts
-import { Headers } from 'effect/unstable/http';
-import { RequestId } from 'effect/unstable/rpc/RpcMessage';
+import { Headers } from 'effect/http';
+import { RequestId } from 'effect/rpc/RpcMessage';
 
 const result =
 	yield*
@@ -462,7 +464,7 @@ Requires a `Protocol` in context (one of the `RpcServer.layerProtocol*`), the ha
 
 ```ts
 import { Layer } from 'effect';
-import { HttpRouter } from 'effect/unstable/http';
+import { HttpRouter } from 'effect/http';
 
 const ServerLayer = RpcServer.layer(UsersGroup, {
 	concurrency: 'unbounded', // default; set a number to backpressure handlers
@@ -473,10 +475,16 @@ const ServerLayer = RpcServer.layer(UsersGroup, {
 }).pipe(
 	Layer.provide(UsersLive), // handlers
 	Layer.provide(RpcServer.layerProtocolHttp({ path: '/rpc' })),
-	Layer.provide(RpcSerialization.layerNdjson),
-	Layer.provide(HttpRouter.layer)
+	Layer.provide(RpcSerialization.layerNdjson)
 );
 ```
+
+Pass `ServerLayer` to `HttpRouter.serve`, `toWebHandler`, or `toHttpEffect` with
+its router requirement intact. `serve` and `toHttpEffect` build a fresh router in
+a forked memo map; `toWebHandler` builds separately by default but passes an
+explicit `memoMap` through unchanged. Pre-providing `HttpRouter.layer` would register on a different router.
+Layers first built inside the entrypoint are private. Provide stateful services
+shared by sibling servers outside those entrypoints.
 
 Server options:
 
@@ -498,8 +506,7 @@ const ServerLayer = RpcServer.layerHttp({
 	streamBufferSize: 16 // framed HTTP response queue; default 16
 }).pipe(
 	Layer.provide(UsersLive),
-	Layer.provide(RpcSerialization.layerNdjson),
-	Layer.provide(HttpRouter.layer)
+	Layer.provide(RpcSerialization.layerNdjson)
 );
 ```
 
@@ -618,7 +625,7 @@ messages additionally have their documented storage/delivery outcomes.
 For one-off headers, use the per-call `headers` option. For region-scoped headers, use `RpcClient.withHeaders` (which updates the `RpcClient.CurrentHeaders` Reference):
 
 ```ts
-import { RpcClient } from 'effect/unstable/rpc';
+import { RpcClient } from 'effect/rpc';
 
 yield* program.pipe(
 	RpcClient.withHeaders({ authorization: `Bearer ${token}`, userid: '123' })
@@ -673,6 +680,11 @@ Pattern-match on `error.reason._tag` to handle transport faults (network down, m
 | `RpcClient.layerProtocolSocket({ retryTransientErrors?, onTransientError? })` | `RpcSerialization`, `Socket.Socket` | full duplex. Auto-pings every 5s; reconnects on transient socket errors; reports retried open failures through `onTransientError` |
 | `RpcClient.layerProtocolWorker(options)` | `Worker.WorkerPlatform`, `Worker.Spawner` | pool of worker-backed clients. Options: either `{ size, concurrency?, targetUtilization? }` or `{ minSize, maxSize, timeToLive, concurrency?, targetUtilization? }` |
 
+A missed pong is a `SocketReadError`, fails all in-flight calls, and triggers
+reconnection even with `retryTransientErrors: true`. It does not invoke
+`onTransientError`; that hook applies to retried connection-open failures.
+Reconnection does not replay failed calls. Retry only idempotent calls explicitly.
+
 For each there's a corresponding `make*` Effect (`makeProtocolHttp`, `makeProtocolSocket`, `makeProtocolWorker`) when you need finer control over context.
 
 ### `RpcClient.ConnectionHooks`
@@ -694,7 +706,7 @@ not a Cause; use `onExit` to distinguish client cancel from server shutdown:
 
 <!-- typecheck -->
 ```ts
-import { RpcSchema } from 'effect/unstable/rpc';
+import { RpcSchema } from 'effect/rpc';
 import { Cause, Effect, Exit, Stream } from 'effect';
 import * as Arr from 'effect/Array';
 
@@ -713,7 +725,7 @@ const subscribeHandler = stream.pipe(Stream.runDrain,
 `RpcMiddleware.Service<Self, Config>()(name, options)` defines a middleware service. The config positionally encodes what the middleware *provides*, *requires*, and what *client-only* error type it can throw. The options carry the wire-error schema and the `requiredForClient` enforcement flag.
 
 ```ts
-import { RpcMiddleware } from 'effect/unstable/rpc';
+import { RpcMiddleware } from 'effect/rpc';
 import { Context, Schema } from 'effect';
 
 class CurrentUser extends Context.Service<CurrentUser, User>()('CurrentUser') {}
@@ -766,7 +778,7 @@ Middleware can chain `requires` and `provides` — `DbMiddleware extends RpcMidd
 For middleware that needs to *also* run client-side (most commonly: attach an auth header), provide a `layerClient`:
 
 ```ts
-import { Headers } from 'effect/unstable/http';
+import { Headers } from 'effect/http';
 
 export const AuthClient = RpcMiddleware.layerClient(
 	AuthMiddleware,
@@ -780,7 +792,7 @@ export const AuthClient = RpcMiddleware.layerClient(
 
 Important details:
 
-- `request.headers` is `Headers.Headers` (already parsed). Use the helpers from `effect/unstable/http/Headers` (`Headers.set`, `Headers.merge`, `Headers.fromInput`).
+- `request.headers` is `Headers.Headers` (already parsed). Use the helpers from `effect/http/Headers` (`Headers.set`, `Headers.merge`, `Headers.fromInput`).
 - You **must** call `next(request)` (with the modified or original request) — the middleware's job is to wrap the send, not replace it.
 - The Layer signature is `Layer<ForClient<AuthMiddleware>>` — it's a distinct service from the server-side middleware, and providing both is the norm for client packages.
 
@@ -810,7 +822,7 @@ same defect fallback that storage records.
 
 Picking the wrong one is a real bug:
 
-- `layerJson` over a websocket → no framing → the first chunk past the first message is misinterpreted
+- `layerJson` over raw TCP → no framing → message boundaries cannot be recovered; WebSocket frames whole messages and supports plain JSON
 - SchemaBinary against a JSON-only HTTP client → incompatible responses
 - `layerNdjson` against `layerProtocolHttp` → streams incrementally through a bounded response queue (default 16), without RPC acks
 
@@ -820,7 +832,7 @@ In-process server+client wired together, no network. The simplest possible RPC t
 
 ```ts
 import { Effect, Layer } from 'effect';
-import { RpcTest } from 'effect/unstable/rpc';
+import { RpcTest } from 'effect/rpc';
 import { it } from '@effect/vitest';
 
 const TestClient = Layer.effect(UsersClient)(
@@ -843,7 +855,7 @@ For worker-backed clients, you can pass typed initial config at spawn time witho
 
 ```ts
 // On the worker (server side):
-import { RpcWorker } from 'effect/unstable/rpc';
+import { RpcWorker } from 'effect/rpc';
 
 class WorkerConfig extends Schema.Class<WorkerConfig>('WorkerConfig')({
 	apiUrl: Schema.String,
@@ -875,8 +887,8 @@ Cluster turns rpcs into **addressable, distributed actors** (`Entity`). Messages
 
 ```ts
 import { Schema } from 'effect';
-import { ClusterSchema, Entity } from 'effect/unstable/cluster';
-import { Rpc } from 'effect/unstable/rpc';
+import { ClusterSchema, Entity } from 'effect/cluster';
+import { Rpc } from 'effect/rpc';
 
 export class Increment extends Rpc.make('Increment', {
 	payload: { amount: Schema.Number },
@@ -958,7 +970,7 @@ export const CounterLive = Counter.toLayer(
 Entity handlers can pull two services from context:
 
 ```ts
-import { Entity } from 'effect/unstable/cluster';
+import { Entity } from 'effect/cluster';
 
 Counter.toLayer(Effect.gen(function*() {
 	return Counter.of({
@@ -1108,7 +1120,7 @@ In-process entity testing without a real cluster. Returns `(entityId) => Effect<
 
 ```ts
 import { Effect } from 'effect';
-import { Entity, ShardingConfig } from 'effect/unstable/cluster';
+import { Entity, ShardingConfig } from 'effect/cluster';
 import { it } from '@effect/vitest';
 
 const TestShardingConfig = ShardingConfig.layer({
@@ -1132,7 +1144,7 @@ Required context: `Scope | ShardingConfig | Rpc.MiddlewareClient<Rpcs> | (handle
 A `Singleton` is an effect that runs *exactly once across the cluster*. The shard manager elects a single runner to host it; if that runner dies, another one takes over. Distinct from `ClusterCron` — the latter is built on top of singletons + entities.
 
 ```ts
-import { Singleton } from 'effect/unstable/cluster';
+import { Singleton } from 'effect/cluster';
 
 const LeaderElection = Singleton.make(
 	'leader-elector',
@@ -1154,7 +1166,7 @@ Cluster-singleton cron executions. The cron schedule is durable: missed runs (wi
 
 ```ts
 import { Cron, Effect } from 'effect';
-import { ClusterCron } from 'effect/unstable/cluster';
+import { ClusterCron } from 'effect/cluster';
 
 const DailyReport = ClusterCron.make({
 	name: 'DailyReport',
@@ -1178,7 +1190,7 @@ The schedule survives runner restarts because the next invocation is durably sto
 Inside any entity handler (or any effect running in the cluster), you can pull `Sharding.Sharding` for cluster-aware operations:
 
 ```ts
-import { Sharding } from 'effect/unstable/cluster';
+import { Sharding } from 'effect/cluster';
 
 const sharding = yield* Sharding.Sharding;
 
@@ -1197,7 +1209,7 @@ Three levels of convenience.
 ### Level 1: testing — `TestRunner.layer`
 
 ```ts
-import { TestRunner } from 'effect/unstable/cluster';
+import { TestRunner } from 'effect/cluster';
 
 const TestLayer = Layer.mergeAll(CounterLive, OrderLive).pipe(
 	Layer.provideMerge(TestRunner.layer)
@@ -1217,7 +1229,7 @@ expect(driver.journal[0].address.entityId).toBe('test-1');
 ### Level 2: single-node, sql-backed — `SingleRunner.layer`
 
 ```ts
-import { SingleRunner } from 'effect/unstable/cluster';
+import { SingleRunner } from 'effect/cluster';
 
 const ClusterLayer = SingleRunner.layer({
 	shardingConfig: { entityMaxIdleTime: '10 minutes' },
@@ -1296,7 +1308,7 @@ When the bundles aren't quite right, assemble from the primitives:
 `availableShardGroups` is **cluster-wide** and must be identical on every runner that shares the same storage backend — shard and advisory-lock numbering is derived from it. `assignedShardGroups` is per-runner and is filtered against `availableShardGroups`, so a runner only ever owns groups that appear in *both*. If your code routes entities or workflows to a non-`default` `ClusterSchema.ShardGroup`, that group must be in `availableShardGroups` everywhere and in `assignedShardGroups` on the runners meant to host it:
 
 ```ts
-import { ShardingConfig } from 'effect/unstable/cluster';
+import { ShardingConfig } from 'effect/cluster';
 
 const Config = ShardingConfig.layer({
 	availableShardGroups: ['default', 'workflow'], // cluster-wide; same on all runners
@@ -1321,6 +1333,32 @@ The storage poller reads at most `unprocessedMessageBatchSize` messages per batc
 
 The memory driver now uses the same ten-minute claim window as SQL. `resetAddress`/`resetAddresses` or `resetShards` makes claimed messages immediately eligible again, which prevents bounded reads from repeatedly selecting in-flight rows while still allowing explicit recovery.
 
+Both decoded and encoded storage services also require `resetRequests(ids)`:
+release those request claims without changing replies or processed state. This
+lets a reset workflow request be redelivered promptly when its prior completion
+is still deduplicated locally. Memory storage models claim expiry but not SQL
+reply filtering or transaction isolation; use SQL-backed tests for those rules.
+
+`clearReplies(requestId, { expectedReplyId? })` must compare the **latest** reply
+ID atomically at the storage boundary before clearing when an expected ID is
+provided. A mismatch is a successful no-op; without the option clearing is
+unconditional. `Sharding.reset(requestId, options?)` forwards that condition and
+returns `false` only when clearing fails, not on a comparison mismatch. Custom
+stores that ignore the condition allow stale workflow resumes to erase newer
+completed replies. Cluster workflows retry failed resets before acknowledging
+deferred completion.
+
+With message storage disabled, completed request IDs are not retained for
+deduplication. Redelivery runs the request again; design volatile handlers for
+that possibility rather than expecting `AlreadyProcessingMessage` forever.
+
+Local sends waiting on a missing entity type share the runner's
+`entityRegistrationTimeout` deadline with storage reads. They defect with
+`Entity type ... not registered` when it expires. The window is not renewed per
+send; dynamically registered types first contacted after that deadline fail
+immediately until registered. If registration never starts, the fallback window
+is two timeout intervals from the first missing type observed.
+
 For custom SQL composition, `SqlMessageStorage.makeEncoded({ prefix? })` returns the low-level `MessageStorage.Encoded` driver directly. `SqlMessageStorage.make`, `layer`, and `layerWith` remain the decoded service constructors.
 
 ## Bridges — exposing entities and workflows as RPC/HTTP
@@ -1330,9 +1368,9 @@ Both `Entity` and `Workflow` ship "proxy" helpers that auto-derive `RpcGroup`s a
 ### `EntityProxy` — entity → RPC / HTTP
 
 ```ts
-import { Entity, EntityProxy, EntityProxyServer } from 'effect/unstable/cluster';
-import { RpcServer } from 'effect/unstable/rpc';
-import { HttpApi, HttpApiBuilder } from 'effect/unstable/httpapi';
+import { Entity, EntityProxy, EntityProxyServer } from 'effect/cluster';
+import { RpcServer } from 'effect/rpc';
+import { HttpApi, HttpApiBuilder } from 'effect/http-api';
 
 const Counter = Entity.make('Counter', [Increment, GetCount])
 	.annotateRpcs(ClusterSchema.Persisted, true);
@@ -1378,8 +1416,8 @@ remotes rather than adding an independent retry loop.
 ### `WorkflowProxy` — workflow → RPC / HTTP
 
 ```ts
-import { Workflow, WorkflowProxy, WorkflowProxyServer } from 'effect/unstable/workflow';
-import { RpcServer } from 'effect/unstable/rpc';
+import { Workflow, WorkflowProxy, WorkflowProxyServer } from 'effect/workflow';
+import { RpcServer } from 'effect/rpc';
 
 const myWorkflows = [EmailWorkflow, OrderWorkflow] as const;
 
@@ -1410,8 +1448,8 @@ discards even that ID. Entity discard endpoints keep their separate contract.
 The in-memory `WorkflowEngine.layerMemory` is for testing only. For production, use `ClusterWorkflowEngine.layer`, which wires the workflow engine into the cluster's `Sharding` + `MessageStorage`:
 
 ```ts
-import { ClusterWorkflowEngine } from 'effect/unstable/cluster';
-import { Workflow } from 'effect/unstable/workflow';
+import { ClusterWorkflowEngine } from 'effect/cluster';
+import { Workflow } from 'effect/workflow';
 
 const WorkflowsLayer = Layer.mergeAll(
 	EmailWorkflowLayer,
@@ -1426,15 +1464,21 @@ const WorkflowsLayer = Layer.mergeAll(
 A workflow can be annotated with `ClusterSchema.ShardGroup`, exactly like an entity:
 
 ```ts
-import { ClusterSchema } from 'effect/unstable/cluster';
+import { ClusterSchema } from 'effect/cluster';
 
-const OrderWorkflow = Workflow.make({ /* ... */ })
+const OrderWorkflow = Workflow.make('OrderWorkflow', { /* ... */ })
 	.annotate(ClusterSchema.ShardGroup, () => 'workflow');
 ```
 
 `ClusterWorkflowEngine` reads that annotation when computing the workflow entity's address, so the workflow's entity messages, durable clock wake-ups, and registered durable-deferred completions all route through the owning workflow's shard group. Any non-`default` group must appear in `ShardingConfig.availableShardGroups` cluster-wide and in `assignedShardGroups` on the runners meant to host it (e.g. `['default', 'workflow']`), or those messages have nowhere to land.
 
 Workflow execution entities and the durable-clock entity use a fixed `10 seconds` idle timeout. Completed and suspended workflows therefore release runner residency slots quickly; their durable state is reconstructed from storage when the next resume, deferred completion, or clock message arrives. Do not use `Entity.keepAlive` to pin these internal workflow entities.
+
+Execution IDs now hash `"${name.length}:${name}:${idempotencyKey(payload)}"`.
+Recomputing IDs created under rc.116 yields new identities; retain stored IDs
+when operating on existing runs. Reusing a workflow tag with a different
+definition warns and retains the existing definition. See `effect-workflow` for
+the execution-identity and deferred-token boundaries.
 
 See the `effect-workflow` skill for the full `Workflow` / `Activity` / `DurableClock` / `DurableDeferred` / `DurableQueue` API surface.
 
@@ -1443,7 +1487,7 @@ See the `effect-workflow` skill for the full `Workflow` / `Activity` / `DurableC
 `AtomRpc.Service()(...)` produces an Atom-aware RPC client with `query` (cached, reactive) and `mutation` (invalidating) helpers, designed for React + Atom apps. See the `effect-atom-rpc` skill for the full surface; brief teaser:
 
 ```ts
-import { AtomRpc } from 'effect/unstable/reactivity';
+import { AtomRpc } from 'effect/reactivity';
 
 class UsersClient extends AtomRpc.Service<UsersClient>()('UsersClient', {
 	group: UsersGroup,
@@ -1473,7 +1517,7 @@ A small users service with auth middleware, websocket transport, and a test clie
 ```ts
 // --- definitions/users.ts (shared between server and client) ---
 import { Context, Schema } from 'effect';
-import { Rpc, RpcGroup, RpcMiddleware } from 'effect/unstable/rpc';
+import { Rpc, RpcGroup, RpcMiddleware } from 'effect/rpc';
 
 export class User extends Schema.Class<User>('User')({
 	id: Schema.String,
@@ -1516,8 +1560,8 @@ export const UsersGroup = RpcGroup.make(GetUser, StreamUsers).middleware(AuthMid
 ```ts
 // --- server/handlers.ts ---
 import { Effect, Layer, Stream } from 'effect';
-import { Headers } from 'effect/unstable/http';
-import { Rpc, RpcMiddleware } from 'effect/unstable/rpc';
+import { Headers } from 'effect/http';
+import { Rpc, RpcMiddleware } from 'effect/rpc';
 import { CurrentUser, UnauthorizedError, UsersGroup, User, UserNotFound } from '../definitions/users.ts';
 
 export const UsersHandlersLive = UsersGroup.toLayer(
@@ -1549,8 +1593,8 @@ export const AuthLive = Layer.succeed(AuthMiddleware)(
 // --- server/main.ts ---
 import { Layer } from 'effect';
 import { NodeHttpServer, NodeRuntime } from '@effect/platform-node';
-import { HttpRouter } from 'effect/unstable/http';
-import { RpcSerialization, RpcServer } from 'effect/unstable/rpc';
+import { HttpRouter } from 'effect/http';
+import { RpcSerialization, RpcServer } from 'effect/rpc';
 import { createServer } from 'node:http';
 
 const ServerLayer = RpcServer.layerHttp({
@@ -1573,9 +1617,9 @@ Layer.launch(HttpLayer).pipe(NodeRuntime.runMain);
 ```ts
 // --- client/users-client.ts ---
 import { Context, Effect, Layer } from 'effect';
-import { FetchHttpClient } from 'effect/unstable/http';
-import { RpcClient, RpcMiddleware, RpcSerialization } from 'effect/unstable/rpc';
-import { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
+import { FetchHttpClient } from 'effect/http';
+import { RpcClient, RpcMiddleware, RpcSerialization } from 'effect/rpc';
+import { RpcClientError } from 'effect/rpc/RpcClientError';
 
 const AuthClient = RpcMiddleware.layerClient(AuthMiddleware, ({ next, request }) =>
 	next({
@@ -1634,7 +1678,7 @@ const usersByName = Effect.gen(function*() {
 12. **Reading `Date.now()` inside an entity or workflow handler.** Use `Clock` (and inside workflows, `DateTime.now` works because the engine wraps activities). For durable timers, use `DurableClock.sleep`.
 13. **`yield* fiber` / `yield* deferred` / `yield* ref`.** Removed in v4. Use `Fiber.join`, `Deferred.await`, `Ref.get` explicitly.
 14. **Treating `maxResidentEntities` like mailbox capacity.** It is a runner-wide resident-entity cap. Persisted messages wait in storage at the cap; volatile sends to new addresses fail with `MailboxFull`.
-15. **Implementing the old encoded storage driver.** `MessageStorage.Encoded` now requires bounded/address-filtered `unprocessedMessages` and batched `resetAddresses`.
+15. **Implementing an incomplete encoded storage driver.** `MessageStorage.Encoded` requires bounded/address-filtered `unprocessedMessages`, batched `resetAddresses`, claim-only `resetRequests`, and atomic conditional `clearReplies` when `expectedReplyId` is supplied.
 
 ## Rules
 

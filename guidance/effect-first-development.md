@@ -2,9 +2,9 @@
 
 This document defines the working model behind Effect-first code using the Effect v4 ecosystem.
 
-Bundled baseline: **Effect 4.0.0-rc.116**. Check the consuming project's installed
+Bundled baseline: **Effect 4.0.0 (stable)**. Check the consuming project's installed
 version and inspect the matching upstream release tag before using newer APIs.
-The release changelog and migration audit are in `docs/effect-4.0.0-rc.116.md`.
+The release changelog and migration audit are in `docs/effect-4.0.0.md`.
 Source paths below are relative to the Effect source reference; locate symbols
 by name rather than relying on line numbers or a particular tool name.
 
@@ -141,12 +141,13 @@ export const decodeCreateTaskInput =
     - `import * as Eq from "effect/Equal"`
     - `import * as Bool from "effect/Boolean"`
 - Reserve root imports from `"effect"` for core combinators/types such as `Effect`, `Match`, `pipe`, and `flow`.
-- Keep unstable imports deliberate and local.
+- Import area modules from `effect/<area>` (for example `effect/http-api` and `effect/ai`). Keep APIs marked `@stability unstable` deliberate and local; they may break in minor releases. Use the same release version for `effect` and all directly used `@effect/*` packages.
 
 ### EF-5: Effect modules over native collection helpers
 
 - Use `Arr`, `R`, `Str`, `Eq`, `HashMap`, `HashSet`, `MutableHashMap`, `MutableHashSet`.
 - Sort with `Arr.sort(values, order)` and explicit `effect/Order` values (`Order.String`, `Order.Number`, `Order.mapInput`, etc.), never native array `.sort()`.
+- Partition/separate tuples put successes or predicate-passing values first: `[successes, failures]` / `[passes, fails]`. This applies to Array, Chunk, Effect, Record, Option's `partitionMap`, and Stream partitioning; do not assume a failures-first tuple.
 - Avoid domain usage of native `Object`, `Map`, `Set`, `Date`, and direct native string helpers.
 - Do not use imperative `for` / `for...of` loops in domain code. Use `Arr.map`, `Arr.filter`, `Arr.filterMap`, or `Arr.reduce` for pure transformations. For effectful iteration, use `Effect.forEach` (which also supports concurrency).
 - When behavior is unchanged, prefer the tersest helper form: direct helper refs over trivial wrapper lambdas, `flow(...)` over passthrough `pipe(...)` callbacks, and shared thunk helpers when already in scope.
@@ -561,7 +562,7 @@ const withConnection = <A, E, R>(
 - Keep retry policy close to the failing effect.
 - Retry only proven-idempotent operations at the narrowest boundary that can classify the failure.
 - Let exhausted failures remain visible unless the boundary has a truthful fallback.
-- Reference: `retry` in `packages/effect/src/Effect.ts` and the Schedule cookbook.
+- Reference: `retry` in `packages/effect/src/Effect.ts` and `ai-docs/src/06_schedule/10_schedules.ts` at the installed release tag.
 
 Example:
 
@@ -772,11 +773,12 @@ export class VersionSyncOptions extends Schema.Class<VersionSyncOptions>(
 
 - If a guard validates domain strings/paths/tags, define a branded schema and use `Schema.is(...)`.
 - If a domain constraint is named, reused, matched on, or structurally validated, model it as a schema first rather than a forest of ad-hoc predicate helpers.
-- Prefer built-in schema constructors/checks such as `Schema.NonEmptyString`, `Schema.NonEmptyArray`, `Schema.TupleWithRest`, `Schema.Union`, `Schema.isPattern`, and `Schema.isIncludes` before `Schema.makeFilter`.
+- Prefer built-in schema constructors/checks such as `Schema.NonEmptyString`, `Schema.NonEmptyArray`, `Schema.TupleWithRest`, `Schema.Union`, `Schema.isPattern`, and `Schema.isIncluding` before `Schema.makeFilter`.
 - Keep guard intent and reusable check intent in schema annotations and check metadata.
 - For internal literal domains, use `Schema.is(Schema.Literal(...))` for type guards, `Match` for exhaustive matching, and `Schema.Literal(...).annotate({...})` for annotated schema values.
 - Prefer named intermediate schemas; export and document them when reusable or when they materially clarify the module's domain model, otherwise keep them module-local.
 - Propagate branded schema types through the persistence layer (e.g., ORM column types: `text().$type<AccessToken>()`) to enforce compile-time safety across the entire stack and prevent parameter-swapping bugs.
+- `Schema.brand` is type-only and takes one concrete identifier; apply it repeatedly to compose brands. Put runtime invariants in checks. Brand identifiers are not stored in AST annotations or preserved by `SchemaRepresentation`; reapply brands after reconstruction when the TypeScript type is needed.
 
 Example:
 
@@ -790,7 +792,7 @@ import * as Str from 'effect/String';
 type TopicKind = 'plain' | 'scoped';
 
 const ContainsScopeSeparator = Schema.String.check(
-	Schema.isIncludes(':', {
+	Schema.isIncluding(':', {
 		identifier: 'ContainsScopeSeparatorCheck',
 		title: 'Contains Scope Separator',
 		description: 'A string that contains `:`.',

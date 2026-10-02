@@ -44,7 +44,7 @@ sorted = Arr.sort byNameThenAge
 
 -- Reverse
 descending :: [User] -> [User]
-descending = Arr.sort (Order.reverse byName)
+descending = Arr.sort (Order.flip byName)
 ```
 
 Native `.sort()` mutates the array in place and uses an untyped comparator. `Arr.sort` from `effect/Array` returns a new sorted array using a composable, typed `Order`.

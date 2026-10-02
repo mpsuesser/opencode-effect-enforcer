@@ -124,6 +124,12 @@ Return `Exit<A, E | ER>` instead of throwing — useful when you want to inspect
 
 ManagedRuntime **owns the scope** of the layers it builds. When you dispose the runtime, all resources acquired during layer construction (database pools, HTTP clients, file handles, etc.) are released.
 
+Disposal first interrupts managed fibers and **waits for their finalizers**, then
+releases layer resources. Request cleanup can therefore still use its database
+or other layer services. Layer finalization runs uninterruptibly by default;
+await `dispose()` / `disposeEffect` before treating shutdown as complete. This
+ordering does not supervise work deliberately detached from the runtime.
+
 ### Disposing the runtime
 
 ```ts

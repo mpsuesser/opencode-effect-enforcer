@@ -8,37 +8,39 @@ You are an Effect TypeScript expert specializing in type-safe SQL database acces
 ## Effect Source Reference
 
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
-Browse and read files there directly to look up APIs, types, and implementations.
+Inspect the `effect@4.0.0` tag for this skill; main may be newer. SQL APIs remain
+`@stability unstable` and may break in minor releases. Keep `effect` and all
+`@effect/sql-*` and platform dependencies on the same release.
 
 Reference this for:
 
-- `packages/effect/src/unstable/sql/` — Core SQL modules (SqlClient, SqlSchema, SqlModel, SqlResolver, Migrator, Statement)
-- `packages/effect/src/unstable/schema/Model.ts` — Model class with variant schemas
+- `packages/effect/src/sql/` — Core SQL modules (SqlClient, SqlSchema, SqlModel, SqlResolver, Migrator, Statement)
+- `packages/effect/src/schema/Model.ts` — Model class with variant schemas
 - `packages/sql/pg/src/PgClient.ts` — PostgreSQL driver example
 
 ## Core Imports
 
-All SQL modules live under the `effect/unstable/sql` path:
+All SQL modules live under the `effect/sql` path:
 
 ```ts
-import { SqlClient } from 'effect/unstable/sql/SqlClient';
-import * as SqlSchema from 'effect/unstable/sql/SqlSchema';
-import * as SqlModel from 'effect/unstable/sql/SqlModel';
-import * as SqlResolver from 'effect/unstable/sql/SqlResolver';
-import * as Migrator from 'effect/unstable/sql/Migrator';
+import { SqlClient } from 'effect/sql/SqlClient';
+import * as SqlSchema from 'effect/sql/SqlSchema';
+import * as SqlModel from 'effect/sql/SqlModel';
+import * as SqlResolver from 'effect/sql/SqlResolver';
+import * as Migrator from 'effect/sql/Migrator';
 ```
 
 Alternatively, the barrel exports namespace modules:
 
 ```ts
-import { SqlClient, SqlSchema, SqlModel, SqlResolver, Migrator } from 'effect/unstable/sql';
+import { SqlClient, SqlSchema, SqlModel, SqlResolver, Migrator } from 'effect/sql';
 // With the barrel, the service is SqlClient.SqlClient.
 ```
 
 For Model schemas (used with SqlModel):
 
 ```ts
-import { Model } from 'effect/unstable/schema';
+import { Model } from 'effect/schema';
 ```
 
 ## SqlClient — Tagged Template Queries
@@ -49,7 +51,7 @@ import { Model } from 'effect/unstable/schema';
 
 ```ts
 import { Effect } from 'effect';
-import { SqlClient } from 'effect/unstable/sql/SqlClient';
+import { SqlClient } from 'effect/sql/SqlClient';
 
 const program = Effect.gen(function* () {
 	const sql = yield* SqlClient;
@@ -157,7 +159,28 @@ yield*
 
 Transaction context is attached to the active `SqlClient` service instance. Queries join a transaction only when they run with that same client; avoid mixing clients or manually reserved connections for one atomic unit of work.
 
-A failed top-level `BEGIN` or nested `SAVEPOINT` is propagated as a typed `SqlError`; the wrapped effect does not run, and no rollback is attempted for the transaction or savepoint that never started. If a nested `SAVEPOINT` failure escapes the outer transaction body, the already-started outer transaction rolls back. Because the failure is typed, outer code may catch it and continue the transaction instead. Commit and rollback command failures are treated as defects.
+A failed top-level `BEGIN` or nested `SAVEPOINT` is propagated as a typed `SqlError`; the wrapped effect does not run, and no rollback is attempted for the transaction or savepoint that never started. If a nested `SAVEPOINT` failure escapes the outer transaction body, the already-started outer transaction rolls back. Catching this typed failure does not repair the database transaction state: continue only if the driver/database still permits it. Commit and rollback command failures are treated as defects.
+
+Nested savepoints are released after success or successful rollback by PostgreSQL,
+PGlite, MySQL, libSQL, and Node/Bun/React Native/WASM SQLite drivers. A release
+failure is also a defect. Custom clients opt in with
+`SqlClient.make({ releaseSavepoint: (name) => ... })`; omitting it leaves the
+previous behavior, suitable for dialects such as MSSQL without release support.
+
+`commit` accepts either SQL text or `(connection) => Effect<void, SqlError>` so
+drivers can inspect completion, while `onCommitFailure` performs cleanup on the
+same connection before release. Failed commit/cleanup still surface as defects,
+not a successful transaction result. SQLite drivers roll back transactions left
+open by failed COMMIT (for example deferred foreign-key violations). A failed
+cleanup prevents reuse until a subsequent acquisition successfully retries that
+rollback; the database is not silently reopened.
+
+PostgreSQL can return a `ROLLBACK` command result for `COMMIT` after a caught
+statement error aborted the transaction. `PgClient` detects this and fails the
+transaction with a `SqlError` defect (`UnknownError`, operation `commit`). Catching
+a statement failure in application code does not restore PostgreSQL transaction
+state. Use a nested transaction/savepoint around a recoverable operation when the
+outer transaction must continue.
 
 ### Dialect Branching
 
@@ -188,8 +211,8 @@ sql.onDialect({
 
 ```ts
 import { Schema } from 'effect';
-import { SqlClient } from 'effect/unstable/sql/SqlClient';
-import * as SqlSchema from 'effect/unstable/sql/SqlSchema';
+import { SqlClient } from 'effect/sql/SqlClient';
+import * as SqlSchema from 'effect/sql/SqlSchema';
 
 const sql = yield* SqlClient;
 
@@ -238,7 +261,7 @@ The `Model` module provides a schema class system with built-in variants for dat
 
 ```ts
 import { Schema } from 'effect';
-import { Model } from 'effect/unstable/schema';
+import { Model } from 'effect/schema';
 
 const UserId = Schema.Number.pipe(Schema.brand('UserId'));
 
@@ -294,7 +317,7 @@ Use `GeneratedByDb` only for fields that are truly read-only after selection, su
 `SqlModel.makeRepository` generates a complete CRUD interface from a Model class.
 
 ```ts
-import * as SqlModel from 'effect/unstable/sql/SqlModel';
+import * as SqlModel from 'effect/sql/SqlModel';
 
 const UserRepo =
 	yield*
@@ -330,8 +353,8 @@ yield* UserRepo.delete(userId);
 
 ```ts
 import { RequestResolver } from 'effect';
-import * as SqlModel from 'effect/unstable/sql/SqlModel';
-import * as SqlResolver from 'effect/unstable/sql/SqlResolver';
+import * as SqlModel from 'effect/sql/SqlModel';
+import * as SqlResolver from 'effect/sql/SqlResolver';
 
 const UserResolvers =
 	yield*
@@ -393,7 +416,7 @@ Resolver versions created by `SqlModel.makeResolvers` honor the same soft-delete
 Results map 1:1 to requests by position. Result count must match request count.
 
 ```ts
-import * as SqlResolver from 'effect/unstable/sql/SqlResolver';
+import * as SqlResolver from 'effect/sql/SqlResolver';
 
 const insertResolver = SqlResolver.ordered({
 	Request: User.insert,
@@ -476,7 +499,7 @@ Each migration file exports a default Effect:
 ```ts
 // migrations/0001_create_users.ts
 import { Effect } from 'effect';
-import { SqlClient } from 'effect/unstable/sql/SqlClient';
+import { SqlClient } from 'effect/sql/SqlClient';
 
 export default Effect.gen(function* () {
 	const sql = yield* SqlClient;
@@ -494,7 +517,7 @@ export default Effect.gen(function* () {
 ### Running Migrations
 
 ```ts
-import * as Migrator from 'effect/unstable/sql/Migrator';
+import * as Migrator from 'effect/sql/Migrator';
 
 // Create a migrator (optionally with schema dump support)
 const migrate = Migrator.make({
@@ -542,7 +565,7 @@ Migrator.fromBabelGlob(migrations);
 ### Migration Errors
 
 ```ts
-import * as Migrator from 'effect/unstable/sql/Migrator';
+import * as Migrator from 'effect/sql/Migrator';
 
 // MigrationError has a `kind` discriminator:
 // - "BadState"    — migrations table in unexpected state
@@ -563,7 +586,7 @@ Effect SQL uses driver-specific packages that provide `SqlClient` layers.
 | `@effect/sql-pg`          | PostgreSQL (native Effect protocol client) |
 | `@effect/sql-pglite`      | Embedded PostgreSQL/PGlite           |
 | `@effect/sql-mysql2`      | MySQL (via `mysql2`)                 |
-| `@effect/sql-sqlite-node` | SQLite (via `better-sqlite3`)        |
+| `@effect/sql-sqlite-node` | SQLite (`node:sqlite`; Node 22.16+)  |
 | `@effect/sql-libsql`      | libSQL / Turso                       |
 | `@effect/sql-mssql`       | Microsoft SQL Server                 |
 | `@effect/sql-clickhouse`  | ClickHouse                           |
@@ -573,7 +596,7 @@ Effect SQL uses driver-specific packages that provide `SqlClient` layers.
 ```ts
 import { Effect, Layer } from 'effect';
 import { PgClient } from '@effect/sql-pg';
-import { SqlClient } from 'effect/unstable/sql/SqlClient';
+import { SqlClient } from 'effect/sql/SqlClient';
 
 // Static config
 const DatabaseLayer = PgClient.layer({
@@ -615,13 +638,24 @@ Bind JSON explicitly with `sql.json`, and send one statement per query string.
 Named preparation is enabled by default; set `prepare: false` for incompatible
 poolers, or use statement-level `unprepared` / `valuesUnprepared`.
 
+Prepared names are namespaced per physical connection to avoid collisions when
+backend sessions are shared. This does not replace checking your pooler's support
+for named prepared statements. Pools retire fatal sessions before the next borrow
+and retire sessions with an unconfirmed `CancelRequest`, including cancellation
+while idle, so a delayed cancel cannot hit a later checkout. The current checkout
+and unpooled sessions can still encounter their own late cancellation. Failed
+background pool acquisitions are retried on borrow; callers already waiting on
+their own failed acquisition receive that failure.
+
 Decode rows according to the actual driver boundary: `int8` is `bigint`, `date`
 is a string, timestamps are `Date` (millisecond precision), and `bytea` is
 `Uint8Array`. Infinite/out-of-range timestamps decode to invalid Dates; validate
 before constructing domain instants. Timestamp encoders accept Date or epoch
 milliseconds; invalid Date encoding fails. A Date binds as `timestamptz`, so use
 UTC session time or `PgTypes.timestamp(value)` for UTC fields in a timestamp column.
-`executeRaw` returns `PgConnection.Result`.
+`executeRaw` returns `PgConnection.Result`. Binary `regclass` and `regclass[]`
+decode as unsigned numeric OIDs; cast to `text` in SQL when relation names are
+required.
 
 Unregistered OIDs decode as UTF-8 text, suitable for scalar enum labels but not
 arbitrary binary types. Register custom scalar/array codecs through
@@ -684,8 +718,8 @@ Use `@effect/sql-pglite` for embedded PostgreSQL-compatible databases backed by 
 ```ts
 import { Config, Effect } from 'effect';
 import { PgliteClient, PgliteMigrator } from '@effect/sql-pglite';
-import * as Migrator from 'effect/unstable/sql/Migrator';
-import { SqlClient } from 'effect/unstable/sql/SqlClient';
+import * as Migrator from 'effect/sql/Migrator';
+import { SqlClient } from 'effect/sql/SqlClient';
 
 const PgliteLayer = PgliteClient.layer({
 	dataDir: 'idb://myapp'
@@ -750,7 +784,7 @@ yield*
 All SQL operations can fail with `SqlError`:
 
 ```ts
-import { SqlError } from 'effect/unstable/sql/SqlError';
+import { SqlError } from 'effect/sql/SqlError';
 
 yield*
 	sql`SELECT * FROM users`.pipe(
@@ -779,10 +813,10 @@ Keep non-unique integrity failures on their own paths; they remain `ConstraintEr
 
 ```ts
 import { Effect, Layer, Schema } from 'effect';
-import { Model } from 'effect/unstable/schema';
-import { SqlClient } from 'effect/unstable/sql/SqlClient';
-import * as SqlModel from 'effect/unstable/sql/SqlModel';
-import * as Migrator from 'effect/unstable/sql/Migrator';
+import { Model } from 'effect/schema';
+import { SqlClient } from 'effect/sql/SqlClient';
+import * as SqlModel from 'effect/sql/SqlModel';
+import * as Migrator from 'effect/sql/Migrator';
 import { PgClient } from '@effect/sql-pg';
 
 // 1. Define Model

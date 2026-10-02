@@ -10,8 +10,8 @@ testPattern({
     `const platform = await import("@effect/platform-node/NodeServices")`
   ],
   shouldNotMatch: [
-    `import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner"`,
+    `import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"`,
     `import * as FileSystem from "effect/FileSystem"`,
-    `import * as HttpClient from "effect/unstable/http/HttpClient"`
+    `import * as HttpClient from "effect/http/HttpClient"`
   ]
 })

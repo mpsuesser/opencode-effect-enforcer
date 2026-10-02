@@ -89,9 +89,36 @@ const host = Config.String('HOST').pipe(
 );
 ```
 
+The fallback result replaces the original failure. If the fallback is absent,
+an outer `withDefault` or `option` can recover it even when the primary input
+was invalid. If the fallback fails, its error propagates. `Config.fail(error)`
+has type `Config<never>` and does not widen a composed result to `unknown`.
+
+### `Config.flatMap` — Select a Dependent Config
+
+Use `map` for a pure value transformation, `mapEffect` for a transformation that
+may fail with `ConfigError`, and `flatMap` when the parsed value selects another
+`Config`. The selected config uses the same provider and nesting prefix; the
+callback runs only after successful resolution of the first config.
+
+<!-- typecheck -->
+```ts
+import { Config, ConfigProvider } from 'effect';
+
+const host = Config.Literals(['development', 'production'], 'MODE').pipe(
+	Config.flatMap((mode) => Config.NonEmptyString(
+		mode === 'development' ? 'DEV_HOST' : 'PROD_HOST'
+	)),
+	Config.nested('APP')
+);
+const parsed = host.parse(ConfigProvider.fromUnknown({
+	APP: { MODE: 'production', PROD_HOST: 'api.example.com' }
+}));
+```
+
 ### `Config.all` — Combine Multiple Configs
 
-Accepts a record or a tuple:
+Accepts a record, tuple, or iterable of configs:
 
 ```ts
 // As a record
@@ -103,6 +130,28 @@ const appConfig = Config.all({
 
 // As a tuple
 const pair = Config.all([Config.String('a'), Config.Int('b')]);
+```
+
+A group is absent when any child is absent and no child fails, even if other
+children have supplied values. `Config.option(group)` then returns `None`;
+`Config.withDefault(group, fallback)` replaces the **whole group**. Put defaults
+on individual children to retain supplied siblings. Validation and source
+errors still propagate. Use `Config.schema(Schema.Struct(...))` when an existing
+but incomplete object must fail validation rather than default.
+
+<!-- typecheck -->
+```ts
+import { Config, ConfigProvider, Effect } from 'effect';
+
+const group = Config.all({
+	host: Config.String('HOST'),
+	port: Config.Int('PORT')
+}).pipe(Config.withDefault({ host: 'localhost', port: 3000 }));
+
+const result = Effect.runSync(group.parse(
+	ConfigProvider.fromUnknown({ HOST: 'supplied.example.com' })
+));
+// { host: 'localhost', port: 3000 } — the supplied host is replaced too.
 ```
 
 ### `Config.nested` — Scope Under a Prefix
@@ -346,7 +395,9 @@ const defaults = ConfigProvider.fromUnknown({
 const combined = ConfigProvider.orElse(envProvider, defaults);
 ```
 
-At the `Config` level, `Config.orElse` preserves evidence that the primary branch read provider input. Consequently, an outer `Config.withDefault` or `Config.option` does not hide a partially supplied `Config.all` group.
+At the `Config` level, `Config.orElse` handles missing data and all `ConfigError`s;
+its fallback determines whether an outer default or option can recover. Provider
+fallback only chooses a source and does not perform that error recovery.
 
 ### `ConfigProvider.nested` — Prefix All Lookups
 

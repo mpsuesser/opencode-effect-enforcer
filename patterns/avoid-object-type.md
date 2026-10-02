@@ -39,8 +39,8 @@ good :: User → Effect ()
 good user = doSomething user      -- clear structure, IDE support
 
 -- For unknown shapes
-decode :: Unknown → Either ParseError User
-decode = Schema.decode userSchema
+decode :: Unknown → Effect User SchemaError
+decode = Schema.decodeUnknownEffect User
 ```
 
 `Object` and `{}` provide no type safety—they accept any non-null value. Use explicit types, `Record<K,V>`, `unknown`, or Schema for validation.

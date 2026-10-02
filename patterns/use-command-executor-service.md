@@ -35,7 +35,7 @@ ChildProcessSpawner :: Effect a ChildProcessSpawner  -- typed I/O, scoped lifeti
 ```
 
 ```haskell
--- Pattern (Effect v4 — effect/unstable/process)
+-- Pattern (Effect v4 — effect/process)
 bad :: () → IO String
 bad = exec "git" ["status"] (cb)              -- callback, untyped, no cancellation
 
@@ -46,7 +46,7 @@ good = do
   -- typed output, error channel, scoped lifetime
 ```
 
-Direct `child_process` imports give you callback APIs, manual lifecycle, and no error channel. Use `ChildProcessSpawner` and `ChildProcess` from `effect/unstable/process` for typed errors, scoped resource lifetime, and platform-agnostic process spawning.
+Direct `child_process` imports give you callback APIs, manual lifecycle, and no error channel. Use `ChildProcessSpawner` and `ChildProcess` from `effect/process` for typed errors, scoped resource lifetime, and platform-agnostic process spawning.
 
 **Exceptions:**
 

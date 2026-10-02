@@ -7,8 +7,9 @@ import { expect, it } from "vitest"
 // Their paths remain beside the Markdown so normal package resolution applies.
 const root = resolve(import.meta.dirname, "..")
 const markedBlock = /<!-- typecheck -->\s*```(?:ts|typescript)\r?\n([\s\S]*?)\r?\n```/g
+const typescriptBlock = /```(ts|typescript|tsx)\r?\n([\s\S]*?)\r?\n```/g
 
-it("typechecks marked documentation examples against the installed Effect release", async () => {
+it("checks all Effect imports and marked examples against the installed release", async () => {
   const documents = await Promise.all(
     ["skills", "guidance", "patterns"].map(async (directory) => {
       const base = resolve(root, directory)
@@ -17,6 +18,8 @@ it("typechecks marked documentation examples against the installed Effect releas
     })
   )
   const modules = new Map<string, ts.SourceFile>()
+  const markedModules = new Set<string>()
+  const importModules = new Set<string>()
   await Promise.all(
     documents.flat().map(async (path) => {
       const markdown = await readFile(path, "utf8")
@@ -29,11 +32,43 @@ it("typechecks marked documentation examples against the installed Effect releas
         const line = markdown.slice(0, match.index).split("\n").length
         const filename = `${path}.line-${line}.ts`
         modules.set(filename, ts.createSourceFile(filename, code, ts.ScriptTarget.ESNext, true))
+        markedModules.add(filename)
+      }
+      // Fragments need not be runnable to check their real package entrypoints
+      // and named exports. Isolate each import to avoid alias collisions between
+      // illustrative snippets; companion packages are reviewed against tagged source.
+      for (const match of markdown.matchAll(typescriptBlock)) {
+        const code = match[2]
+        if (code === undefined) continue
+        const fragment = ts.createSourceFile(
+          path,
+          code,
+          ts.ScriptTarget.ESNext,
+          true,
+          match[1] === "tsx" ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+        )
+        for (const statement of fragment.statements) {
+          if (
+            !ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)
+          ) {
+            continue
+          }
+          const specifier = statement.moduleSpecifier.text
+          if (specifier !== "effect" && !specifier.startsWith("effect/")) continue
+          const line = markdown.slice(0, match.index).split("\n").length
+          const filename = `${path}.import-${line}-${statement.pos}.ts`
+          modules.set(
+            filename,
+            ts.createSourceFile(filename, statement.getText(fragment), ts.ScriptTarget.ESNext, true)
+          )
+          importModules.add(filename)
+        }
       }
     })
   )
 
-  expect(modules.size).toBeGreaterThanOrEqual(5)
+  expect(markedModules.size).toBeGreaterThanOrEqual(5)
+  expect(importModules.size).toBeGreaterThan(100)
   const options: ts.CompilerOptions = {
     noEmit: true,
     strict: true,

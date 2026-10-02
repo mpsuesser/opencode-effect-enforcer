@@ -3,25 +3,25 @@ name: effect-rpc-server
 description: Serve RpcGroup contracts with Effect's RpcServer — handler layers (RpcGroup.toLayer/toLayerHandler), protocol layers (HTTP, WebSocket, TCP, stdio, worker), RpcSerialization, server middleware, streaming results, interruption and shutdown semantics, RpcTest. Use when implementing the server side of an Effect RPC API, mounting RPC on an HttpRouter or existing HTTP app, choosing a wire format, implementing RpcMiddleware, handling client aborts, or testing RPC handlers.
 ---
 
-You are an Effect TypeScript expert specializing in serving RPC groups with `RpcServer` from `effect/unstable/rpc`.
+You are an Effect TypeScript expert specializing in serving RPC groups with `RpcServer` from `effect/rpc`.
 
-Everything ships from the `effect` package under `effect/unstable/rpc` — there is no `@effect/rpc` package in v4. This skill covers the **server side**: implementing handlers, transports, serialization, middleware, and lifecycle. For defining `Rpc`/`RpcGroup` contracts see the `effect-rpc-api` skill; for building clients see the `effect-rpc-client` skill; for cluster entities see the `effect-rpc-cluster` skill; for `HttpRouter`/`HttpServer` fundamentals see the `effect-http-server` skill.
+Everything ships from the `effect` package under `effect/rpc` — there is no `@effect/rpc` package in v4. This skill covers the **server side**: implementing handlers, transports, serialization, middleware, and lifecycle. For defining `Rpc`/`RpcGroup` contracts see the `effect-rpc-api` skill; for building clients see the `effect-rpc-client` skill; for cluster entities see the `effect-rpc-cluster` skill; for `HttpRouter`/`HttpServer` fundamentals see the `effect-http-server` skill.
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules change between betas.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read the `effect@4.0.0` tag for this skill; main may be newer. These APIs remain `@stability unstable` and may break in minor releases. Keep Effect-family packages on the same release.
 
 Key files:
 
-- `packages/effect/src/unstable/rpc/RpcServer.ts` — `make`, `makeNoSerialization`, `layer`, `layerHttp`, every `layerProtocol*` / `makeProtocol*`, `toHttpEffect*`, the `Protocol` service
-- `packages/effect/src/unstable/rpc/RpcGroup.ts` — `toLayer`, `toLayerHandler`, `toHandlers`, `accessHandler`, `of`, handler type derivation
-- `packages/effect/src/unstable/rpc/Rpc.ts` — `ServerClient`, `Handler`, `ToHandlerFn`, `ResultFrom`, `fork`, `uninterruptible`, `ServicesServer`
-- `packages/effect/src/unstable/rpc/RpcMiddleware.ts` — `Service` constructor, server middleware function shape, `layerClient`
-- `packages/effect/src/unstable/rpc/RpcSerialization.ts` — JSON, NDJSON, JSON-RPC, and SchemaBinary parsers and layers
-- `packages/effect/src/unstable/rpc/RpcMessage.ts` — the wire vocabulary (`Request`, `Ack`, `Interrupt`, `Eof`, `Chunk`, `Exit`, `Defect`, `ClientEnd`)
-- `packages/effect/src/unstable/rpc/RpcWorker.ts` — `InitialMessage` for worker transports
-- `packages/effect/src/unstable/rpc/RpcTest.ts` — in-process test client
-- `packages/effect/src/unstable/rpc/RpcSchema.ts` — `ClientAbort` cause annotation, stream schema markers
+- `packages/effect/src/rpc/RpcServer.ts` — `make`, `makeNoSerialization`, `layer`, `layerHttp`, every `layerProtocol*` / `makeProtocol*`, `toHttpEffect*`, the `Protocol` service
+- `packages/effect/src/rpc/RpcGroup.ts` — `toLayer`, `toLayerHandler`, `toHandlers`, `accessHandler`, `of`, handler type derivation
+- `packages/effect/src/rpc/Rpc.ts` — `ServerClient`, `Handler`, `ToHandlerFn`, `ResultFrom`, `fork`, `uninterruptible`, `ServicesServer`
+- `packages/effect/src/rpc/RpcMiddleware.ts` — `Service` constructor, server middleware function shape, `layerClient`
+- `packages/effect/src/rpc/RpcSerialization.ts` — JSON, NDJSON, JSON-RPC, and SchemaBinary parsers and layers
+- `packages/effect/src/rpc/RpcMessage.ts` — the wire vocabulary (`Request`, `Ack`, `Interrupt`, `Eof`, `Chunk`, `Exit`, `Defect`, `ClientEnd`)
+- `packages/effect/src/rpc/RpcWorker.ts` — `InitialMessage` for worker transports
+- `packages/effect/src/rpc/RpcTest.ts` — in-process test client
+- `packages/effect/src/rpc/RpcSchema.ts` — `ClientAbort` cause annotation, stream schema markers
 - `packages/platform/node/test/RpcServer.test.ts` + `test/fixtures/rpc-{schemas,e2e}.ts` — the best end-to-end reference for real wiring across http/ws/tcp transports and every serialization
 - `packages/platform/browser/test/fixtures/rpc-worker.ts` — minimal worker-side server entrypoint
 
@@ -60,7 +60,7 @@ Imports used throughout:
 
 ```ts
 import { Cause, Context, Deferred, Effect, Layer, Queue, Schema, Stream } from 'effect';
-import { Headers, HttpRouter } from 'effect/unstable/http';
+import { Headers, HttpRouter } from 'effect/http';
 import {
 	Rpc,
 	RpcGroup,
@@ -71,7 +71,7 @@ import {
 	RpcServer,
 	RpcTest,
 	RpcWorker
-} from 'effect/unstable/rpc';
+} from 'effect/rpc';
 ```
 
 Running example group (definition details belong to the `effect-rpc-api` skill):
@@ -255,6 +255,14 @@ const ServerLayer = RpcServer.layerHttp({
 
 The protocol layers register routes on `HttpRouter`; `HttpRouter.serve` provides the router and turns it into an HTTP app:
 
+Keep the protocol/server composition inside the app passed to `serve` (or
+`toWebHandler`/`toHttpEffect`). `serve` and `toHttpEffect` build a fresh router in a
+forked layer memo map; `toWebHandler` builds separately by default but uses any
+explicit `memoMap` as supplied. Do not pre-provide `HttpRouter.layer` to the RPC route layer;
+that registers on a router the entrypoint does not serve. If sibling servers need
+the same stateful handler dependencies, provide those services outside their
+entrypoints; layers first built inside an app are private to that app.
+
 ```ts
 import { createServer } from 'node:http';
 import { NodeHttpServer, NodeRuntime } from '@effect/platform-node';
@@ -267,6 +275,27 @@ NodeRuntime.runMain(Layer.launch(Main));
 ```
 
 See the `effect-http-server` skill for `HttpRouter.serve` options (middleware, `disableLogger`, `disableListenLog`) and adding sibling routes.
+
+The same route composition can be built without any platform dependency:
+
+<!-- typecheck -->
+```ts
+import { Effect, Layer } from 'effect';
+import * as Schema from 'effect/Schema';
+import { HttpRouter } from 'effect/http';
+import { Rpc, RpcGroup, RpcSerialization, RpcServer } from 'effect/rpc';
+
+const Pings = RpcGroup.make(Rpc.make('Ping', { success: Schema.String }));
+const Handlers = Pings.toLayer({ Ping: () => Effect.succeed('pong') });
+const Routes = RpcServer.layerHttp({
+	group: Pings,
+	path: '/rpc',
+	protocol: 'http'
+}).pipe(Layer.provide([Handlers, RpcSerialization.layerNdjson]));
+
+// Keep this construction scope alive while using the returned HTTP effect.
+const makeHttpEffect = HttpRouter.toHttpEffect(Routes);
+```
 
 ---
 
@@ -385,6 +414,12 @@ Rules, verified against the protocol implementations and the e2e matrix:
 - `RpcSerialization.layerJsonRpc()` / `layerNdJsonRpc()` speak JSON-RPC 2.0: rpc tags map to `method`, batched arrays are preserved, and internal signals travel as `@effect/rpc/Ack`-style methods. Use for interop with non-Effect JSON-RPC clients.
 
 Client and server must use the **same** serialization.
+
+NDJSON skips malformed lines so later frames still decode; JSON-RPC skips
+non-object messages and checks notification method types before interpreting
+internal messages. Continue validating procedure payloads through the contract.
+Custom encoded-interrupt consumers must allow `fiberId: null` as well as
+`undefined`, matching JSON-encoded `RpcMessage.ExitEncoded` values.
 
 ---
 
@@ -512,7 +547,7 @@ StreamUsers: Effect.fnUntraced(function* (payload) {
 Semantics, verified against `RpcServer.makeNoSerialization`:
 
 - The server batches available values into `Chunk` messages (`Stream.runForEachArray` / `Queue.takeAll`), so one message can carry many elements.
-- **Backpressure** exists only on ack-supporting transports (everything except plain HTTP): after writing a chunk the server waits for the client's `Ack` before pulling more. Over plain HTTP the producer is never throttled.
+- **RPC acknowledgment backpressure** exists on ack-supporting transports: after writing a chunk the server waits for the client's `Ack` before pulling more. Framed HTTP has no RPC acks but still backpressures producers through its bounded response queue (`streamBufferSize`, default 16).
 - **Ending**: a `Stream` ending ends the response; for the queue form call `Queue.end(queue)` — `Cause.Done` is the end-of-stream signal, and `Queue.end` only typechecks when the queue's error channel includes it, so create the queue as `Queue.bounded<User, Cause.Done>(16)`. The client then sees the stream complete with a final void `Exit`.
 - **Failures**: failing the stream with the rpc's declared error fails the client's stream with that typed error.
 - The client consumes the result as a `Stream` by default or a `Queue.Dequeue` with `{ asQueue: true }` — see the `effect-rpc-client` skill.
@@ -545,6 +580,7 @@ Never: () =>
 
 - **HTTP**: if the request's scope closes before responses finish (client went away), the protocol sends an `Interrupt` for every request id from that HTTP call.
 - **Sockets/WebSockets**: a closed connection is pushed to the protocol's `disconnects` queue; the server interrupts all of that client's in-flight fibers.
+- **HTTP WebSocket upgrades**: Node/Bun scope cleanup sends `1000` on success, `1001` for interruption-only exits, or `1011` on failure, preserving an explicit close code already sent. The HTTP request scope retains the handler failure through error-response handling and observation middleware.
 - An `Interrupt` for an unknown/finished request id is answered with `Exit.interrupt()` — interruption is idempotent.
 
 ### `Rpc.uninterruptible`
@@ -572,7 +608,7 @@ Worker entrypoint (browser shown; for Node use `NodeWorkerRunner.layer` from `@e
 // worker.ts
 import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { Effect, Layer } from 'effect';
-import { RpcServer } from 'effect/unstable/rpc';
+import { RpcServer } from 'effect/rpc';
 
 const MainLive = RpcServer.layer(UserRpcs).pipe(
 	Layer.provide(UsersLive),
@@ -609,7 +645,7 @@ Wires `RpcServer.makeNoSerialization` to a no-serialization client. Requests, st
 
 ```ts
 import { assert, it } from '@effect/vitest';
-import { RpcClient } from 'effect/unstable/rpc';
+import { RpcClient } from 'effect/rpc';
 
 class UsersClient extends Context.Service<
 	UsersClient,
@@ -684,8 +720,8 @@ The decoded core with no transport at all: you push `FromClient<Rpcs>` messages 
 import { createServer } from 'node:http';
 import { NodeHttpServer, NodeRuntime } from '@effect/platform-node';
 import { Effect, Layer } from 'effect';
-import { HttpRouter } from 'effect/unstable/http';
-import { RpcSerialization, RpcServer } from 'effect/unstable/rpc';
+import { HttpRouter } from 'effect/http';
+import { RpcSerialization, RpcServer } from 'effect/rpc';
 import { SecureRpcs } from '../domain/rpc.ts';
 
 const UsersLive = SecureRpcs.toLayer(
@@ -773,7 +809,7 @@ const ServerLayer = RpcServer.layer(StoreRpcs, { concurrency: 1 }).pipe(
 
 ## Common Mistakes
 
-1. **Importing from `@effect/rpc`.** v3 habit; the package does not exist in v4. Everything is `effect/unstable/rpc` (and platform layers come from `@effect/platform-node` / `-bun` / `-browser`).
+1. **Importing from `@effect/rpc`.** v3 habit; the package does not exist in v4. Everything is `effect/rpc` (and platform layers come from `@effect/platform-node` / `-bun` / `-browser`).
 2. **Forgetting `protocol: 'http'` on `layerHttp`.** The default is `'websocket'` — your `POST /rpc` curl returns 404 and only a `GET` upgrade route exists. Also note `layerHttp` takes `{ group, path, ... }` as one options bag, while `layer(group, options)` takes the group positionally.
 3. **Providing handlers/middleware but no `Protocol` or `RpcSerialization`.** `RpcServer.layer` requires all of: handler layer(s), middleware implementation layers, a `layerProtocol*`, and (for non-worker protocols) a `RpcSerialization.layer*`. Missing ones surface as unresolved layer requirements.
 4. **`layerJson` on a raw TCP socket server.** Sockets need `layerNdjson`, `layerNdJsonRpc()`, or `layerSchemaBinary()` for framing. WebSocket supplies its own framing and supports `layerJson`.

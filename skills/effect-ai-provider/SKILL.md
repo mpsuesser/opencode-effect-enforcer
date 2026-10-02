@@ -7,6 +7,11 @@ description: Configure and compose AI provider layers using @effect/ai packages.
 
 Configure AI provider layers for language model integration using Effect's AI ecosystem.
 
+Baseline: `effect@4.0.0`; inspect the matching tag in the Effect source reference.
+Keep `effect` and every `@effect/*` package on the same version. Core AI APIs and
+provider clients, models, and generated schemas carry `@stability unstable`:
+minor releases may include breaking changes, even with `effect/ai` import paths.
+
 ## When to Use This Skill
 
 Use this skill when:
@@ -34,7 +39,7 @@ import {
 	Stream
 } from 'effect';
 
-// From "effect/unstable/ai" — namespace imports
+// From "effect/ai" — namespace imports
 import {
 	AiError,
 	Chat,
@@ -43,13 +48,13 @@ import {
 	Prompt,
 	Tool,
 	Toolkit
-} from 'effect/unstable/ai';
+} from 'effect/ai';
 // Or individually:
-import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
-import * as Chat from 'effect/unstable/ai/Chat';
-import * as Model from 'effect/unstable/ai/Model';
-import * as Prompt from 'effect/unstable/ai/Prompt';
-import * as AiError from 'effect/unstable/ai/AiError';
+import * as LanguageModel from 'effect/ai/LanguageModel';
+import * as Chat from 'effect/ai/Chat';
+import * as Model from 'effect/ai/Model';
+import * as Prompt from 'effect/ai/Prompt';
+import * as AiError from 'effect/ai/AiError';
 
 // Anthropic
 import { AnthropicClient, AnthropicLanguageModel } from '@effect/ai-anthropic';
@@ -70,7 +75,7 @@ import {
 } from '@effect/ai-openrouter';
 
 // HTTP client (required by all providers)
-import { FetchHttpClient } from 'effect/unstable/http';
+import { FetchHttpClient } from 'effect/http';
 ```
 
 ## Provider Layer Pattern
@@ -96,7 +101,7 @@ ProviderClient.layerConfig :: { apiKey } → Layer Client HttpClient
 ```typescript
 import { AnthropicClient, AnthropicLanguageModel } from '@effect/ai-anthropic';
 import { Config, Layer } from 'effect';
-import { FetchHttpClient } from 'effect/unstable/http';
+import { FetchHttpClient } from 'effect/http';
 
 // Client layer (reusable across models)
 const AnthropicClientLayer = AnthropicClient.layerConfig({
@@ -115,6 +120,12 @@ const AnthropicLive = AnthropicLanguageModel.layer({
 
 Anthropic capability detection preserves the lower output limits and structured-output support of known legacy Claude models. Unknown and newly released model identifiers default to modern capabilities: native structured outputs and `128_000` output tokens. Override capability detection with `structuredOutputs: false` (or `true`) when a model or compatible endpoint differs from that default; set `max_tokens` separately when the provider's output limit differs.
 
+Anthropic-compatible gateways may omit `usage.inference_geo`. Malformed gateway
+4xx error bodies are classified by HTTP status (including 429 retry delays), not
+as `InvalidOutputError`. Direct `client.betaMessagesPost` calls expose
+`HttpClientError` for those responses; the language-model adapter maps them to
+`AiError` reasons.
+
 ```typescript
 const compatibleClaude = AnthropicLanguageModel.model('future-claude-model', {
 	structuredOutputs: false,
@@ -127,7 +138,7 @@ const compatibleClaude = AnthropicLanguageModel.model('future-claude-model', {
 ```typescript
 import { OpenAiClient, OpenAiLanguageModel } from '@effect/ai-openai';
 import { Config, Layer } from 'effect';
-import { FetchHttpClient } from 'effect/unstable/http';
+import { FetchHttpClient } from 'effect/http';
 
 const OpenAiClientLayer = OpenAiClient.layerConfig({
 	apiKey: Config.Redacted('OPENAI_API_KEY')
@@ -150,6 +161,10 @@ Public OpenAI modules:
 - `OpenAiTool` — OpenAI provider-defined tools for native capabilities
 
 `OpenAiSchema.ResponseStreamEvent` accepts both flat OpenAI error events and compatible-provider events with details nested under `error`, normalizing both to the same decoded error event shape.
+
+For WebSocket turns, `previous_response_not_found` triggers a retry with the full
+prompt. An open socket is retained; custom adapters can inspect
+`ProviderOptions.incrementalFallback` to recognize the full-prompt retry.
 
 ```typescript
 const client = yield* OpenAiClient.OpenAiClient;
@@ -176,14 +191,21 @@ const NativeTools = Toolkit.make(
 
 Available hosted/provider tools include `WebSearch`, `CodeInterpreter`, `FileSearch`, `ImageGeneration`, and `Mcp` (`customName: "OpenAiMcp"`). MCP tool approval requests/results use this canonical `OpenAiMcp` name and the normal Effect AI approval request/response parts. Handler-required local tools such as `Shell`, `LocalShell`, and `ApplyPatch` run in your environment; provide handlers only behind explicit sandboxing, authorization, and audit policy.
 
+Web-search calls may omit `action`. Narrow that optional field before reading
+action details; incomplete calls are preserved as failed tool results.
+
 ## OpenAI-Compatible Providers
 
-Use `apiUrl` with `@effect/ai-openai` for OpenAI-compatible APIs (Azure OpenAI, local models, etc.):
+Use `apiUrl` with `@effect/ai-openai` for APIs compatible with OpenAI Responses.
+For Chat Completions-compatible endpoints use `@effect/ai-openai-compat`
+(`OpenAiClient`, `OpenAiLanguageModel`), which preserves non-null text/tool
+argument fragments when other streamed delta fields are null. Both adapters
+preserve raw JSON Schema dynamic-tool arguments.
 
 ```typescript
 import { OpenAiClient, OpenAiConfig } from '@effect/ai-openai';
 import { Config, Layer } from 'effect';
-import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect/unstable/http';
+import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect/http';
 
 const CompatibleClientLayer = OpenAiClient.layerConfig({
 	apiKey: Config.Redacted('OPENAI_COMPAT_API_KEY'),
@@ -208,7 +230,7 @@ import {
 	OpenRouterLanguageModel
 } from '@effect/ai-openrouter';
 import { Config, Layer } from 'effect';
-import { FetchHttpClient } from 'effect/unstable/http';
+import { FetchHttpClient } from 'effect/http';
 
 const OpenRouterClientLayer = OpenRouterClient.layerConfig({
 	apiKey: Config.Redacted('OPENROUTER_API_KEY')
@@ -226,13 +248,13 @@ const routerModel = OpenRouterLanguageModel.model('anthropic/claude-sonnet-4');
 import { AnthropicClient, AnthropicLanguageModel } from '@effect/ai-anthropic';
 import { OpenAiClient, OpenAiLanguageModel } from '@effect/ai-openai';
 import { Effect, ExecutionPlan, Layer } from 'effect';
-import { LanguageModel } from 'effect/unstable/ai';
+import { LanguageModel } from 'effect/ai';
 
 // Try cheaper model first, fall back to more expensive one
 const DraftPlan = ExecutionPlan.make(
 	{
 		provide: OpenAiLanguageModel.model('gpt-5.2'),
-		attempts: 3 // retry up to 3 times before falling back
+		attempts: 3 // up to 3 total attempts before falling back
 	},
 	{
 		provide: AnthropicLanguageModel.model('claude-opus-4-6'),
@@ -278,7 +300,7 @@ Maintain conversation history with automatic context management:
 
 ```typescript
 import { Effect, Ref } from 'effect';
-import { Chat, Prompt } from 'effect/unstable/ai';
+import { Chat, Prompt } from 'effect/ai';
 
 // Create with system prompt
 const session =
@@ -361,7 +383,7 @@ OpenAI error classification distinguishes temporary rate limits from exhausted a
 Wrap provider layers with metadata. Takes 3 positional arguments: `(providerName, modelId, layer)`:
 
 ```typescript
-import { Model } from 'effect/unstable/ai';
+import { Model } from 'effect/ai';
 
 // This is what ProviderLanguageModel.model() calls internally:
 const Claude = Model.make(
@@ -437,7 +459,7 @@ Wrap `AiError` into domain-specific tagged errors:
 
 ```typescript
 import { Schema } from 'effect';
-import { AiError } from 'effect/unstable/ai';
+import { AiError } from 'effect/ai';
 
 export class MyAiError extends Schema.TaggedError<MyAiError>()(
 	'MyAiError',
@@ -459,7 +481,7 @@ export class MyAiError extends Schema.TaggedError<MyAiError>()(
 | ----------------------- | ------------- | ----------------------------------------------- |
 | `@effect/ai-anthropic`  | Anthropic     | Claude Opus 4, Claude Sonnet 4, etc.            |
 | `@effect/ai-openai`     | OpenAI        | GPT-5, GPT-4.1, o-series, etc.                  |
-| `@effect/ai-openai`     | OpenAI-Compat | Any OpenAI-compatible API via `apiUrl`          |
+| `@effect/ai-openai-compat` | OpenAI-Compat | Chat Completions-compatible APIs via `apiUrl` |
 | `@effect/ai-openrouter` | OpenRouter    | Multi-provider proxy (any model ID)             |
 
 **Note**: There are no `@effect/ai-google` or `@effect/ai-amazon-bedrock` packages. Use OpenRouter to access Google/Bedrock models.
@@ -488,8 +510,8 @@ import {
 	Model,
 	Prompt,
 	type Response
-} from 'effect/unstable/ai';
-import { FetchHttpClient } from 'effect/unstable/http';
+} from 'effect/ai';
+import { FetchHttpClient } from 'effect/http';
 
 // ---------------------------------------------------------------------------
 // Provider client layers
@@ -675,9 +697,15 @@ import { BedrockClient } from '@effect/ai-amazon-bedrock'; // Does NOT exist
 ## References
 
 Provider-neutral structured decisions use `Decision` / `DecisionModel` from
-`effect/unstable/ai`. `OpenRouterDecisionModel` targets OpenRouter's alpha Decisions
+`effect/ai`. `OpenRouterDecisionModel` targets OpenRouter's alpha Decisions
 API; `@effect/ai-typesafe` supplies a provider for TypeSafe System One. Custom
 OpenRouter client implementations include `createDecisions`.
+
+`OpenRouterDecisionModel` and the TypeSafe decision model configure
+`probabilityPrecision: 2`: rounded distributions such as `0.02 / 0.93 / 0.04`
+are accepted and rescaled. Custom `DecisionModel.make` adapters retain strict sum
+validation unless they opt in. `Decision.probability` allows omitted `criteria`;
+when present it must describe both boolean outcomes (see `effect-ai-language-model`).
 
 Use each branded service's same-name type (`LanguageModel.LanguageModel`,
 `EmbeddingModel.EmbeddingModel`, `Chat.Chat`) and its exported TypeId for custom

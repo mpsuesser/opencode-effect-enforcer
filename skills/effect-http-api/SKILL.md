@@ -7,8 +7,8 @@ You are an Effect TypeScript expert specializing in the HttpApi module for build
 
 ## Effect Source Reference
 
-Use `HttpApi.ParseOptions` annotations at API, group, or endpoint scope to
-configure client and server codecs. `HttpApiBuilder.handler` defines a reusable
+Use `HttpApi.ParseOptions` as the fallback for client and server codecs;
+per-slot annotations override it (see below). `HttpApiBuilder.handler` defines a reusable
 endpoint callback with inferred request, success, error, and service types.
 Generated clients and AtomHttpApi calls accept per-call `sseOptions`.
 SSE IDs may be absent: model them with `Schema.optional(Schema.String)`.
@@ -22,13 +22,13 @@ the generator also accepts OpenAPI 3.2's native `query` operation.
 Generated multipart binary fields use `File | Blob` and dedicated `*Multipart`
 component exports. Keep generated imports aligned with the chosen transport.
 
-The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Browse and read files there directly to look up APIs, types, and implementations.
+The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Inspect the `effect@4.0.0` tag for this skill; main may be newer. These APIs remain `@stability unstable` and may break in minor releases despite their shorter import paths. Keep `effect` and companion packages on the same release.
 
 Key reference files:
 
 - `packages/effect/HTTPAPI.md` — canonical HttpApi documentation
-- `packages/effect/src/unstable/httpapi/*.ts` — module sources
-- `packages/effect/typetest/unstable/httpapi/*.tst.ts` — type-level contracts
+- `packages/effect/src/http-api/*.ts` — module sources
+- `packages/effect/typetest/http-api/*.tst.ts` — type-level contracts
 - `packages/platform/node/test/HttpApi.test.ts` — comprehensive runtime tests
 - `ai-docs/src/51_http-server/` — server walkthrough with fixtures
 - `ai-docs/src/50_http-client/` — HttpClient walkthrough
@@ -51,7 +51,7 @@ import {
 	HttpApiSwagger,
 	HttpApiTest,
 	OpenApi
-} from 'effect/unstable/httpapi';
+} from 'effect/http-api';
 
 // HTTP primitives (router, server, client, multipart)
 import {
@@ -66,7 +66,7 @@ import {
 	HttpServerResponse,
 	HttpStatus,
 	Multipart
-} from 'effect/unstable/http';
+} from 'effect/http';
 
 // Platform server (Node.js — Bun has @effect/platform-bun/BunHttpServer)
 import { NodeHttpServer, NodeRuntime } from '@effect/platform-node';
@@ -103,12 +103,14 @@ HttpApiEndpoint.delete('name', '/path', { ... });
 HttpApiEndpoint.head('name', '/path', { ... });
 HttpApiEndpoint.options('name', '/path', { ... });
 
-// Escape hatch for arbitrary methods (PROPFIND, MOVE, etc.)
-const link = HttpApiEndpoint.make('LINK');
-link('name', '/path', { ... });
+HttpApiEndpoint.query('name', '/path', { ... });
+
+// Generic factory for a supported HttpMethod
+const query = HttpApiEndpoint.make('QUERY');
+query('name', '/path', { ... });
 ```
 
-The first argument is the endpoint name (used as the method name in the generated client). The second is the route path. The third is an options object with schemas. For methods with no body (`get`, `head`, `options`, `delete`), the `payload` option is treated as a query-string-encoded record of fields.
+The first argument is the endpoint name (used as the method name in the generated client). The second is the route path. The third is an options object with schemas. For methods with no body (`GET`, `HEAD`, `OPTIONS`, `TRACE`), the `payload` option is treated as a query-string-encoded record of fields. `DELETE` and `QUERY` can carry bodies; `make` accepts the closed `HttpMethod` union, not arbitrary method strings.
 
 ### Endpoint Options
 
@@ -258,6 +260,42 @@ Group- and API-level prefixing are described below.
 
 ## Schema Annotations
 
+### Per-slot parse options
+
+Annotate the API, group, or endpoint with `HttpApi.ParamsParseOptions`,
+`QueryParseOptions`, `HeadersParseOptions`, `PayloadParseOptions`,
+`SuccessParseOptions`, or `ErrorParseOptions`. Each controls both sides of that
+codec: server decoding/client encoding for inputs, the reverse for outputs.
+Success options cover streamed/SSE bodies too; header options cover request
+headers and `WithHeaders` response headers independently of their bodies.
+
+For the same annotation, endpoint overrides group, which overrides API. A slot
+annotation at **any** level wins over fallback `ParseOptions` at **every** level.
+Objects replace rather than merge. Annotate before constructing handler groups.
+Real HTTP headers include transport fields: strict fallback parsing otherwise
+rejects them, while `onExcessProperty: 'preserve'` retains them in decoded values.
+Use an explicit empty header override to retain Schema defaults:
+
+<!-- typecheck -->
+```ts
+import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/http-api';
+import * as Schema from 'effect/Schema';
+
+class CreateUser extends Schema.Class<CreateUser>('CreateUser')({
+	name: Schema.String
+}) {}
+
+const Api = HttpApi.make('StrictApi').add(
+	HttpApiGroup.make('users').add(
+		HttpApiEndpoint.post('create', '/users', {
+			headers: { 'x-api-key': Schema.String },
+			payload: CreateUser
+		})
+	)
+).annotate(HttpApi.ParseOptions, { onExcessProperty: 'error' })
+	.annotate(HttpApi.HeadersParseOptions, {});
+```
+
 ### Status Codes
 
 ```ts
@@ -281,7 +319,7 @@ class UserNotFound extends Schema.TaggedError<UserNotFound>()(
 
 `HttpApiSchema.StatusLiteral` is the exported keyof type for the literal form. The full set covers the standard codes (`Continue`, `OK`, `Created`, `Accepted`, `NoContent`, `MovedPermanently`, `Found`, `BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `MethodNotAllowed`, `NotAcceptable`, `RequestTimeout`, `Conflict`, `Gone`, `UnprocessableEntity`, `TooManyRequests`, `InternalServerError`, `NotImplemented`, `BadGateway`, `ServiceUnavailable`, `GatewayTimeout`, etc.). Unannotated success schemas default to 200, and unannotated error schemas default to 500. If you omit `success`, the endpoint defaults to `HttpApiSchema.NoContent` (204). `success: Schema.Void` is an empty 200 response unless you annotate it or use `HttpApiSchema.NoContent`.
 
-The literal mapping is centralized in `HttpStatus` from `effect/unstable/http`. Use `HttpStatus.fromLiteral` when plain HTTP code needs the corresponding numeric literal type; `HttpApiSchema.status` uses the same mapping internally:
+The literal mapping is centralized in `HttpStatus` from `effect/http`. Use `HttpStatus.fromLiteral` when plain HTTP code needs the corresponding numeric literal type; `HttpApiSchema.status` uses the same mapping internally:
 
 ```ts
 HttpStatus.fromLiteral('OK'); // 200
@@ -638,7 +676,7 @@ const AllRoutes = Layer.mergeAll(ApiRoutes, DocsRoute);
 If you forget to provide a group's handler layer you'll get a clear runtime defect:
 
 ```
-HttpApiGroup "users" not found (key: "effect/httpapi/HttpApiGroup/users").
+HttpApiGroup "users" not found (key: "effect/http-api/HttpApiGroup/users").
 Did you forget to provide HttpApiBuilder.group(api, "users", ...)?
 Available groups: <list>
 ```
@@ -667,6 +705,12 @@ export const { handler, dispose } = HttpRouter.toWebHandler(
 `HttpServer.layerServices` is a generic/test helper that includes a no-op `FileSystem`. Use it only when your routes do not need real filesystem access, file responses, persisted multipart files, or static serving. For Node/Bun HTTP servers with real platform behavior, prefer concrete layers such as `NodeHttpServer.layer(...)` / `BunHttpServer.layer(...)` or their `layerHttpServices` variants where applicable.
 
 `HttpRouter.serve` and `HttpRouter.toWebHandler` both also accept `routerConfig` (passed to find-my-way) and `middleware` (a wrap function applied to the entire HTTP server pipeline).
+
+`HttpRouter.serve` and `toHttpEffect` build with a fresh router in a forked layer
+memo map. Pass registration layers directly to them; do not pre-provide
+`HttpRouter.layer` to `ApiRoutes`. Services first built inside these entrypoints
+are private; provide services shared with siblings outside them. `toWebHandler`
+owns a separate build by default, but an explicit `memoMap` is used as supplied.
 
 > There is no `HttpApiBuilder.toWebHandler` — always go through `HttpRouter.toWebHandler` (or `HttpRouter.serve` for a long-running server).
 
@@ -1240,6 +1284,12 @@ const spec = OpenApi.fromApi(Api);
 // spec is OpenAPI 3.1.0
 ```
 
+Parameters and response headers are documented from their **encoded** object
+representation, preserving property annotations. Decode-defaulted optional keys
+remain optional on the wire (path parameters still must be required by OpenAPI).
+Text bodies preserve encoded string literals and exportable checks such as
+patterns, including when opaque schemas or component references are involved.
+
 `fromApi` caches by both the `HttpApi` instance and the identity of the options object, but every call returns a fresh mutable spec copy. Mutating one returned spec does not contaminate later calls. Reuse one immutable options object to reuse the cache; mutating that options object does not invalidate an existing entry. The clone preserves frozen `JSON.rawJSON` values rather than flattening them into ordinary objects.
 
 The options accept the Schema representation `referencePolicy`. It runs at the canonical JSON-encoded AST boundary and controls which schemas become OpenAPI component references; by default only schemas with resolved identifiers are extracted, while anonymous non-recursive schemas remain inline:
@@ -1420,7 +1470,7 @@ For multipart streaming, see `HttpApiSchema.asMultipartStream` above.
 `HttpApiTest.groups(api, groupNames, { baseUrl? })` builds a fully typed `HttpApiClient` that runs against your real handler layers in memory — no HTTP server, no port. List the groups whose handlers you want to exercise; all other groups are auto-stubbed with `Effect.die`. The default `baseUrl` is `http://localhost:3000`; pass `{ baseUrl }` when tests rely on URL construction.
 
 ```ts
-import { HttpApiTest } from 'effect/unstable/httpapi';
+import { HttpApiTest } from 'effect/http-api';
 import { NodeHttpServer } from '@effect/platform-node';
 import { Effect, Layer } from 'effect';
 import { it } from '@effect/vitest';
@@ -1467,7 +1517,7 @@ it.effect('GET /users responds 200', () =>
 
 ## Reactive Integration
 
-For React/Atom-driven UIs, `effect/unstable/reactivity/AtomHttpApi` builds a service that exposes typed `query` and `mutation` atoms generated from an HttpApi:
+For React/Atom-driven UIs, `effect/reactivity/AtomHttpApi` builds a service that exposes typed `query` and `mutation` atoms generated from an HttpApi:
 
 ```ts
 class ApiAtom extends AtomHttpApi.Service<ApiAtom>()('app/ApiAtom', {
@@ -1499,7 +1549,7 @@ import {
 	HttpClient,
 	HttpClientRequest,
 	HttpClientResponse
-} from 'effect/unstable/http';
+} from 'effect/http';
 
 class Todo extends Schema.Class<Todo>('Todo')({
 	userId: Schema.Number,
@@ -1573,7 +1623,7 @@ export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
 
 // --- api/Authorization.ts ---
 import { Context, Schema } from 'effect';
-import { HttpApiMiddleware, HttpApiSecurity } from 'effect/unstable/httpapi';
+import { HttpApiMiddleware, HttpApiSecurity } from 'effect/http-api';
 
 export class CurrentUser extends Context.Service<CurrentUser, User>()(
 	'app/CurrentUser'
@@ -1590,7 +1640,7 @@ export class Authorization extends HttpApiMiddleware.Service<
 
 // --- api/Users.ts ---
 import { Schema } from 'effect';
-import { HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi';
+import { HttpApiEndpoint, HttpApiGroup } from 'effect/http-api';
 
 export class UsersApi extends HttpApiGroup.make('users')
 	.add(
@@ -1623,7 +1673,7 @@ export class SystemApi extends HttpApiGroup.make('system', {
 ) {}
 
 // --- api/Api.ts ---
-import { HttpApi, OpenApi } from 'effect/unstable/httpapi';
+import { HttpApi, OpenApi } from 'effect/http-api';
 
 export class Api extends HttpApi.make('app')
 	.add(UsersApi)
@@ -1663,7 +1713,7 @@ export const AuthorizationLayer = Layer.effect(
 
 // --- server/users.ts ---
 import { Effect, Layer } from 'effect';
-import { HttpApiBuilder } from 'effect/unstable/httpapi';
+import { HttpApiBuilder } from 'effect/http-api';
 
 export const UsersHandlers = HttpApiBuilder.group(
 	Api,
@@ -1692,8 +1742,8 @@ export const SystemHandlers = HttpApiBuilder.group(
 // --- server/main.ts ---
 import { NodeHttpServer, NodeRuntime } from '@effect/platform-node';
 import { Layer } from 'effect';
-import { HttpRouter } from 'effect/unstable/http';
-import { HttpApiBuilder, HttpApiScalar } from 'effect/unstable/httpapi';
+import { HttpRouter } from 'effect/http';
+import { HttpApiBuilder, HttpApiScalar } from 'effect/http-api';
 import { createServer } from 'node:http';
 
 const ApiRoutes = HttpApiBuilder.layer(Api, {

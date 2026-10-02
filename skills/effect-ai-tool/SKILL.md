@@ -9,7 +9,11 @@ Use this skill when implementing tools for AI language models using the Effect A
 
 ## Effect AI Documentation Access
 
-For comprehensive Effect AI documentation, view the Effect v4 repository at `packages/ai/`
+For core AI APIs inspect `packages/effect/src/ai/` at `effect@4.0.0` in the
+Effect source reference; provider implementations live under `packages/ai/`.
+Keep all Effect-family packages on the same version. These APIs are tagged
+`@stability unstable`, so minor releases may break them despite stable-looking
+import paths.
 
 Reference this for:
 
@@ -83,7 +87,7 @@ Use this pattern when the surrounding framework wants an async callback surface 
 ### Basic Tool Definition
 
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as Tool from 'effect/ai/Tool';
 import * as Schema from 'effect/Schema';
 
 const GetCurrentTime = Tool.make('GetCurrentTime', {
@@ -107,7 +111,7 @@ type Result = Tool.Success<typeof GetCurrentTime>;
 If you have an existing domain schema you want to use as a tool, create the tool with `Tool.make` and reference the schema directly:
 
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as Tool from 'effect/ai/Tool';
 import * as Schema from 'effect/Schema';
 
 const UserResult = Schema.Struct({
@@ -139,7 +143,7 @@ type Success = Tool.Success<typeof GetUserTool>;
 ### Tool with Parameters
 
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as Tool from 'effect/ai/Tool';
 import { Schema } from 'effect';
 
 const GetWeather = Tool.make('GetWeather', {
@@ -169,7 +173,7 @@ type Success = Tool.Success<typeof GetWeather>;
 ### Tool with Failure Handling
 
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as Tool from 'effect/ai/Tool';
 import { Schema } from 'effect';
 
 class UserNotFound extends Schema.TaggedError<UserNotFound>()(
@@ -196,10 +200,7 @@ const FindUser = Tool.make('FindUser', {
 		name: Schema.String,
 		email: Schema.String
 	}),
-	failure: Schema.Union([
-		Schema.instanceOf(UserNotFound),
-		Schema.instanceOf(DatabaseError)
-	]),
+	failure: Schema.Union([UserNotFound, DatabaseError]),
 	failureMode: 'error'
 });
 
@@ -222,12 +223,14 @@ annotation and `Tool.FailureOrigin` type. Keep validation, declared handler, and
 internal failures distinct when presenting or reporting them.
 
 - `"error"` (default): Failures go to Effect error channel
-- `"return"`: Failures returned as tool result (captured, not thrown)
+- `"return"`: Parameter and handler failures become failed tool results. Result
+  encoding can still fail the returned Stream with `AiError`; return mode does
+  not make stream consumption infallible.
 
 ### Tool with Service Dependencies
 
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as Tool from 'effect/ai/Tool';
 import * as Context from 'effect/Context';
 import { Schema } from 'effect';
 
@@ -261,8 +264,8 @@ type Requirements = Tool.HandlerServices<typeof QueryDatabase>;
 ### Basic Toolkit
 
 ```typescript
-import * as Toolkit from 'effect/unstable/ai/Toolkit';
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as Toolkit from 'effect/ai/Toolkit';
+import * as Tool from 'effect/ai/Tool';
 import { Effect, Schema } from 'effect';
 
 const GetCurrentTime = Tool.make('GetCurrentTime', {
@@ -473,7 +476,7 @@ Keep static descriptions on the tool for invariant behavior. Put runtime-specifi
 ### Merging Toolkits
 
 ```typescript
-import * as Toolkit from 'effect/unstable/ai/Toolkit';
+import * as Toolkit from 'effect/ai/Toolkit';
 
 const mathToolkit = Toolkit.make(
 	Tool.make('add', {
@@ -510,7 +513,7 @@ type AllTools = Toolkit.Tools<typeof combined>;
 ### Basic Provider Tool
 
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as Tool from 'effect/ai/Tool';
 import { Schema } from 'effect';
 
 const AnthropicBash = Tool.providerDefined({
@@ -557,7 +560,7 @@ const nativeTools = Toolkit.make(
 ### Provider Tool with Handler
 
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as Tool from 'effect/ai/Tool';
 import { Schema } from 'effect';
 
 const WebSearch = Tool.providerDefined({
@@ -614,7 +617,7 @@ declare const performSearch: (query: string) => Effect.Effect<
 ### Understanding ToolCallPart and ToolResultPart
 
 ```typescript
-import * as Prompt from 'effect/unstable/ai/Prompt';
+import * as Prompt from 'effect/ai/Prompt';
 
 const toolCallPart = Prompt.makePart('tool-call', {
 	id: 'call_123',
@@ -725,8 +728,14 @@ const toolkitLayer = LongRunningToolkit.toLayer({
 
 **Key Pattern: toolkit.handle**
 
-- `toolkit.handle(name, params, toolCallId?)` accepts `Tool.ParametersEncoded<Tool>` and returns `Effect<Stream<HandlerResult<Tool>>>`
+- `toolkit.handle(name, params, toolCallId?, options?)` accepts
+  `Tool.ParametersEncoded<T>` and optional schema parse options. Its full shape is
+  `Effect<Stream<HandlerResult<T>, Tool.HandlerError<T> | AiError, Tool.HandlerServices<T>>, AiError, Tool.HandlerServices<T>>`.
 - `handle` decodes the encoded input with the tool's parameter schema before invoking the handler; the handler still receives `Tool.Parameters<Tool>`
+- Provide handler services to the outer Effect as well as the Stream. A
+  service-dependent parameter decoder runs before the Stream exists; providing
+  services only around `Stream.runCollect` is too late. Consuming the Stream
+  inside the same provided `Effect.gen` keeps both stages wired.
 - The optional call ID is forwarded to the handler as `context.toolCallId`
 - `preliminary: true`: progress update; do not persist as final history
 - `preliminary: false`: final result to send/persist
@@ -760,7 +769,7 @@ Passing the decoded `{ times: 3 }` directly to `handle` is now a type error. Use
 ### Tool Annotations
 
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as Tool from 'effect/ai/Tool';
 import { Schema } from 'effect';
 
 const ReadOnlyQuery = Tool.make('query', {
@@ -786,7 +795,7 @@ MCP emits the first four annotations as tool hints. They are hints, not authoriz
 ### JSON Schema Generation
 
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as Tool from 'effect/ai/Tool';
 
 const tool = Tool.make('example', {
 	parameters: Schema.Struct({
@@ -815,7 +824,7 @@ const jsonSchema = Tool.getJsonSchema(tool);
 ### Tool Guards
 
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
+import * as Tool from 'effect/ai/Tool';
 
 const userTool = Tool.make('example');
 const providerTool = Tool.providerDefined({
@@ -858,8 +867,8 @@ const executeTool = (toolName: string, params: unknown) =>
 
 <!-- typecheck -->
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
-import * as Toolkit from 'effect/unstable/ai/Toolkit';
+import * as Tool from 'effect/ai/Tool';
+import * as Toolkit from 'effect/ai/Toolkit';
 import * as Schema from 'effect/Schema';
 import { Clock, Context, Effect, Layer, Stream } from 'effect';
 
@@ -946,9 +955,9 @@ manual `handle` calls accept their encoded representation.
 **CRITICAL**: Always use namespace imports:
 
 ```typescript
-import * as Tool from 'effect/unstable/ai/Tool';
-import * as Toolkit from 'effect/unstable/ai/Toolkit';
-import * as Prompt from 'effect/unstable/ai/Prompt';
+import * as Tool from 'effect/ai/Tool';
+import * as Toolkit from 'effect/ai/Toolkit';
+import * as Prompt from 'effect/ai/Prompt';
 import { Schema, Effect, Data, Context, Layer } from 'effect';
 
 const myTool = Tool.make('example');
@@ -958,8 +967,8 @@ const myToolkit = Toolkit.make(myTool);
 **NEVER** do this:
 
 ```typescript
-import { make } from 'effect/unstable/ai/Tool';
-import { make as makeToolkit } from 'effect/unstable/ai/Toolkit';
+import { make } from 'effect/ai/Tool';
+import { make as makeToolkit } from 'effect/ai/Toolkit';
 ```
 
 ## Quality Checklist

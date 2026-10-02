@@ -32,7 +32,7 @@ bad = do
 
 good :: Effect a
 good = do
-  x ← Schema.decode schema raw   -- prove correctness
+  x ← Schema.decodeUnknownEffect schema raw   -- prove correctness
 ```
 
 Suppressing errors masks bugs that surface at runtime. Fix the underlying type issue instead.

@@ -51,12 +51,18 @@ The `Scope` object itself:
 ```ts
 interface Scope {
 	readonly strategy: 'sequential' | 'parallel';
+	readonly parent: Scope | undefined;
 	state: State.Open | State.Closed | State.Empty;
 }
 interface Closeable extends Scope {} // can be passed to Scope.close
 ```
 
 `Scope.Scope` is also the `Context` tag for the current scope, so `yield* Scope.Scope` and `yield* Effect.scope` both return it.
+
+`Scope.close` and `Scope.closeUnsafe` require **`Scope.Closeable`**, obtained from
+`Scope.make` / `Scope.fork` (or their unsafe constructors). An ambient
+`Scope.Scope` grants finalizer registration, not authority to close its owner.
+Keep owned scope fields typed `Scope.Closeable`; do not cast a borrowed scope.
 
 Imports used throughout this skill:
 
@@ -181,7 +187,7 @@ Selective variants: `Effect.onExitIf(self, predicate, f)`, `Effect.onExitFilter(
 
 Semantics:
 
-- Finalizers attached with `onExit`/`ensuring` run in an **uninterruptible region** (unless you reach for the low-level `Effect.onExitPrimitive(self, f, interruptible)`, which also allows returning `undefined` to skip finalization).
+- Finalizers attached with `onExit`/`ensuring` run in an **uninterruptible region** by default. Use public combinators rather than internal runtime primitives.
 - If an `onExit` finalizer fails (`f` may have an error channel `XE`), its error joins the result error channel. If both the source and finalizer fail, their causes are combined rather than one replacing the other.
 - `Effect.ensuring` deliberately requires `Effect<X, never, R1>` as its finalizer, so typed finalizer errors must be handled before attachment. A finalizer defect can still occur at runtime and is combined with an existing source failure.
 - These only fire if the effect **starts** executing.
@@ -289,8 +295,8 @@ Constructors and operations (all verified against `Scope.ts`):
 | `Scope.makeUnsafe` | `(strategy?) => Closeable` | synchronous |
 | `Scope.addFinalizer` | `(scope, finalizer: Effect<unknown>) => Effect<void>` | exit-blind |
 | `Scope.addFinalizerExit` | `(scope, (exit) => Effect<unknown>) => Effect<void>` | exit-aware |
-| `Scope.close` | `(scope, exit: Exit<A, E>) => Effect<void>` | idempotent |
-| `Scope.closeUnsafe` | `(scope, exit) => Effect<void> \| undefined` | low-level; **you must run the returned effect** or finalizers are skipped |
+| `Scope.close` | `(scope: Closeable, exit: Exit<A, E>) => Effect<void>` | idempotent; finalizes uninterruptibly by default |
+| `Scope.closeUnsafe` | `(scope: Closeable, exit) => Effect<void> \| undefined` | low-level; **run the returned effect uninterruptibly** or cleanup can be skipped |
 | `Scope.fork` | `(scope, strategy?) => Effect<Closeable>` | child scope, see section 5 |
 | `Scope.forkUnsafe` | `(scope, strategy?) => Closeable` | synchronous |
 | `Scope.provide` / `Scope.use` | dual | see section 3 |
@@ -299,6 +305,7 @@ Close semantics (from `internal/effect.ts` `scopeCloseFinalizers`):
 
 - Finalizers run in **reverse registration order** (LIFO).
 - `'sequential'` (default): one at a time, each awaited. `'parallel'`: all started concurrently, then awaited together.
+- `Scope.close` runs finalizers uninterruptibly by default: interruption of the closing fiber waits for cleanup. A finalizer can explicitly restore interruptibility; avoid doing so unless abandoning that cleanup is intentional.
 - **Every finalizer always runs** — a failing finalizer does not prevent the others. All failures are collected and combined into a single `Cause`; `Scope.close` then fails with that combined cause.
 - When scoped work and scope finalization both fail, the work cause and combined finalizer cause are merged.
 - Closing an already-closed scope is a no-op.
@@ -339,7 +346,7 @@ const program = Effect.gen(function* () {
 `Scope.fork(parent)` creates a `Closeable` child registered with the parent:
 
 - Closing the **parent** closes the child with the same `Exit`.
-- Closing the **child** first detaches it from the parent (the parent no longer tracks it).
+- Closing the **child** first detaches it from the parent before cleanup runs, even if cleanup throws or is interrupted. The readonly `child.parent` still identifies its parent; it is not a liveness indicator.
 - Forking from an **already-closed** parent returns an already-closed child — finalizers added to it run immediately.
 
 This is the splitting primitive: hand part of a lifetime to other code while keeping an upper bound.
@@ -492,6 +499,7 @@ yield* ScopedRef.set(
 Semantics (verified in `ScopedRef.ts` and its tests):
 
 - Constructing requires `Scope.Scope`: when the *outer* scope closes, the currently-held value's scope is closed too.
+- The owner also closes in-flight replacement scopes. `make`, `fromAcquire`, and `set` interrupt if their owning scope has closed; they cannot return or install a resource from a closed generation. Replacements retain the reference's original position in the owner's finalizer order.
 - `set` is **synchronized** (internal semaphore — one replacement at a time) and **uninterruptible**.
 - `set` acquires the replacement first. If acquisition fails, its new scope is closed, the error propagates, and the current value remains alive and unchanged.
 - After successful acquisition, `set` closes the old scope before installing the replacement. If the old finalizer defects, the replacement scope is also closed and the reference is not switched, preventing the newly acquired resource from leaking.
@@ -707,6 +715,6 @@ class Plugin {
 11. **Using `acquireUseRelease` and swallowing release errors unknowingly — or the opposite.** Its release *can* fail; a release failure fails the whole effect after successful `use`, and combines with the use cause after failed `use`. Conversely `acquireRelease`'s release is typed `never` — convert errors inside it.
 12. **Acquiring per-request resources in a `Layer.effect` constructor.** Layer finalizers run when the layer scope closes (shutdown), not per call. Acquire per-request resources inside the request handler under `Effect.scoped`, or fork a child scope per item (section 5).
 13. **v3 fork names**: `Effect.fork` → `Effect.forkChild`, `Effect.forkDaemon` → `Effect.forkDetach`. `forkScoped`/`forkIn` keep their names and now accept `{ startImmediately?, uninterruptible? }`.
-14. **Calling `Scope.closeUnsafe` and dropping the result.** It returns `Effect | undefined`; ignoring the returned effect skips every finalizer. Use `Scope.close` unless you are writing low-level machinery.
+14. **Calling `Scope.closeUnsafe` and dropping or interrupting the result.** It requires `Closeable` and returns `Effect | undefined`; run a returned effect uninterruptibly. The scope is already marked closed, so retrying close cannot recover skipped finalizers. Prefer `Scope.close`.
 15. **Expecting interruption to skip cleanup.** Finalizers receive `Exit.failCause` with an interrupt cause and still run (uninterruptibly). Use exit-aware finalizers (`addFinalizer`, `acquireRelease`'s `(a, exit) =>`) to branch on success/failure/interrupt — don't split cleanup across `onError` + success paths.
 16. **Splitting acquire and `Effect.addFinalizer` into separate yields.** Interruption between the two steps leaks the resource. `acquireRelease` wraps acquisition and finalizer registration in a single `uninterruptibleMask` precisely to close this window — use it whenever cleanup is tied to an acquired value.

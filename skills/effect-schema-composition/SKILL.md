@@ -164,13 +164,13 @@ import { Schema } from 'effect';
 Schema.String.check(Schema.isMaxLength(5));
 Schema.String.check(Schema.isMinLength(5));
 Schema.String.check(Schema.isNonEmpty()); // non-empty string
-Schema.String.check(Schema.isLengthBetween(2, 4));
+Schema.String.check(Schema.isBetweenLength(2, 4));
 
 // Pattern matching
 Schema.String.check(Schema.isPattern(/^[a-z]+$/));
-Schema.String.check(Schema.isStartsWith('prefix'));
-Schema.String.check(Schema.isEndsWith('suffix'));
-Schema.String.check(Schema.isIncludes('substring'));
+Schema.String.check(Schema.isStartingWith('prefix'));
+Schema.String.check(Schema.isEndingWith('suffix'));
+Schema.String.check(Schema.isIncluding('substring'));
 
 // Case and whitespace validation
 Schema.String.check(Schema.isTrimmed()); // No leading/trailing whitespace
@@ -184,6 +184,16 @@ Schema.String.check(Schema.isULID());
 Schema.String.check(Schema.isBase64());
 Schema.String.check(Schema.isBase64Url());
 ```
+
+For string length, choose the unit deliberately: `isMinLength`, `isMaxLength`,
+and `isBetweenLength` count UTF-16 code units; `isMinCodePoints`,
+`isMaxCodePoints`, and `isBetweenCodePoints` count Unicode code points, not
+grapheme clusters. The latter match JSON Schema length semantics and guide
+native Arbitrary generation. Cardinality bounds must be finite.
+
+JSON Schema export can approximate runtime checks. Use the Effect decoder as
+the final authority; see `effect-schema-v4` for exact/approximate check exporters,
+Unicode patterns, and `oneOf` fallback semantics.
 
 ### Number Filters
 
@@ -220,7 +230,7 @@ import { Schema } from 'effect';
 
 Schema.Array(Schema.Number).check(Schema.isMinLength(2));
 Schema.Array(Schema.Number).check(Schema.isMaxLength(5));
-Schema.Array(Schema.Number).check(Schema.isLengthBetween(2, 5));
+Schema.Array(Schema.Number).check(Schema.isBetweenLength(2, 5));
 ```
 
 ### Combining Multiple Filters
@@ -329,6 +339,7 @@ const MyForm = Schema.Struct({
 
 Use `SchemaGetter.checkEffect` for async validation inside a `Schema.decode` transformation:
 
+<!-- typecheck -->
 ```typescript
 import {
 	Effect,
@@ -345,14 +356,14 @@ async function validateUsername(username: string) {
 
 const ValidUsername = Schema.String.pipe(
 	Schema.decode({
-		decode: SchemaGetter.checkEffect((username) =>
+		decode: SchemaGetter.checkEffect((username, options) =>
 			Effect.promise(() =>
 				validateUsername(username).then((valid) =>
 					valid
 						? undefined
-						: new SchemaIssue.InvalidValue(Option.some(username), {
-								title: 'Invalid username'
-							})
+						: new SchemaIssue.InvalidValue(
+								{ message: 'Invalid username' }, username, options
+							)
 				)
 			)
 		),
@@ -467,7 +478,7 @@ function split(separator: string) {
 
 ### Schema-derived binary boundaries
 
-Use `SchemaBinary.toCodec(schema)` from `effect/unstable/encoding` for a compact
+Use `SchemaBinary.toCodec(schema)` from `effect/encoding` for a compact
 `Uint8Array` representation. It derives the wire layout from the schema's
 **encoded side**, preserving transformations, checks, and decoding/encoding
 services. Use public Schema encode/decode adapters; `toCodecDirect` and the
@@ -477,7 +488,7 @@ module's internal fast-path functions are not application APIs.
 ```ts
 import { Effect } from 'effect';
 import * as Schema from 'effect/Schema';
-import { SchemaBinary } from 'effect/unstable/encoding';
+import { SchemaBinary } from 'effect/encoding';
 
 class Reading extends Schema.Class<Reading>('Reading')({
 	id: Schema.String,
@@ -539,6 +550,7 @@ const BooleanFromString = Schema.Literals(['on', 'off']).pipe(
 
 Use `SchemaTransformation.transformEffect` when transformation might fail:
 
+<!-- typecheck -->
 ```typescript
 import {
 	Effect,
@@ -551,11 +563,11 @@ import {
 
 const NumberFromString = Schema.String.pipe(
 	Schema.decodeTo(Schema.Number, {
-		decode: SchemaGetter.transformEffect((s) =>
+		decode: SchemaGetter.transformEffect((s, options) =>
 			Option.match(Number.parse(s), {
 				onNone: () =>
 					Effect.fail(
-						new SchemaIssue.InvalidValue(Option.some(s))
+						new SchemaIssue.InvalidValue({ expected: 'a number' }, s, options)
 					),
 				onSome: (n) => Effect.succeed(n)
 			})
@@ -944,6 +956,12 @@ const AuthToken = Schema.TemplateLiteralParser(authTemplate.parts);
 ```
 
 ### Branded Types
+
+Brands are type-only: `Schema.brand` does not add checks or change the runtime
+AST. Pass a single concrete string literal and apply it repeatedly to compose
+brands. `Schema.fromBrand` additionally applies a constructor's checks, and its
+identifier must be that constructor's sole brand key. Representation round trips
+preserve checks, but not nominal brands; reapply brands after rebuilding.
 
 ```typescript
 import { Schema } from 'effect';

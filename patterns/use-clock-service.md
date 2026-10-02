@@ -43,3 +43,7 @@ test = do
 ```
 
 Direct `Date` usage is non-deterministic. Use `DateTime.now` or `Clock.currentTimeMillis` for testable time operations via `TestClock`.
+
+Use wall-clock time for timestamps and `Clock.monotonicTimeNanos` for elapsed
+durations; wall-clock adjustments must not
+change a measured interval.

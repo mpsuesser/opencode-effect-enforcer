@@ -3,25 +3,27 @@ name: effect-workflow
 description: Build durable workflows with Effect using Workflow, Activity, DurableClock, DurableDeferred, and DurableQueue for execution that survives restarts, supports compensation (saga pattern), and integrates with Effect Cluster for distribution.
 ---
 
-You are an Effect TypeScript expert specializing in durable workflow execution using the `effect/unstable/workflow` module.
+You are an Effect TypeScript expert specializing in durable workflow execution using the `effect/workflow` module.
 
 ## Effect Source Reference
 
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
-Browse and read files there directly to look up APIs, types, and implementations.
+Inspect the `effect@4.0.0` tag for this skill; main may be newer. Keep `effect`
+and all companion packages on the same release.
 
 Key source files:
 
-- `packages/effect/src/unstable/workflow/Workflow.ts` — Workflow definition, compensation, annotations
-- `packages/effect/src/unstable/workflow/Activity.ts` — Activity definition, retry, idempotency
-- `packages/effect/src/unstable/workflow/WorkflowEngine.ts` — Engine service, in-memory layer, encoded interface
-- `packages/effect/src/unstable/workflow/DurableClock.ts` — Durable sleep/timers
-- `packages/effect/src/unstable/workflow/DurableDeferred.ts` — Durable signal/wait, tokens, done/succeed/fail
-- `packages/effect/src/unstable/workflow/DurableQueue.ts` — Durable queue handing work to persisted background workers
+- `packages/effect/src/workflow/Workflow.ts` — Workflow definition, compensation, annotations
+- `packages/effect/src/workflow/Activity.ts` — Activity definition, retry, idempotency
+- `packages/effect/src/workflow/WorkflowEngine.ts` — Engine service, in-memory layer, encoded interface
+- `packages/effect/src/workflow/DurableClock.ts` — Durable sleep/timers
+- `packages/effect/src/workflow/DurableDeferred.ts` — Durable signal/wait, tokens, done/succeed/fail
+- `packages/effect/src/workflow/DurableQueue.ts` — Durable queue handing work to persisted background workers
 
 ## IMPORTANT: Unstable API
 
-The workflow module lives under `effect/unstable/workflow`. APIs may change between versions. All imports use this path:
+The workflow module lives under `effect/workflow` and remains `@stability unstable`:
+its APIs may break in minor releases. All imports use this path:
 
 ```ts
 import {
@@ -31,7 +33,7 @@ import {
 	DurableClock,
 	DurableDeferred,
 	DurableQueue
-} from 'effect/unstable/workflow';
+} from 'effect/workflow';
 ```
 
 ## Core Concepts
@@ -51,19 +53,18 @@ DurableQueue  →  hand work to a persisted background worker and await its resu
 
 ## Workflow Definition
 
-Use `Workflow.make` to define a workflow. Every workflow has:
+Use `Workflow.make(tag, options)` to define a workflow. Every workflow has:
 
-- A unique `name`
+- A unique tag (the first argument, exposed as `_tag`)
 - A `payload` schema (struct fields or Schema)
 - An `idempotencyKey` function that produces a deterministic execution ID from the payload
 - Optional `success` and `error` schemas (default `Schema.Void` / `Schema.Never`)
 
 ```ts
-import { Workflow } from 'effect/unstable/workflow';
+import { Workflow } from 'effect/workflow';
 import { Schema } from 'effect';
 
-const SendEmail = Workflow.make({
-	name: 'SendEmail',
+const SendEmail = Workflow.make('SendEmail', {
 	payload: {
 		to: Schema.String,
 		subject: Schema.String,
@@ -76,6 +77,21 @@ const SendEmail = Workflow.make({
 ```
 
 ### Registering a Workflow Handler
+
+Class syntax is also supported for shared workflow definitions:
+
+<!-- typecheck -->
+```ts
+import * as Schema from 'effect/Schema';
+import { Workflow } from 'effect/workflow';
+
+class SendReceipt extends Workflow.make('SendReceipt', {
+	payload: { orderId: Schema.String },
+	idempotencyKey: ({ orderId }) => orderId
+}) {}
+
+const receiptExecutionId = SendReceipt.executionId({ orderId: 'order-1' });
+```
 
 Use `workflow.toLayer(handler)` to register the execution logic. The handler receives the decoded payload and execution ID:
 
@@ -131,7 +147,17 @@ ID (`Schema.String`). Consumers can persist that ID to poll/resume the workflow.
 Update generated client response types and tests that expected `void`; ordinary
 RPC `discard: true` call options still discard the response and cannot return it.
 
-The execution ID is computed as a hash of `"${name}-${idempotencyKey(payload)}"`. This means executing the same workflow with the same payload is idempotent — it returns the existing execution rather than starting a new one.
+The execution ID hashes the length-prefixed input
+`"${name.length}:${name}:${idempotencyKey(payload)}"`. This avoids ambiguous
+tag/key concatenations. The same workflow tag and idempotency key identify the
+same execution, even if other payload fields differ; choose the key accordingly.
+Use `workflow.executionId(payload)` instead of duplicating the hash algorithm.
+
+This differs from rc.116's `"${name}-${key}"` hash: recomputing from an old payload
+produces a different ID. Preserve stored execution IDs for polling, resuming,
+interrupting, and deferred tokens for existing executions. Coordinate the
+identity transition before resubmitting old payloads, which would otherwise
+start distinct executions.
 
 ```ts
 const id =
@@ -148,15 +174,15 @@ const id =
 Activities are the **atomic units of work** inside a workflow. Their results are persisted by the engine, so on replay they return the cached result without re-executing.
 
 ```ts
-import { Activity } from 'effect/unstable/workflow';
+import { Activity } from 'effect/workflow';
 
 const validateRecipient = Activity.make({
 	name: 'ValidateRecipient',
 	success: Schema.Struct({ valid: Schema.Boolean }),
 	error: Schema.String,
 	execute: Effect.gen(function* () {
-		// This code runs at most once per workflow execution
-		// (unless the activity itself fails and is retried)
+		// A persisted result is reused on replay. Interrupted/crashed work
+		// can rerun before its result is recorded: external writes need idempotency.
 		const result = yield* checkEmailService(payload.to);
 		return { valid: result.isValid };
 	})
@@ -180,7 +206,7 @@ const handler = SendEmail.toLayer((payload, executionId) =>
 Use `Activity.retry` to retry an effect within an activity. The engine tracks the attempt count automatically and exposes it via `Activity.CurrentAttempt`:
 
 ```ts
-import { Activity } from 'effect/unstable/workflow';
+import { Activity } from 'effect/workflow';
 
 const sendWithRetry = Activity.make({
 	name: 'SendWithRetry',
@@ -263,7 +289,7 @@ const result =
 `DurableClock.sleep` creates a timer that survives process restarts. Short sleeps (<=60s by default) run in-memory as regular activities. Longer sleeps are scheduled through the engine.
 
 ```ts
-import { DurableClock } from 'effect/unstable/workflow';
+import { DurableClock } from 'effect/workflow';
 
 // Inside a workflow handler:
 yield*
@@ -290,7 +316,7 @@ Under the hood, a DurableClock creates a `DurableDeferred` and the engine schedu
 ### Creating and Awaiting
 
 ```ts
-import { DurableDeferred } from 'effect/unstable/workflow';
+import { DurableDeferred } from 'effect/workflow';
 import { Schema, Exit } from 'effect';
 
 // Define the deferred with typed schemas
@@ -304,6 +330,15 @@ const confirmation = yield* DurableDeferred.await(PaymentConfirmation);
 ```
 
 The engine registers the awaited deferred before reading it. Completing that deferred while the workflow run is still active preempts a run parked on it, retains the pending result, and replays so the completion is observed. The in-memory engine follows the same behavior as `ClusterWorkflowEngine`; this closes the race where a live completion could otherwise be missed until a later retry.
+
+The cluster engine retries failed run resets before acknowledging deferred
+completion. It resets the suspended run conditionally against the reply it read,
+so a stale concurrent resume cannot erase a newer completed reply. Custom
+`MessageStorage.clearReplies(requestId, { expectedReplyId })` implementations
+must atomically compare the latest reply ID before clearing; mismatch is a
+successful no-op. `Sharding.reset` returning `false` means reset failed, not that
+the expected-reply comparison mismatched. See `effect-rpc-cluster` for storage
+claim-reset semantics.
 
 ### Completing from Outside
 
@@ -395,8 +430,8 @@ const result =
 `DurableQueue` lets a workflow delegate a unit of work to a **persisted background worker** and suspend until the worker records a result. The workflow calls `process` to enqueue an item and wait; a separate worker created with `worker` / `makeWorker` takes the item, runs the handler, and completes the waiting workflow through a `DurableDeferred` token.
 
 ```ts
-import { DurableQueue, Workflow, WorkflowEngine } from 'effect/unstable/workflow';
-import { PersistedQueue } from 'effect/unstable/persistence';
+import { DurableQueue, Workflow, WorkflowEngine } from 'effect/workflow';
+import { PersistedQueue } from 'effect/persistence';
 import { Effect, Layer, Schema } from 'effect';
 ```
 
@@ -514,7 +549,7 @@ The compensation function receives:
 Controls whether defects (unexpected errors) are captured in the workflow result. Default: `true`.
 
 ```ts
-const MyWorkflow = Workflow.make({ ... }).annotate(Workflow.CaptureDefects, false)
+const MyWorkflow = Workflow.make('MyWorkflow', { ... }).annotate(Workflow.CaptureDefects, false)
 ```
 
 ### SuspendOnFailure
@@ -522,7 +557,7 @@ const MyWorkflow = Workflow.make({ ... }).annotate(Workflow.CaptureDefects, fals
 When `true`, the workflow suspends on any error instead of failing. You can then manually resume it:
 
 ```ts
-const MyWorkflow = Workflow.make({ ... }).annotate(Workflow.SuspendOnFailure, true)
+const MyWorkflow = Workflow.make('MyWorkflow', { ... }).annotate(Workflow.SuspendOnFailure, true)
 
 // Later, after fixing the issue:
 yield* MyWorkflow.resume(executionId)
@@ -557,7 +592,7 @@ The `WorkflowEngine` is a service that orchestrates workflow execution. It handl
 For testing and local development, use the in-memory engine:
 
 ```ts
-import { WorkflowEngine } from 'effect/unstable/workflow';
+import { WorkflowEngine } from 'effect/workflow';
 
 const TestLayer = Layer.mergeAll(
 	SendEmailLive
@@ -569,11 +604,11 @@ const TestLayer = Layer.mergeAll(
 
 ### Production Engine — `ClusterWorkflowEngine.layer`
 
-For production, use `ClusterWorkflowEngine.layer` from `effect/unstable/cluster`. It wires the workflow engine into `Sharding` + `MessageStorage` so executions, activities, and durable signals survive restarts and can be distributed across runners:
+For production, use `ClusterWorkflowEngine.layer` from `effect/cluster`. It wires the workflow engine into `Sharding` + `MessageStorage` so executions, activities, and durable signals survive restarts and can be distributed across runners:
 
 ```ts
 import { Layer } from 'effect';
-import { ClusterWorkflowEngine } from 'effect/unstable/cluster';
+import { ClusterWorkflowEngine } from 'effect/cluster';
 
 const WorkflowsLayer = Layer.mergeAll(
 	SendEmailLive,
@@ -585,14 +620,18 @@ const WorkflowsLayer = Layer.mergeAll(
 
 The `ClusterWorkflowEngine` requires `Sharding | MessageStorage` in context; both come from any of the cluster runtime bundles. See the `effect-rpc-cluster` skill for cluster setup.
 
+Workflow tags are unique registration identities. Reusing a tag with a different
+workflow definition logs a warning (including payload shapes) and retains the
+existing definition; it is not a schema replacement mechanism.
+
 #### Workflow shard-group routing
 
-A workflow can be annotated with `ClusterSchema.ShardGroup` (from `effect/unstable/cluster`), exactly like an entity:
+A workflow can be annotated with `ClusterSchema.ShardGroup` (from `effect/cluster`), exactly like an entity:
 
 ```ts
-import { ClusterSchema } from 'effect/unstable/cluster';
+import { ClusterSchema } from 'effect/cluster';
 
-const OrderWorkflow = Workflow.make({ /* ... */ })
+const OrderWorkflow = Workflow.make('OrderWorkflow', { /* ... */ })
 	.annotate(ClusterSchema.ShardGroup, () => 'workflow');
 ```
 
@@ -633,8 +672,7 @@ The `Encoded` interface works with raw/encoded values (JSON-safe), while the `Wo
 When a workflow suspends (waiting for an activity or deferred), the engine retries with `Schedule.min([Schedule.exponential("200 millis", 1.5), Schedule.spaced("30 seconds")])`: exponential backoff from 200ms, capped at 30s. (`Schedule.andThen` / `andThenResult` were renamed to `Schedule.concat` / `concatResult`, and the old `Schedule.either` cap pattern is now `Schedule.min`.) Override per-workflow:
 
 ```ts
-const MyWorkflow = Workflow.make({
-	name: 'MyWorkflow',
+const MyWorkflow = Workflow.make('MyWorkflow', {
 	payload: { id: Schema.String },
 	idempotencyKey: (p) => p.id,
 	suspendedRetrySchedule: Schedule.spaced('5 seconds')
@@ -651,7 +689,7 @@ import {
 	DurableDeferred,
 	Workflow,
 	WorkflowEngine
-} from 'effect/unstable/workflow';
+} from 'effect/workflow';
 
 // --- Schemas ---
 
@@ -700,8 +738,7 @@ const shipOrder = Activity.make({
 
 // --- Workflow ---
 
-const ProcessOrder = Workflow.make({
-	name: 'ProcessOrder',
+const ProcessOrder = Workflow.make('ProcessOrder', {
 	payload: {
 		orderId: Schema.String,
 		items: Schema.Array(Schema.String)
@@ -806,10 +843,10 @@ Compensation finalizers are only registered for top-level effects in the workflo
 
 ## Integration with Effect Cluster
 
-For production durability and distribution, swap `WorkflowEngine.layerMemory` for `ClusterWorkflowEngine.layer` (from `effect/unstable/cluster`):
+For production durability and distribution, swap `WorkflowEngine.layerMemory` for `ClusterWorkflowEngine.layer` (from `effect/cluster`):
 
 ```ts
-import { ClusterWorkflowEngine } from 'effect/unstable/cluster';
+import { ClusterWorkflowEngine } from 'effect/cluster';
 import { NodeClusterSocket } from '@effect/platform-node';
 
 const MainLive = Layer.mergeAll(SendEmailLive, ProcessOrderLive).pipe(

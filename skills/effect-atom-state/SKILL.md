@@ -7,20 +7,20 @@ description: Implement reactive state management with Effect Atom for React appl
 
 Effect Atom is a reactive state management library for Effect that seamlessly integrates with React.
 
-`@effect/atom-react` supports React `>=19.0.0 <20.0.0` (the peer range
-was relaxed). This does not add React 18 support. Keep the adapter aligned with
-the Effect release; core atoms still live in `effect/unstable/reactivity`, and
+`@effect/atom-react@4.0.0` requires React `>=19.0.0 <20.0.0`.
+Keep the adapter at the same version as `effect`; core atoms live in `effect/reactivity`, and
 React bindings live in `@effect/atom-react` (`packages/atom/react` upstream).
+Core reactivity APIs carry `@stability unstable` and may break in minor releases.
 
 ## Effect Source Reference
 
 The Effect v4 source is available at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`.
-Browse and read files there directly to look up APIs, types, and implementations.
+Inspect `git show effect@4.0.0:<path>` there for this baseline; main may be ahead.
 
 Reference this for:
 
-- Atom reactivity: `packages/effect/src/unstable/reactivity/`
-- AsyncResult source: `packages/effect/src/unstable/reactivity/AsyncResult.ts`
+- Atom reactivity: `packages/effect/src/reactivity/`
+- AsyncResult source: `packages/effect/src/reactivity/AsyncResult.ts`
 - Effect source: `packages/effect/src/`
 
 ## Core Concepts
@@ -36,7 +36,7 @@ explicit for state that must survive SSR dehydration.
 Atoms work **by reference** - they are stable containers for reactive state:
 
 ```typescript
-import * as Atom from 'effect/unstable/reactivity/Atom';
+import * as Atom from 'effect/reactivity/Atom';
 
 // Atoms are created once and referenced throughout the app
 export const counterAtom = Atom.make(0);
@@ -47,10 +47,13 @@ export const counterAtom = Atom.make(0);
 
 ### Automatic Cleanup
 
-Atoms automatically reset when no subscribers remain (unless marked with `keepAlive`):
+Registry nodes become eligible for disposal when unused by subscribers and
+dependent atoms. Disposal follows the atom's idle TTL or registry default; it is
+not necessarily synchronous with the last React unmount. `keepAlive` retains the
+node until its registry is reset/disposed:
 
 ```typescript
-// Resets when last subscriber unmounts
+// Disposed after becoming unused, according to the registry's idle policy
 export const temporaryState = Atom.make(initialValue);
 
 // Persists across component lifecycles
@@ -61,10 +64,15 @@ export const persistentState = Atom.make(initialValue).pipe(Atom.keepAlive);
 
 Atom values are computed on-demand when subscribers access them.
 
+Tracked dependencies remain retained while a node is stale and are reconciled
+on its next build. Register cleanup with `get.addFinalizer` or scoped effects so
+superseded builds release resources. Observed failed builds can recover when a
+dependency changes; avoid manual reset workarounds for stale-node propagation.
+
 ## Pattern: Basic Atoms
 
 ```typescript
-import * as Atom from 'effect/unstable/reactivity/Atom';
+import * as Atom from 'effect/reactivity/Atom';
 
 // Simple atom
 export const count = Atom.make(0);
@@ -132,9 +140,13 @@ export const userAtoms = Atom.family((userId: string) =>
 	Atom.make<User | null>(null).pipe(Atom.keepAlive)
 );
 
-// Usage - always returns the same atom for a given ID
+// Reuses the cached live atom for a given ID
 const userAtom = userAtoms(userId);
 ```
+
+Family caches use weak references where supported. Identity is reused while the
+cached atom is live; it is not a permanent store of every key ever requested.
+An old atom's finalizer does not evict a newer cached atom for the same key.
 
 ## Pattern: Atom.fn for Async Actions
 
@@ -142,9 +154,15 @@ Use `Atom.fn` with `Effect.fnUntraced` for async operations:
 
 - Reading gives `AsyncResult<Success, Error>` with automatic `.waiting` flag
 - Triggering via `useAtomSet` runs the effect
+- The callback takes one application argument plus an `Atom.FnContext`; bundle
+  multiple inputs into an object. The second argument is not another payload.
+- By default a new write replaces the current run. Use `{ concurrent: true }`
+  deliberately for overlapping Effect executions. Synchronous successes and
+  failures are retained in concurrent mode; it still exposes one `AsyncResult`,
+  not a per-invocation result log.
 
 ```typescript
-import * as Atom from "effect/unstable/reactivity/Atom"
+import * as Atom from "effect/reactivity/Atom"
 import { useAtomValue, useAtomSet } from "@effect/atom-react"
 import { Effect, Exit } from "effect"
 
@@ -278,7 +296,7 @@ Atom.runtime.addGlobalLayer(
 Atoms can return `AsyncResult` types for explicit error handling:
 
 ```tsx
-import * as AsyncResult from 'effect/unstable/reactivity/AsyncResult';
+import * as AsyncResult from 'effect/reactivity/AsyncResult';
 
 export const userData = Atom.make<AsyncResult.AsyncResult<User, Error>>(
 	AsyncResult.initial()
@@ -354,7 +372,7 @@ Use `Atom.kvs` for persisted state:
 
 ```typescript
 import { BrowserKeyValueStore as BrowserKvs } from '@effect/platform-browser';
-import * as Atom from 'effect/unstable/reactivity/Atom';
+import * as Atom from 'effect/reactivity/Atom';
 import * as Schema from 'effect/Schema';
 
 export const userSettings = Atom.kvs({
@@ -452,7 +470,7 @@ export const wsConnection = Atom.make(
 2. **Never Manual Void Wrappers**: Don't wrap Effects in void functions—you lose `waiting` control
 3. **Reference Stability**: Use `Atom.family` for dynamically generated atom sets
 4. **Lazy Evaluation**: Values computed on-demand when accessed
-5. **Automatic Cleanup**: Atoms reset when unused (unless `keepAlive`)
+5. **Automatic Cleanup**: Unused atoms follow idle retention; `keepAlive` lasts until registry reset/disposal
 6. **Derive, Don't Coordinate**: Use computed atoms to derive state
 7. **Result Types**: Handle errors explicitly with AsyncResult.match
 8. **Services in Runtime**: Wrap layers once, use in multiple atoms
@@ -467,7 +485,7 @@ export const wsConnection = Atom.make(
 Use `Atom.fn` with `Effect.fnUntraced` which automatically provides `AsyncResult` with `.waiting` flag:
 
 ```typescript
-import * as Atom from "effect/unstable/reactivity/Atom"
+import * as Atom from "effect/reactivity/Atom"
 import { useAtomValue, useAtomSet } from "@effect/atom-react"
 import { Effect } from "effect"
 
@@ -496,7 +514,7 @@ function UserProfile() {
 
 ```typescript
 export const updateItem = runtime.fn(
-	Effect.fnUntraced(function* (id: string, updates: Partial<Item>) {
+	Effect.fnUntraced(function* ({ id, updates }: { id: string; updates: Partial<Item> }) {
 		const current = yield* Atom.get(itemsAtom);
 
 		// Optimistic update
@@ -569,12 +587,32 @@ Atom.batch(() => {
 	registry.set(ageAtom, 30);
 	registry.set(statusAtom, 'active');
 });
-// Subscribers notified once, not three times
+// Dependents observe the final batched state
 ```
 
 Outside Effect/Atom contexts, use an `AtomRegistry` (`registry.set(...)`) inside the batch. Inside an atom or write context, use that context (`ctx.set(...)`) in the same pattern. `Atom.batch` only batches notifications; it does not introduce a free `set` function.
 
-Use when multiple atoms must update atomically to avoid intermediate renders.
+Batch synchronous writes to avoid intermediate notifications. Writes made by
+commit listeners are processed in subsequent commit work rather than dropped,
+so do not promise exactly one callback when listeners themselves write.
+Batching is not rollback: writes made before a thrown exception are still
+committed and notified, then the first failure is rethrown. Async work after an
+`await` is outside the batch.
+
+## Stale-while-revalidate reads
+
+Wrap an `AsyncResult` query atom with `Atom.swr({ staleTime: '30 seconds' })`.
+Reads return the current result and defer stale-source refresh until after the
+read. The scheduled refresh is skipped if the source becomes fresh or the
+wrapper is disposed; a one-shot unmounted read does not keep background work
+alive. Mount/subscribe for a continuing query lifetime.
+
+`revalidateOnMount` controls initial stale refreshes. `revalidateOnFocus: true`
+respects `staleTime`, while `'always'` forces a refresh. Manual refresh always
+forwards to the source. `staleTime` is a freshness window, distinct from idle TTL.
+Create the wrapper once (module scope, `Atom.family`, or `useMemo`) rather than
+on every render. `swr` returns `WithoutSerializable<R>`; retain the serializable
+source atom for hydration or explicitly serialize the wrapper under its own key.
 
 ## AsyncResult.builder
 

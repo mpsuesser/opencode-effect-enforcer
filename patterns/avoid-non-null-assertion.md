@@ -37,8 +37,8 @@ safe :: User → Maybe Email
 safe user = user?.contact?.email ?? Nothing
 
 -- With Schema for external data
-validated :: Unknown → Either ParseError User
-validated = Schema.decode userSchema
+validated :: Unknown → Effect User SchemaError
+validated = Schema.decodeUnknownEffect User
 ```
 
 The `!` operator is "trust me, this isn't null"—if wrong, runtime crash. Use `?.`, `??`, `Option`, or type guards for safe null handling.

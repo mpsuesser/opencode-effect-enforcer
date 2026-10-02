@@ -467,6 +467,14 @@ const program = Effect.all([
 error type. Preloading a LayerMap does not make future resource acquisition
 infallible; its accessors retain the resource error channel.
 
+Construct keyed layers with a lookup function and options:
+`LayerMap.make(lookup, { preloadKeys, idleTimeToLive })`.
+`fromRecord` and `LayerMap.Service` also support preloading. In all forms, keys
+with zero idle TTL are skipped, including when TTL is omitted. Set a non-zero
+`idleTimeToLive` to eagerly acquire and validate preloaded keys during
+construction; otherwise errors surface on first access. Preloaded resources
+remain retained only for that idle TTL, not forever.
+
 Handle construction errors:
 
 ```typescript

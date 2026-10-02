@@ -124,6 +124,41 @@ it.live('test with real time', () =>
 
 Use `it.live` only when real time or live runtime services are behavior under test. It scopes the test without installing `TestClock` or `TestConsole`. Real databases, HTTP clients, and filesystems still require their explicit layers; `it.live` does not provide them.
 
+### Vitest Fixtures
+
+Build helpers with `makeMethods(test.extend(...))` when using Vitest fixtures.
+Destructure the fixtures in the callback: Vitest reads those names to select
+setup and rejects a plain `(ctx) =>` parameter once fixtures are defined.
+
+```typescript
+import { expect, makeMethods, test } from '@effect/vitest';
+import { Effect } from 'effect';
+
+const it = makeMethods(
+	test.extend('config', { scope: 'file' }, () => ({ port: 3000 }))
+);
+
+it.effect('reads the config fixture', ({ config }) =>
+	Effect.sync(() => {
+		expect(config.port).toBe(3000);
+	})
+);
+
+it.effect.each([3000])('uses port %s', (port, { config }) =>
+	Effect.sync(() => {
+		expect(config.port).toBe(port);
+	})
+);
+```
+
+`it.effect.each` passes the test case first and context second. Named and
+anonymous `it.layer` suites preserve fixtures; fixture teardown follows the
+Effect test scope's closure. Property tests cannot request fixtures, though auto
+fixtures still run. Build `makeMethods` from `test` or `test.extend(...)`, not
+the suite-bound test passed to a `describe` callback, which can register nested
+layer tests outside their intended suite. In concurrent tests, destructure and
+use the callback's `expect` for per-test snapshots and assertion counts.
+
 ### Resource Management in Tests
 
 `it.effect` already handles scoping internally — there is no separate `it.scoped` or `it.scopedLive` variant. Use `Effect.acquireRelease` or `Effect.scoped` directly within `it.effect`:
@@ -606,6 +641,11 @@ it.effect('should fail with specific error', () =>
 
 ## Property-Based Testing
 
+Native `Arbitrary` is exported from `effect/Arbitrary` or the `effect` root;
+it does not use fast-check. It remains marked `@stability unstable`, so preserve
+important failing inputs rather than relying on replay compatibility across
+releases.
+
 ### Using it.prop for Pure Properties
 
 ```typescript
@@ -685,7 +725,7 @@ it.effect.prop('user validation works', { user: User }, ({ user }) =>
 with `Arbitrary.all`. For manual sampling use the interruptible native runner:
 
 ```typescript
-import { Arbitrary } from 'effect/unstable/arbitrary';
+import * as Arbitrary from 'effect/Arbitrary';
 
 const userArbitrary = Arbitrary.schema(User);
 const samples = Arbitrary.sampleEffect(userArbitrary, { count: 10, seed: 'users' });
@@ -699,8 +739,21 @@ result; inspect the outcome rather than treating completion as success. Preserve
 seeds, replay tokens, and important failing inputs. Replay paths can change when
 the generator/shrinker changes. In the Vitest adapter, thrown exceptions, typed
 failures, and defects are shrinkable falsifications; interruption stays interruption.
+The direct `Arbitrary.checkEffect` runner instead propagates defects and
+interruption; only `false` and typed Effect failures become falsifications.
+Generated values are not cloned. Keep properties deterministic and immutable,
+and acquire/reset stateful fixtures inside each evaluation: shrinking and replay
+run the property repeatedly without resetting shared services for you.
 
 ### Configuring native property checks
+
+Set suite-wide defaults before concurrent tests start with
+`Arbitrary.configureGlobal({ check: { runs: 1000 }, sample: { count: 10 } })`.
+This replaces the previous configuration; `{}` restores built-in defaults.
+Non-`undefined` per-call options win. Defaults are read when an execution starts,
+including for Effects created earlier, and do not change active runs. Replay
+tokens still control replayed checks. Vitest's `arbitrary` options use these
+same defaults.
 
 ```typescript
 import { it } from '@effect/vitest';
@@ -720,6 +773,42 @@ it.effect.prop(
 	}
 );
 ```
+
+## Schema Assertions
+
+`TestSchema` from `effect/testing` is marked `@stability unstable`.
+`new TestSchema.Asserts(schema)` provides `make()`, `decoding()`, and `encoding()`
+assertions. Their `succeedEffect` and `failEffect` methods are lazy Effects;
+decoding/encoding assertions use the caller's services, test clock, and
+interruption. Prefer them inside `it.effect` over starting a separate runtime
+through Promise helpers.
+
+<!-- typecheck -->
+```typescript
+import { Effect } from 'effect';
+import * as Schema from 'effect/Schema';
+import { TestSchema } from 'effect/testing';
+
+const asserts = new TestSchema.Asserts(Schema.FiniteFromString);
+const verify = Effect.gen(function* () {
+	yield* asserts.decoding().succeedEffect('42', 42);
+	yield* asserts.encoding().succeedEffect(42, '42');
+	yield* asserts.verifyRoundTripEffect({ seed: 1, runs: 20 });
+});
+```
+
+`verifyRoundTripEffect` generates decoded values and checks encode-then-decode
+with strict deep equality; it requires both encoding and decoding services.
+It does not promise to preserve arbitrary original wire spellings. The Promise
+counterpart is `verifyRoundTrip`, replacing `verifyLosslessTransformation`.
+Promise `succeed` / `fail` remain available for any test runner after satisfying
+their services with the assertion object's `.provide(...)` method.
+
+Success assertions compare against the input when only one argument is supplied;
+pass an explicit expected value for transformations. Failure assertions compare
+the formatted schema issue, not arbitrary failures. Assertion mismatches are
+defects. Schema defects and interruption propagate, even when combined with
+validation failures, rather than satisfying a failure assertion.
 
 ## Test Control
 
@@ -973,7 +1062,7 @@ For SSE endpoints, use `HttpServerResponse.stream` with different `Stream` const
 
 ```typescript
 import { Effect, Stream } from 'effect';
-import { HttpServerResponse } from 'effect/unstable/http';
+import { HttpServerResponse } from 'effect/http';
 
 // Normal SSE response — stream JSON lines, then [DONE]
 const sse = (lines: ReadonlyArray<unknown>) =>

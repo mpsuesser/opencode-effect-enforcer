@@ -7,6 +7,8 @@ description: Structure Effect platform layer provision for cross-platform applic
 
 Master Effect platform layer provision for cross-platform applications. Use this skill when structuring applications that use Effect platform abstractions to ensure portability across Node.js and Bun environments.
 
+Targets **Effect 4.0.0**. Keep `effect` and `@effect/*` packages on the same version and inspect the `effect@4.0.0` source tag. APIs explicitly marked `@stability unstable` can change in minor releases, including third-party client surfaces such as NodeRedis.
+
 ## The Golden Rule
 
 **Application code uses abstract interfaces. Platform-specific layers are provided either at the program entry point or inside a runtime-facing adapter module's `defaultLayer`.**
@@ -49,9 +51,10 @@ The important boundary is that downstream callers still depend on the abstract s
 
 For HTTP provider adapters, the abstract dependency is `HttpClient.HttpClient`. Keep it visible on the adapter's raw layer and name the adapter after the upstream it owns:
 
+<!-- typecheck -->
 ```typescript
 import { Context, Effect, Layer } from 'effect';
-import { FetchHttpClient, HttpClient } from 'effect/unstable/http';
+import { FetchHttpClient, HttpClient } from 'effect/http';
 
 export class ProviderGateway extends Context.Service<ProviderGateway, {
 	readonly health: Effect.Effect<void>;
@@ -120,9 +123,9 @@ Each platform context (`NodeServices.layer`, `BunServices.layer`) provides these
 | **Stdio**               | `Stdio.Stdio`                             | Standard I/O streams (stdin, stdout, stderr)        | `effect`                  |
 | **Terminal**            | `Terminal.Terminal`                       | Terminal/console I/O with ANSI support              | `effect`                  |
 | **Crypto**              | `Crypto.Crypto`                           | Cryptographic random bytes, UUIDs, and digests      | `effect`                  |
-| **ChildProcessSpawner** | `ChildProcessSpawner.ChildProcessSpawner` | Spawn and manage child processes                    | `effect/unstable/process` |
+| **ChildProcessSpawner** | `ChildProcessSpawner.ChildProcessSpawner` | Spawn and manage child processes                    | `effect/process` |
 
-`Crypto.Crypto` is included in the Node/Bun aggregate layers; browser applications can provide `BrowserCrypto.layer` when they need the crypto service. These aggregate layers are core service bundles: they do **not** provide specialized integrations such as HTTP clients/servers, sockets, workers, or Redis. For sockets, import `Socket.Socket` / `SocketServer.SocketServer` from `effect/unstable/socket` and provide socket-specific layers such as `NodeSocket.layerWebSocket(...)`, `NodeSocket.layerNet(...)`, `BunSocket.layerWebSocket(...)`, `BrowserSocket.layerWebSocket(...)`, or Node/Bun socket-server layers as appropriate.
+`Crypto.Crypto` is included in the Node/Bun aggregate layers; browser applications can provide `BrowserCrypto.layer` when they need the crypto service. These aggregate layers are core service bundles: they do **not** provide specialized integrations such as HTTP clients/servers, sockets, workers, or Redis. For sockets, import `Socket.Socket` / `SocketServer.SocketServer` from `effect/socket` and provide socket-specific layers such as `NodeSocket.layerWebSocket(...)`, `NodeSocket.layerNet(...)`, `BunSocket.layerWebSocket(...)`, `BrowserSocket.layerWebSocket(...)`, or Node/Bun socket-server layers as appropriate.
 
 Runtime application/provider HTTP belongs behind Effect `HttpClient`, not raw `fetch`. Only a named low-level platform transport adapter may use fetch directly, with a documented justification and full ownership of interruption, status-before-decode, schema decoding, and typed errors. Provider adapters also own redacted diagnostic evidence and retry exhaustion; provider calls run outside database transactions, and retries apply only to proven-idempotent operations. In particular, do not decorate a shared client with automatic retry when it can execute ordinary non-idempotent POST/PATCH requests.
 
@@ -142,9 +145,10 @@ The Node layer connects while it is built and therefore can fail with `Redis.Red
 
 ### Usage Example
 
+<!-- typecheck -->
 ```typescript
 import { Console, Crypto, Effect, FileSystem, Path, Stream, Terminal } from 'effect';
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 
 const buildProject = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
@@ -175,7 +179,7 @@ const buildProject = Effect.gen(function* () {
 		Stream.runForEach((line) => Console.log(`[build] ${line}`))
 	);
 	return yield* handle.exitCode;
-});
+}).pipe(Effect.scoped);
 ```
 
 ## Layer Composition Patterns
@@ -219,20 +223,22 @@ pipe(
 import { NodeServices, NodeRuntime } from '@effect/platform-node';
 import { Effect, FileSystem, Layer, pipe } from 'effect';
 
-declare const program: Effect.Effect<void, never, never>;
+declare const program: Effect.Effect<string, never, FileSystem.FileSystem>;
 
-// Custom FileSystem implementation
-const CustomFS = Layer.succeed(FileSystem.FileSystem, {
-	/* custom implementation */
-} as FileSystem.FileSystem);
+// A complete test double without asserting an incomplete object.
+const CustomFS = FileSystem.layerNoop({
+	readFileString: () => Effect.succeed('custom content')
+});
 
 pipe(
 	program,
+	Effect.provide(CustomFS), // Innermost provision wins for program reads
 	Effect.provide(NodeServices.layer),
-	Effect.provide(CustomFS), // Override after platform layer
 	NodeRuntime.runMain
 );
 ```
+
+Provision nests: `program.pipe(Effect.provide(A), Effect.provide(B))` builds A inside B, and A wins for overlapping services seen by `program`. An already-built aggregate such as `NodeServices.layer` wires its own internal dependencies; replacing the FileSystem seen by application code does not rewire its child-process spawner. Compose individual platform layers when those internal dependencies must also be replaced.
 
 ## Testing with Mock Layers
 
@@ -242,12 +248,12 @@ pipe(
 
 ```typescript
 import { Effect, FileSystem, Layer } from 'effect';
-import { expect, test } from 'vitest';
+import { expect, it } from '@effect/vitest';
 
 declare const readConfig: Effect.Effect<string, never, FileSystem.FileSystem>;
 
-// Use FileSystem.makeNoop for testing — provides default "NotFound" stubs
-// for all methods, then override only the ones you need
+// makeNoop supplies NotFound for many operations, exists=false, remove=void,
+// and defects for directory/temp creation. Override each operation the test uses.
 const MockFileSystem = Layer.succeed(
 	FileSystem.FileSystem,
 	FileSystem.makeNoop({
@@ -256,18 +262,18 @@ const MockFileSystem = Layer.succeed(
 	})
 );
 
-test('should read config', () =>
+it.effect('should read config', () =>
 	Effect.gen(function* () {
 		const result = yield* readConfig;
 		expect(result).toContain('mock content');
-	}).pipe(Effect.provide(MockFileSystem), Effect.runPromise));
+	}).pipe(Effect.provide(MockFileSystem)));
 ```
 
 ### Mocking Multiple Services
 
 ```typescript
 import { Effect, FileSystem, Layer, Path, Terminal } from 'effect';
-import { test } from 'vitest';
+import { it } from '@effect/vitest';
 
 declare const program: Effect.Effect<
 	void,
@@ -276,38 +282,33 @@ declare const program: Effect.Effect<
 >;
 
 const TestContext = Layer.mergeAll(
-	Layer.succeed(FileSystem.FileSystem, {
+	FileSystem.layerNoop({
 		readFileString: () => Effect.succeed('test')
-		// ...
-	} as FileSystem.FileSystem),
+	}),
 
-	Layer.succeed(Path.Path, {
-		join: (...parts) => parts.join('/'),
-		normalize: (path) => path
-		// ...
-	} as Path.Path),
+	Path.layer, // Complete, deterministic POSIX path operations
 
 	Layer.succeed(
 		Terminal.Terminal,
 		Terminal.make({
 			columns: Effect.succeed(80),
 			rows: Effect.succeed(24),
-		readInput: Effect.die('readInput not used in this test'),
+			readInput: Effect.die('readInput not used in this test'),
 			readLine: Effect.succeed('test input'),
 			display: () => Effect.void
 		})
 	)
 );
 
-test('integration test', () =>
-	program.pipe(Effect.provide(TestContext), Effect.runPromise));
+it.effect('integration test', () =>
+	program.pipe(Effect.provide(TestContext)));
 ```
 
 ### Using layerNoop for Convenient Test Layers
 
 ```typescript
 import { Effect, FileSystem } from 'effect';
-import { test } from 'vitest';
+import { it } from '@effect/vitest';
 
 // FileSystem.layerNoop wraps makeNoop in a Layer for convenience
 const TestFS = FileSystem.layerNoop({
@@ -316,11 +317,11 @@ const TestFS = FileSystem.layerNoop({
 	exists: () => Effect.succeed(true)
 });
 
-test('with layerNoop', () =>
+it.effect('with layerNoop', () =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		yield* fs.writeFileString('test.txt', 'content');
-	}).pipe(Effect.provide(TestFS), Effect.runPromise));
+	}).pipe(Effect.provide(TestFS)));
 ```
 
 ## Architecture Patterns
@@ -339,24 +340,28 @@ src/
 
 ### Service Implementation
 
+<!-- typecheck -->
 ```typescript
 // services/ConfigService.ts
-import { Effect, FileSystem, Layer, Path, Schema, Context } from 'effect';
+import { Effect, FileSystem, Layer, Path, Context } from 'effect';
+import * as Schema from 'effect/Schema';
 
-interface Config {
-	readonly name: string;
-	readonly version: string;
-}
+class Config extends Schema.Class<Config>('Config')({
+	name: Schema.String,
+	version: Schema.String
+}) {}
 
-declare const ConfigSchema: Schema.Schema<Config>;
+const ConfigJson = Schema.fromJsonString(Config);
 
 class ConfigError extends Schema.TaggedError<ConfigError>()(
 	'ConfigError',
 	{
-		message: Schema.String
+		operation: Schema.Literals(['load', 'save']),
+		cause: Schema.Defect()
 	}
 ) {}
 
+/** Loads and saves schema-validated application configuration. */
 export class ConfigService extends Context.Service<
 	ConfigService,
 	{
@@ -365,6 +370,7 @@ export class ConfigService extends Context.Service<
 	}
 >()('ConfigService') {}
 
+/** Requires abstract file-system and path services; preserves boundary failures. */
 export const ConfigServiceLive = Layer.effect(
 	ConfigService,
 	Effect.gen(function* () {
@@ -374,15 +380,18 @@ export const ConfigServiceLive = Layer.effect(
 		const load = Effect.gen(function* () {
 			const configPath = path.join('config', 'app.json');
 			const content = yield* fs.readFileString(configPath);
-			return yield* Schema.decode(ConfigSchema)(JSON.parse(content));
-		});
+			return yield* Schema.decodeUnknownEffect(ConfigJson)(content);
+		}).pipe(Effect.mapError((cause) => new ConfigError({ operation: 'load', cause })));
 
-		const save = (config: Config) =>
-			Effect.gen(function* () {
+		const save = Effect.fn('Config.save')(
+			function* (config: Config) {
 				const configPath = path.join('config', 'app.json');
-				const content = JSON.stringify(config, null, 2);
+				const content = yield* Schema.encodeEffect(ConfigJson)(config);
+				yield* fs.makeDirectory(path.dirname(configPath), { recursive: true });
 				yield* fs.writeFileString(configPath, content);
-			});
+			},
+			Effect.mapError((cause) => new ConfigError({ operation: 'save', cause }))
+		);
 
 		return { load, save };
 	})
@@ -418,27 +427,23 @@ pipe(
 
 ## Common Patterns
 
-### Conditional Platform Loading
+### Runtime-Specific Entry Points
 
 ```typescript
+// main-node.ts
 import { NodeServices, NodeRuntime } from '@effect/platform-node';
-import { BunServices } from '@effect/platform-bun';
-import { Effect, pipe } from 'effect';
+import { Effect } from 'effect';
 
 declare const program: Effect.Effect<void, never, never>;
 
-const PlatformContext =
-	process.env.RUNTIME === 'bun' ? BunServices.layer : NodeServices.layer;
-
-pipe(
-	program,
-	Effect.provide(PlatformContext),
-	NodeRuntime.runMain // Runtime matches context
-);
+program.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);
 ```
+
+Use `BunServices.layer` with `BunRuntime.runMain` in the Bun entry point. Separate entry points avoid eagerly loading adapters for a different runtime or selecting a layer independently of its runner.
 
 ### Scoped Platform Resources
 
+<!-- typecheck -->
 ```typescript
 import { Effect, FileSystem, Path } from 'effect';
 
@@ -446,17 +451,13 @@ const withTempDirectory = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
 	const path = yield* Path.Path;
 
-	const tempDir = yield* Effect.acquireRelease(
-		Effect.gen(function* () {
-			const dir = path.join('temp', `${Date.now()}`);
-			yield* fs.makeDirectory(dir, { recursive: true });
-			return dir;
-		}),
-		(dir) => fs.remove(dir, { recursive: true })
-	);
+	const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: 'app-' });
+	const file = path.join(tempDir, 'result.txt');
+	yield* fs.writeFileString(file, 'result');
 
-	return tempDir;
-});
+	// Return a durable value, not the path to a resource about to be deleted.
+	return yield* fs.readFileString(file);
+}).pipe(Effect.scoped);
 ```
 
 ## Anti-Patterns
@@ -506,8 +507,8 @@ export const myService = program.pipe(
 1. **Import abstractions, provide implementations**: Application code imports from `effect` (e.g. `FileSystem`, `Path`, `Terminal`), entry points provide platform-specific contexts
 2. **One platform layer per runtime**: Use exactly one of `NodeServices.layer` or `BunServices.layer`
 3. **Platform layer last**: Provide custom services first, platform context last
-4. **Mock in tests**: Use `Layer.succeed` with mock implementations, never import platform-specific modules in tests
-5. **Entry point decides platform**: Only `main.ts` (or equivalent entry) should import platform-specific modules
+4. **Test through services**: Use complete test layers for unit tests; real platform layers belong in runtime-adapter or composition tests
+5. **Own platform wiring**: Entry points and runtime-facing adapter `defaultLayer` exports may import platform-specific modules
 6. **Keep HTTP transport requirements visible**: Provider adapter `layer` requires `HttpClient.HttpClient`; an optional `defaultLayer` may provide the chosen transport
 7. **Make adapters own the boundary**: Named adapters classify status before schema decoding, map typed failures, retain redacted evidence, and expose retry exhaustion
 8. **Do not retry by accident**: Restrict retrying/rate-limited clients to proven-idempotent operations; non-idempotent calls need an explicit provider guarantee or idempotency key

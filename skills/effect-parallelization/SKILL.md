@@ -120,9 +120,9 @@ yield* Effect.all([logA, logB, logC], { concurrency: 'unbounded', discard: true 
 // Effect<void, E, R>
 ```
 
-### `mode: 'result'` — run everything, never fail
+### `mode: 'result'` — collect typed outcomes
 
-Each slot becomes a `Result<A, E>` and the error channel becomes `never`. Every effect runs to completion (no fail-fast interruption):
+Each slot becomes a `Result<A, E>` and the error channel becomes `never`. Typed failures do not short-circuit the batch; defects and interruption still terminate it:
 
 ```ts
 const results = yield* Effect.all(
@@ -233,6 +233,7 @@ const settled = yield* Effect.raceFirst(primary, secondary);
 Semantics (verified in `internal/effect.ts`):
 
 - **Loser interruption is awaited**: when a winner settles, the remaining fibers are interrupted uninterruptibly and the race only resumes with the winning exit after those interruptions (including finalizers) complete.
+- Cleanup also covers losers still starting when the race settles or the caller is interrupted. Use the race combinators directly rather than custom start/cancel bookkeeping.
 - `race`/`raceAll`: early failures do not finish the race — the race keeps waiting until one effect succeeds or all have failed. If all fail, the failure reasons are collected into one combined `Cause`.
 - `raceFirst`/`raceAllFirst`: the first fiber to settle (success *or* failure) decides the outcome.
 - Effects are forked in iteration order; if an early effect completes synchronously, later effects may never start at all.
@@ -300,17 +301,33 @@ const strong = yield* Effect.filterMapEffect(
 // Array of kept, transformed values
 ```
 
-### `Effect.partition` — split failures from successes, never fail
+### `Effect.partition` — collect successes and typed failures
 
-Runs every element (no short-circuit). Returns `[excluded, satisfying]` — failures first. Both arrays preserve input order:
+Typed failures do not short-circuit. Returns `[passes, fails]` — **successes first**. Both arrays preserve input order; defects and interruption still propagate:
 
 ```ts
-const [failures, users] = yield* Effect.partition(
+const [users, failures] = yield* Effect.partition(
 	userIds,
 	(id) => fetchUser(id),
 	{ concurrency: 8 }
 );
-// Effect<[excluded: Array<E>, satisfying: Array<User>], never, R>
+// Effect<[passes: Array<User>, fails: Array<E>], never, R>
+```
+
+`Arr.partition`, `Arr.separate`, the corresponding `Chunk` / `Record` helpers,
+and `Option.partitionMap` also put successes first, matching `Stream.partition`.
+Name destructured tuple elements by meaning rather than assuming the older order.
+
+<!-- typecheck -->
+```ts
+import { Effect } from 'effect';
+
+const partitioned = Effect.partition(
+	[1, 2, 3],
+	(n) => n === 2 ? Effect.fail('rejected') : Effect.succeed(n),
+	{ concurrency: 2 }
+);
+// Success value: [[1, 3], ['rejected']]
 ```
 
 ### `Effect.validate` — accumulate all failures
@@ -518,7 +535,7 @@ import { Effect } from 'effect';
 
 const syncAllUsers = (userIds: ReadonlyArray<string>) =>
 	Effect.gen(function* () {
-		const [failures, synced] = yield* Effect.partition(
+		const [synced, failures] = yield* Effect.partition(
 			userIds,
 			(id) => syncUser(id),
 			{ concurrency: 8 }

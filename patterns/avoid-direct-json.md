@@ -30,8 +30,8 @@ encodeJson     :: Schema a → a → String
 bad :: String → IO User
 bad json = JSON.parse json        -- returns Any, throws on invalid
 
-good :: String → Either ParseError User
-good json = Schema.decodeUnknownSync(Schema.fromJsonString(User)) json
+good :: String → Effect User SchemaError
+good json = Schema.decodeUnknownEffect(Schema.fromJsonString(User)) json
 
 unknownJson = Schema.fromJsonString(Schema.Unknown)
 
@@ -41,11 +41,11 @@ data User = Schema.Class "User"
   , name :: Schema.String
   }
 
-decode :: String → Either ParseError User
-decode = Schema.decodeUnknownSync(Schema.fromJsonString(User))
+decode :: String → Effect User SchemaError
+decode = Schema.decodeUnknownEffect(Schema.fromJsonString(User))
 
-encode :: User → String
-encode = Schema.encodeSync(Schema.fromJsonString(User))
+encode :: User → Effect String SchemaError
+encode = Schema.encodeEffect(Schema.fromJsonString(User))
 ```
 
 `JSON.parse` returns `any` and throws on invalid input. `Schema.fromJsonString(...)` provides typed, validated JSON parsing and encoding. Use `Schema.fromJsonString(Schema.Unknown)` when the JSON shape is intentionally unknown; `Schema.UnknownFromJsonString` is internal in current Effect v4. Direct JSON methods remain reasonable at narrow logging/debugging boundaries.

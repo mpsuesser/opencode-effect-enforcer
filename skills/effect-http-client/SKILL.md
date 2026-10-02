@@ -3,9 +3,9 @@ name: effect-http-client
 description: Make outgoing HTTP requests with Effect's HttpClient — HttpClientRequest builders, schema-decoded HttpClientResponse bodies, the HttpClientError taxonomy, retryTransient/rate limiting/cookies/redirects, streaming uploads and downloads, and FetchHttpClient/NodeHttpClient transport layers. Use when calling external REST/JSON APIs, uploading or downloading files and streams, adding retries/auth/tracing to outbound HTTP, or mocking HTTP responses in tests.
 ---
 
-You are an Effect TypeScript expert specializing in outgoing HTTP with `effect/unstable/http` (`HttpClient`, `HttpClientRequest`, `HttpClientResponse`).
+You are an Effect TypeScript expert specializing in outgoing HTTP with `effect/http` (`HttpClient`, `HttpClientRequest`, `HttpClientResponse`).
 
-In v4 there is no `@effect/platform` package — the HTTP client lives in the `effect` package under `effect/unstable/http`. Only the platform transports (`NodeHttpClient`, `BunHttpClient`) live in `@effect/platform-*` packages.
+In v4 there is no `@effect/platform` package — the HTTP client lives in the `effect` package under `effect/http`. Only the platform transports (`NodeHttpClient`, `BunHttpClient`) live in `@effect/platform-*` packages.
 
 ## Effect Source Reference
 
@@ -18,23 +18,23 @@ for HTTP value schemas. Import Undici-specific APIs from
 `@effect/platform-node/Undici`; the transport layer owns their initialization.
 HTTP `QUERY` is supported; configure CORS `allowedMethods` explicitly if needed.
 
-The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules are `unstable` and change between betas.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read the `effect@4.0.0` tag for this skill; main may be newer. APIs tagged `@stability unstable`, including these HTTP modules and Undici integration, may break in minor releases. Keep Effect-family packages on the same release.
 
 Key files:
 
-- `packages/effect/src/unstable/http/HttpClient.ts` — the `HttpClient` service, `make`/`makeWith`, every client combinator (`mapRequest`, `transform`, `filterStatus*`, `retry`, `retryTransient`, `withRateLimiter`, `withCookiesRef`, `withScope`, `followRedirects`, `catch*`, `tap*`), tracing references
-- `packages/effect/src/unstable/http/HttpClientRequest.ts` — immutable request model, method constructors, URL/param/header/body combinators, `toWeb`/`fromWeb`
-- `packages/effect/src/unstable/http/HttpClientResponse.ts` — response model, `schemaJson`/`schemaNoBody`, `matchStatus`, `filterStatus(Ok)`, `stream`
-- `packages/effect/src/unstable/http/HttpIncomingMessage.ts` — shared body accessors plus `JsonOptions`, `schemaBodyJson`, `schemaBodyUrlParams`, `schemaHeaders` (re-exported by HttpClientResponse)
-- `packages/effect/src/unstable/http/HttpClientError.ts` — `HttpClientError` wrapper and its `reason` union
-- `packages/effect/src/unstable/http/HttpBody.ts` — body variants (`Empty`, `Raw`, `Uint8Array`, `FormData`, `Stream`) and constructors (`json`, `jsonSchema`, `text`, `urlParams`, `formDataRecord`, `stream`, `file`)
-- `packages/effect/src/unstable/http/FetchHttpClient.ts` — fetch transport: `layer`, `Fetch` reference, `RequestInit` service
-- `packages/effect/src/unstable/http/UrlParams.ts` — ordered query-param model, coercion rules, schemas
-- `packages/effect/src/unstable/http/Url.ts` — immutable helpers over the native `URL`
-- `packages/effect/src/unstable/http/Cookies.ts` — cookie model, `fromSetCookie`, `toCookieHeader`, `getValue`
-- `packages/effect/src/unstable/http/Headers.ts` — header model, `Input` forms, `CurrentRedactedNames`
+- `packages/effect/src/http/HttpClient.ts` — the `HttpClient` service, `make`/`makeWith`, every client combinator (`mapRequest`, `transform`, `filterStatus*`, `retry`, `retryTransient`, `withRateLimiter`, `withCookiesRef`, `withScope`, `followRedirects`, `catch*`, `tap*`), tracing references
+- `packages/effect/src/http/HttpClientRequest.ts` — immutable request model, method constructors, URL/param/header/body combinators, `toWeb`/`fromWeb`
+- `packages/effect/src/http/HttpClientResponse.ts` — response model, `schemaJson`/`schemaNoBody`, `matchStatus`, `filterStatus(Ok)`, `stream`
+- `packages/effect/src/http/HttpIncomingMessage.ts` — shared body accessors plus `JsonOptions`, `schemaBodyJson`, `schemaBodyUrlParams`, `schemaHeaders` (re-exported by HttpClientResponse)
+- `packages/effect/src/http/HttpClientError.ts` — `HttpClientError` wrapper and its `reason` union
+- `packages/effect/src/http/HttpBody.ts` — body variants (`Empty`, `Raw`, `Uint8Array`, `FormData`, `Stream`) and constructors (`json`, `jsonSchema`, `text`, `urlParams`, `formDataRecord`, `stream`, `file`)
+- `packages/effect/src/http/FetchHttpClient.ts` — fetch transport: `layer`, `Fetch` reference, `RequestInit` service
+- `packages/effect/src/http/UrlParams.ts` — ordered query-param model, coercion rules, schemas
+- `packages/effect/src/http/Url.ts` — immutable helpers over the native `URL`
+- `packages/effect/src/http/Cookies.ts` — cookie model, `fromSetCookie`, `toCookieHeader`, `getValue`
+- `packages/effect/src/http/Headers.ts` — header model, `Input` forms, `CurrentRedactedNames`
 - `packages/platform/node/src/NodeHttpClient.ts` — Node transports: undici, node:http, fetch re-export
-- `packages/effect/test/unstable/http/HttpClient.test.ts` — retryTransient, withRateLimiter, abort semantics
+- `packages/effect/test/http/HttpClient.test.ts` — retryTransient, withRateLimiter, abort semantics
 - `ai-docs/src/50_http-client/10_basics.ts` — canonical "wrap a configured client in a service" lesson
 
 ## Core Model
@@ -69,7 +69,7 @@ import {
 	HttpClientRequest,
 	HttpClientResponse,
 	UrlParams
-} from 'effect/unstable/http';
+} from 'effect/http';
 ```
 
 For Node-specific transports:
@@ -215,7 +215,7 @@ HttpClientRequest.trace('/debug');
 HttpClientRequest.get('/search', { urlParams: { q: 'effect' }, acceptJson: true });
 ```
 
-These come from the generic factory `HttpClientRequest.make(method)`; `HttpClientRequest.setMethod` swaps the method on an existing request. `HttpMethod` is a closed union of these eight verbs — there is no path for custom methods like `REPORT`.
+These come from the generic factory `HttpClientRequest.make(method)`; `HttpClientRequest.setMethod` swaps the method on an existing request. `HttpMethod` is a closed union of nine verbs, including body-carrying `QUERY` (`HttpClientRequest.query`, `client.query`, `HttpClient.query`) — there is no path for custom methods like `REPORT`.
 
 ### URL combinators
 
@@ -442,6 +442,10 @@ const lines = HttpClientResponse.stream(client.get('/logs')).pipe(
 
 Every client failure is a single tagged error, `HttpClientError`, wrapping a `reason` union:
 
+For unknown boundary values, use the module guards rather than inspecting private
+type IDs. Body construction failures have `HttpBody.isHttpBodyError`; cookie
+construction failures have `Cookies.isCookiesError`.
+
 | `reason._tag` | When | Has `response`? |
 |---|---|---|
 | `TransportError` | network/connection failure while sending | no |
@@ -620,12 +624,12 @@ The undici transport neutralizes undici's own timeouts (`headersTimeout` one hou
 
 ### `HttpClient.withRateLimiter`
 
-Client-side rate limiting backed by the `RateLimiter` service from `effect/unstable/persistence`. It delays requests past the limit, **automatically retries 429s** (responses or `StatusCodeError`s) back through the limiter honoring `retry-after`, and by default updates its limit/window from `ratelimit-*` / `x-ratelimit-*` response headers.
+Client-side rate limiting backed by the `RateLimiter` service from `effect/persistence`. It delays requests past the limit, **automatically retries 429s** (responses or `StatusCodeError`s) back through the limiter honoring `retry-after`, and by default updates its limit/window from `ratelimit-*` / `x-ratelimit-*` response headers.
 
 Because `withRateLimiter` retries 429 responses independently of the HTTP method, apply it with `times > 0` only to a client restricted to proven-idempotent operations. For a mixed or non-idempotent client, set `times: 0` and handle the returned 429 as a visible typed failure.
 
 ```ts
-import { RateLimiter } from 'effect/unstable/persistence';
+import { RateLimiter } from 'effect/persistence';
 
 const limitedReads = Effect.gen(function* () {
 	const limiter = yield* RateLimiter.RateLimiter;
@@ -828,7 +832,7 @@ For declarative API clients derived from an `HttpApi` definition, see the effect
 
 ```ts
 import { Context, Effect, flow, Layer, Schedule, Schema } from 'effect';
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/unstable/http';
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/http';
 
 class Todo extends Schema.Class<Todo>('Todo')({
 	userId: Schema.Number,
@@ -978,7 +982,7 @@ const makeGithubReads = Effect.gen(function* () {
 
 ## Common Mistakes
 
-1. **v3 imports** — `@effect/platform/HttpClient` and friends no longer exist. Import `HttpClient`, `HttpClientRequest`, `HttpClientResponse`, `FetchHttpClient`, etc. from `effect/unstable/http`; only `NodeHttpClient` comes from `@effect/platform-node`.
+1. **v3 imports** — `@effect/platform/HttpClient` and friends no longer exist. Import `HttpClient`, `HttpClientRequest`, `HttpClientResponse`, `FetchHttpClient`, etc. from `effect/http`; only `NodeHttpClient` comes from `@effect/platform-node`.
 2. **Calling body accessors as methods** — `response.text`, `response.json`, `response.stream` are property getters returning Effects/Streams. `yield* response.json`, not `await response.json()`.
 3. **`HttpClientRequest.del` does not exist** — the request constructor is `HttpClientRequest.delete`; the client/service method and accessor are `client.del` / `HttpClient.del`.
 4. **Catching v3 error tags** — there are no top-level `RequestError`/`ResponseError` tags anymore. Everything is one tag, `HttpClientError`; branch on `error.reason._tag` (`TransportError`, `StatusCodeError`, `DecodeError`, ...).

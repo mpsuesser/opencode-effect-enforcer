@@ -38,6 +38,6 @@ good = Layer.provide(platformLayer)          -- no platform coupling
 good = -- runtime provides ChildProcessSpawner, FileSystem, etc.
 ```
 
-Binding packages wrap external systems (CLIs, APIs, databases) and must be platform-agnostic. They should depend on abstract services from `effect` and its unstable namespaces, such as `FileSystem`, `Path`, `HttpClient`, and `ChildProcessSpawner`, but never on `@effect/platform-bun` or `@effect/platform-node` concrete implementations.
+Binding packages wrap external systems (CLIs, APIs, databases) and must be platform-agnostic. They should depend on abstract services from `effect` and its area entrypoints, such as `FileSystem`, `Path`, `HttpClient` from `effect/http`, and `ChildProcessSpawner` from `effect/process`, rather than hardwiring `@effect/platform-bun` or `@effect/platform-node` concrete implementations.
 
 Platform-specific layers (`BunServices.layer`, `NodeServices.layer`) belong in the runtime or CLI entry point, not in bindings. The runtime provides concrete implementations of abstract Effect services there.

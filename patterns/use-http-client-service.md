@@ -49,25 +49,27 @@ good url = pipe
 
 ```haskell
 -- Composable request building
-request :: Effect HttpClientRequest HttpBodyError
+request :: HttpClientRequest
 request = pipe
-  (HttpClientRequest.post "/api/users")
-  (HttpClientRequest.bodyJson { name: "Alice" })
+  (HttpClientRequest.get "https://api.example.com/users")
+  (HttpClientRequest.setHeader "accept" "application/json")
 
 -- With retry, timeout, tracing
 resilient :: Effect Response (HttpClient | HttpBodyError)
 resilient = pipe
-  request
-  (Effect.flatMap HttpClient.execute)
+  (HttpClient.execute request)
   (Effect.retry (Schedule.recurs 3))
   (Effect.timeout (Duration.seconds 10))
 
 -- Provide platform layer at entry point
 main = program
-  & provide BunHttpClient.layer    -- or NodeHttpClient.layer
+  & provide BunHttpClient.layer    -- or NodeHttpClient.layerUndici
 ```
 
 Direct `http` / `https` imports give you callback APIs, manual TLS plumbing, and no error channel. Use Effect's `HttpClient`, `HttpClientRequest`, and `HttpClientResponse` for typed errors, composable request building, declarative retry/timeout, and testability via layer substitution.
+
+Import these modules from `effect/http`. The retry example assumes an idempotent
+GET; only retry mutations when their idempotency is established by the contract.
 
 **Exceptions:**
 

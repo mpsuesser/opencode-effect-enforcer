@@ -3,7 +3,11 @@ name: effect-atom-rpc
 description: Build reactive Atom-aware RPC clients for React/Atom UIs using AtomRpc. Provides cached query atoms, invalidating mutation atoms, SSR hydration, and reactivity-key invalidation on top of an RpcGroup.
 ---
 
-You are an Effect TypeScript expert specializing in `effect/unstable/reactivity/AtomRpc` — the reactive RPC client for Atom-driven frontends.
+You are an Effect TypeScript expert specializing in `effect/reactivity/AtomRpc` — the reactive RPC client for Atom-driven frontends.
+
+Baseline: `effect@4.0.0`; inspect that tag in the Effect source reference.
+Core reactivity APIs are `@stability unstable` and may break in minor releases.
+Use matching Effect-family versions; `@effect/atom-react@4.0.0` requires React 19.
 
 ## When to use this skill
 
@@ -35,13 +39,13 @@ handle them when consuming the stream. An explicit zero `timeToLive` disables
 default idle retention, so unmount/remount may dispose and refetch. Omission uses
 the registry default. HttpApi calls accept per-call `sseOptions`.
 
-- `packages/effect/src/unstable/reactivity/AtomRpc.ts` — the whole API (~270 lines)
+- `packages/effect/src/reactivity/AtomRpc.ts` — the whole API
 - `packages/effect/test/reactivity/AtomRpc.test.ts` — minimal usage + serialization test
-- `packages/effect/src/unstable/reactivity/AtomHttpApi.ts` — the cousin pattern for `HttpApi` (same idea, same options)
-- `packages/effect/src/unstable/reactivity/AsyncResult.ts` — the `AsyncResult` type returned by `query`
-- `packages/effect/src/unstable/reactivity/Atom.ts` — `runtime`, `family`, `serializable`, `keepAlive`, `setIdleTTL`
-- `packages/effect/src/unstable/reactivity/Hydration.ts` — SSR dehydrate/hydrate helpers
-- `packages/effect/src/unstable/reactivity/Reactivity.ts` — the `Reactivity` service that powers reactivity keys
+- `packages/effect/src/reactivity/AtomHttpApi.ts` — the cousin pattern for `HttpApi` (same idea, same options)
+- `packages/effect/src/reactivity/AsyncResult.ts` — the `AsyncResult` type returned by `query`
+- `packages/effect/src/reactivity/Atom.ts` — `runtime`, `family`, `serializable`, `keepAlive`, `setIdleTTL`
+- `packages/effect/src/reactivity/Hydration.ts` — SSR dehydrate/hydrate helpers
+- `packages/effect/src/reactivity/Reactivity.ts` — the `Reactivity` service that powers reactivity keys
 
 ## Imports
 
@@ -52,9 +56,9 @@ import {
 	AtomRpc,
 	Hydration,
 	Reactivity
-} from 'effect/unstable/reactivity';
-import { RpcClient, RpcSerialization } from 'effect/unstable/rpc';
-import { FetchHttpClient } from 'effect/unstable/http';
+} from 'effect/reactivity';
+import { RpcClient, RpcSerialization } from 'effect/rpc';
+import { FetchHttpClient } from 'effect/http';
 import { useAtomValue, useAtomSet } from '@effect/atom-react';
 ```
 
@@ -77,9 +81,9 @@ The `runtime` is what powers `query` and `mutation` — internally it builds a `
 
 ```ts
 import { Layer } from 'effect';
-import { AtomRpc } from 'effect/unstable/reactivity';
-import { FetchHttpClient } from 'effect/unstable/http';
-import { RpcClient, RpcSerialization } from 'effect/unstable/rpc';
+import { AtomRpc } from 'effect/reactivity';
+import { FetchHttpClient } from 'effect/http';
+import { RpcClient, RpcSerialization } from 'effect/rpc';
 import { UsersGroup } from '../shared/users-rpc.ts';
 
 export class UsersClient extends AtomRpc.Service<UsersClient>()('UsersClient', {
@@ -124,7 +128,7 @@ AtomRpc.Service<UsersClient>()('UsersClient', {
 	disableTracing: false,
 	generateRequestId: customRequestIdFactory, // for deterministic IDs in tests
 	makeEffect: undefined, // override the default RpcClient.make
-	runtime: Atom.runtime // override the runtime factory (e.g., Atom.runtime.withReactivity)
+	runtime: Atom.runtime // override with another factory, e.g. Atom.context()
 });
 ```
 
@@ -148,6 +152,11 @@ client.query(tag, payload, options?) =>
 ```
 
 Query atoms are **cached by request key** — calling `query('GetUser', { id: '1' })` from many components returns the *same* atom, so the rpc fires once and shares the result.
+
+The key also includes headers, reactivity keys, TTL, and serialization key.
+Use matching options to share a cache entry. Union-of-tag arguments retain the
+selected RPCs' payload/result types; they no longer collapse to `never`. Narrow
+the tag when application logic needs to pair a particular payload with its result.
 
 Effect v4 query wrappers preserve serialization and retention metadata while adding reactivity. It is therefore safe to combine `reactivityKeys`, `serializationKey`, and `timeToLive`; hydration identity and idle retention are not discarded by the reactive wrapper.
 
@@ -184,7 +193,11 @@ client.query(tag, payload, {
 ```
 
 - **`reactivityKeys`** — keys this atom listens to. When a `mutation` (or any `Reactivity.invalidate`) fires with overlapping keys, this atom re-fetches.
-- **`timeToLive`** — `Duration.Input | "infinity"`. With a finite duration, the atom is removed from the cache after that long without subscribers (`Atom.setIdleTTL`). With `Duration.infinity`, the atom is `Atom.keepAlive`'d (never evicted). Without `timeToLive`, the atom resets when the last subscriber unmounts.
+- **`timeToLive`** — idle retention via `Atom.setIdleTTL`. A finite duration permits
+  disposal after inactivity; `Duration.infinity` uses `Atom.keepAlive` until the
+  registry is reset/disposed. Omission uses the registry default, while explicit
+  zero bypasses default idle retention. Freshness is separate: use `Atom.swr` for
+  stale-while-revalidate behavior (see `effect-atom-state`).
 - **`serializationKey`** — for non-stream queries, a stable key opts the atom into `Atom.serializable` keyed by `AtomRpc:${tag}:${serializationKey}`. Without a `serializationKey`, the query atom is cached for the current registry but is not serializable/hydratable, so SSR clients will fetch again. Stream rpcs cannot be serializable.
 
 ### Stream rpcs
@@ -291,25 +304,27 @@ Hydration uses `Atom.serializable` (which `query` opts into when you pass `seria
 
 ```ts
 // --- server: render then dehydrate ---
-import { AtomRegistry, Hydration } from 'effect/unstable/reactivity';
+import { Effect } from 'effect';
+import { AtomRegistry, Hydration } from 'effect/reactivity';
 
-const registry = AtomRegistry.make();
-const userAtom = UsersClient.query('GetUser', { id: 'u1' }, {
-	serializationKey: 'u1'
-});
-
-const unmount = registry.mount(userAtom);
-yield* Effect.yieldNow;
-yield* Effect.yieldNow;
-
-const dehydrated = Hydration.toValues(Hydration.dehydrate(registry));
-unmount();
+const dehydrated = yield* Effect.scoped(Effect.gen(function* () {
+	const registry = yield* Effect.acquireRelease(
+		Effect.sync(() => AtomRegistry.make()),
+		(registry) => Effect.sync(() => registry.dispose())
+	);
+	const userAtom = UsersClient.query('GetUser', { id: 'u1' }, {
+		serializationKey: 'u1'
+	});
+	yield* AtomRegistry.mount(registry, userAtom);
+	yield* AtomRegistry.getResult(registry, userAtom);
+	return Hydration.toValues(Hydration.dehydrate(registry));
+}));
 // dehydrated is a JSON-safe array of { key, value } pairs to inline in the HTML
 ```
 
 ```tsx
 // --- client: hydrate before rendering ---
-import { AtomRegistry, Hydration } from 'effect/unstable/reactivity';
+import { AtomRegistry, Hydration } from 'effect/reactivity';
 import { RegistryContext } from '@effect/atom-react';
 
 const registry = AtomRegistry.make();
@@ -327,7 +342,7 @@ Stream rpcs are not serializable — only non-stream `query` atoms with a stable
 `AtomRpc.Service` accepts a `runtime` factory option. The default is `Atom.runtime`. Override it when you want all the atoms produced by this client to share a custom reactivity scope, registry, or annotation:
 
 ```ts
-const myRuntime = Atom.runtime.withReactivity(['shared-namespace']);
+const myRuntime = Atom.context();
 
 export class UsersClient extends AtomRpc.Service<UsersClient>()('UsersClient', {
 	group: UsersGroup,
@@ -336,12 +351,17 @@ export class UsersClient extends AtomRpc.Service<UsersClient>()('UsersClient', {
 }) {}
 ```
 
+`withReactivity(keys)` decorates an atom; it is not a runtime factory. Use
+`reactivityKeys` on queries/mutations for invalidation. Runtime factories use
+registry-scoped layer memoization by default; provide the same registry to
+components that should share state.
+
 ## End-to-end example
 
 ```ts
 // --- shared/users-rpc.ts ---
 import { Schema } from 'effect';
-import { Rpc, RpcGroup } from 'effect/unstable/rpc';
+import { Rpc, RpcGroup } from 'effect/rpc';
 
 export class User extends Schema.Class<User>('User')({
 	id: Schema.String,
@@ -375,9 +395,9 @@ export const UsersGroup = RpcGroup.make(GetUser, ListUsers, CreateUser);
 ```ts
 // --- frontend/clients/users-client.ts ---
 import { Layer } from 'effect';
-import { FetchHttpClient } from 'effect/unstable/http';
-import { AtomRpc } from 'effect/unstable/reactivity';
-import { RpcClient, RpcSerialization } from 'effect/unstable/rpc';
+import { FetchHttpClient } from 'effect/http';
+import { AtomRpc } from 'effect/reactivity';
+import { RpcClient, RpcSerialization } from 'effect/rpc';
 import { UsersGroup } from '../../shared/users-rpc.ts';
 
 export class UsersClient extends AtomRpc.Service<UsersClient>()('UsersClient', {
@@ -393,7 +413,7 @@ export class UsersClient extends AtomRpc.Service<UsersClient>()('UsersClient', {
 ```tsx
 // --- frontend/components/UserList.tsx ---
 import { useAtomValue, useAtomSet } from '@effect/atom-react';
-import { AsyncResult } from 'effect/unstable/reactivity';
+import { AsyncResult } from 'effect/reactivity';
 import { UsersClient } from '../clients/users-client';
 
 export function UserList() {
@@ -455,7 +475,7 @@ export function UserDetail({ id }: { id: string }) {
 If your backend exposes an `HttpApi` instead of an `RpcGroup`, `AtomHttpApi.Service<Self>()(id, options)` is the same idea applied to `HttpApiGroup`/`HttpApiEndpoint`:
 
 ```ts
-import { AtomHttpApi } from 'effect/unstable/reactivity';
+import { AtomHttpApi } from 'effect/reactivity';
 
 class ApiClient extends AtomHttpApi.Service<ApiClient>()('ApiClient', {
 	api: MyHttpApi,
@@ -494,7 +514,8 @@ The `query`/`mutation` arguments differ (you pass `groupName, endpointName, requ
 - One `AtomRpc.Service` class per logical client; module-singleton, never per-component.
 - Always pass `reactivityKeys` to mutations so dependent queries refresh.
 - Pass `serializationKey` to every query you want SSR-hydratable.
-- Pick `timeToLive` deliberately: short (`'10 seconds'`) for hot data, long (`Duration.infinity`) for reference data, omit for "tear down on unmount".
+- Pick idle `timeToLive` deliberately; omit for registry defaults, zero to bypass
+  default idle retention, or `Duration.infinity` to retain until registry disposal.
 - Use `AsyncResult.builder(...).onWaiting(...).onError(...).onSuccess(...)` (or `AsyncResult.matchWithWaiting`) to render — never check `.waiting` and `.error` ad-hoc. Reserve `.onFailure((cause) => ...)` for whole-`Cause` fallbacks after typed error branches.
 - For protocol layers that depend on auth tokens or other reactive state, use the `(get) => Layer` form of `protocol` so the client rebuilds when those atoms change.
 - For typed error recovery, handle declared RPC errors, RPC middleware wire errors, and `RpcClientError`; branch on `_tag` only when the relevant errors are tagged.

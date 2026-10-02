@@ -1,29 +1,29 @@
 ---
 name: effect-http-server
-description: Build HTTP servers with effect/unstable/http — HttpRouter routes and middleware, HttpServerRequest schema decoding, HttpServerResponse constructors, multipart uploads, websocket upgrades, static files, NodeHttpServer/BunHttpServer layers, and in-memory web handlers. Use when serving raw HTTP routes, reading request bodies/cookies/uploads, writing server middleware, streaming responses, or testing handlers without a real port.
+description: Build HTTP servers with effect/http — HttpRouter routes and middleware, HttpServerRequest schema decoding, HttpServerResponse constructors, multipart uploads, websocket upgrades, static files, NodeHttpServer/BunHttpServer layers, and in-memory web handlers. Use when serving raw HTTP routes, reading request bodies/cookies/uploads, writing server middleware, streaming responses, or testing handlers without a real port.
 ---
 
-You are an Effect TypeScript expert specializing in HTTP servers built with `effect/unstable/http` — `HttpRouter`, `HttpServer`, `HttpServerRequest`, `HttpServerResponse`, `HttpMiddleware`, and the platform server layers.
+You are an Effect TypeScript expert specializing in HTTP servers built with `effect/http` — `HttpRouter`, `HttpServer`, `HttpServerRequest`, `HttpServerResponse`, `HttpMiddleware`, and the platform server layers.
 
 This skill covers the imperative HTTP server primitives. For the declarative, schema-first `HttpApi`/OpenAPI layer see the `effect-http-api` skill; for HTTP clients see `effect-http-client`; for raw TCP/WebSocket sockets see `effect-socket`.
 
 ## Effect Source Reference
 
-The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules are unstable and change between betas.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read the `effect@4.0.0` tag for this skill; main may be newer. These modules remain `@stability unstable` and may break in minor releases. Keep Effect-family packages on the same release.
 
 Key files:
 
-- `packages/effect/src/unstable/http/HttpRouter.ts` — router service, `add`/`addAll`/`route`/`use`, `serve`, `toWebHandler`, schema decoders, `middleware`, `cors`, `provideRequest`, `RouterConfig`
-- `packages/effect/src/unstable/http/HttpServer.ts` — `HttpServer` service, `serve`/`serveEffect`, address helpers, `layerTestClient`, `layerServices`
-- `packages/effect/src/unstable/http/HttpServerRequest.ts` — request model, body accessors, `schemaBodyJson`/`schemaBodyForm`/etc., `ParsedSearchParams`, `upgrade`, `MaxBodySize`
-- `packages/effect/src/unstable/http/HttpServerResponse.ts` — every response constructor and combinator, `toWeb`/`fromWeb`
-- `packages/effect/src/unstable/http/HttpMiddleware.ts` — `logger`, `tracer`, `cors`, `xForwardedHeaders`, `searchParamsParser`, tracing config references
-- `packages/effect/src/unstable/http/HttpEffect.ts` — `toWebHandler*`, `fromWebHandler`, `toHandled`, pre-response handlers, request scope management
-- `packages/effect/src/unstable/http/HttpServerError.ts` — `HttpServerError` + reasons, `causeResponse`, `ClientAbort`
-- `packages/effect/src/unstable/http/HttpServerRespondable.ts` — the error-to-response protocol
-- `packages/effect/src/unstable/http/HttpBody.ts` — body variants (`Empty`/`Raw`/`Uint8Array`/`FormData`/`Stream`) and constructors
-- `packages/effect/src/unstable/http/Headers.ts`, `Cookies.ts`, `Multipart.ts` — header/cookie/multipart models and limits
-- `packages/effect/src/unstable/http/HttpStaticServer.ts` — static file serving
+- `packages/effect/src/http/HttpRouter.ts` — router service, `add`/`addAll`/`route`/`use`, `serve`, `toWebHandler`, schema decoders, `middleware`, `cors`, `provideRequest`, `RouterConfig`
+- `packages/effect/src/http/HttpServer.ts` — `HttpServer` service, `serve`/`serveEffect`, address helpers, `layerTestClient`, `layerServices`
+- `packages/effect/src/http/HttpServerRequest.ts` — request model, body accessors, `schemaBodyJson`/`schemaBodyForm`/etc., `ParsedSearchParams`, `upgrade`, `MaxBodySize`
+- `packages/effect/src/http/HttpServerResponse.ts` — every response constructor and combinator, `toWeb`/`fromWeb`
+- `packages/effect/src/http/HttpMiddleware.ts` — `logger`, `tracer`, `cors`, `xForwardedHeaders`, `searchParamsParser`, tracing config references
+- `packages/effect/src/http/HttpEffect.ts` — `toWebHandler*`, `fromWebHandler`, `toHandled`, pre-response handlers, request scope management
+- `packages/effect/src/http/HttpServerError.ts` — `HttpServerError` + reasons, `causeResponse`, `ClientAbort`
+- `packages/effect/src/http/HttpServerRespondable.ts` — the error-to-response protocol
+- `packages/effect/src/http/HttpBody.ts` — body variants (`Empty`/`Raw`/`Uint8Array`/`FormData`/`Stream`) and constructors
+- `packages/effect/src/http/Headers.ts`, `Cookies.ts`, `Multipart.ts` — header/cookie/multipart models and limits
+- `packages/effect/src/http/HttpStaticServer.ts` — static file serving
 - `packages/platform/node/src/NodeHttpServer.ts` — Node server adapter, `layer`, `layerTest`, graceful shutdown
 - `packages/platform/bun/src/BunHttpServer.ts` — Bun equivalent
 - `packages/platform/node/test/NodeHttpServer.test.ts` — the best end-to-end reference for real route/middleware/multipart wiring
@@ -55,7 +55,7 @@ import {
 	HttpStatus,
 	HttpStaticServer,
 	Multipart
-} from 'effect/unstable/http';
+} from 'effect/http';
 import { NodeHttpServer, NodeRuntime } from '@effect/platform-node';
 import { createServer } from 'node:http';
 ```
@@ -86,7 +86,7 @@ Layer.launch(Main).pipe(NodeRuntime.runMain);
 HttpRouter.add(method, path, handler, options?): Layer<never, never, HttpRouter | ...>
 ```
 
-- `method`: `'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | '*'` (`'*'` matches all methods; `HEAD` requests automatically fall back to the matching `GET` route with the body stripped)
+- `method`: `HttpMethod | '*'`, including `HEAD`, `TRACE`, and body-carrying `QUERY` (`'*'` matches all methods; `HEAD` requests automatically fall back to the matching `GET` route with the body stripped)
 - `path`: `PathInput` — must start with `/`, or be `*`. `:name` captures a path param; a trailing `/*` is a wildcard (and also matches the bare prefix: `'/files/*'` matches `/files` too)
 - `options`: `{ uninterruptible?: boolean }` — handlers are interruptible by default (client disconnect interrupts the fiber); set `true` for must-complete handlers
 
@@ -159,7 +159,7 @@ const { id: pathOnly } = yield* HttpRouter.schemaPathParams(IdParams); // path p
 
 ### Router configuration
 
-The matcher is `find-my-way-ts`. Configure via the `RouterConfig` reference or the `routerConfig` option of `serve`/`toWebHandler`:
+The matcher is the bundled `FindMyWay` module. Configure via the `RouterConfig` reference or the `routerConfig` option of `serve`/`toWebHandler`:
 
 ```ts
 Layer.succeed(HttpRouter.RouterConfig)({
@@ -169,6 +169,9 @@ Layer.succeed(HttpRouter.RouterConfig)({
 	maxParamLength: 100
 });
 ```
+
+Route parameter construction does not require string code generation (`new
+Function`), so routing works under CSP restrictions on dynamic code evaluation.
 
 ---
 
@@ -309,6 +312,11 @@ handler.pipe(
 ```
 
 The Effect v4 parser stops consuming input as soon as a part-count, part-size, or field-size limit is exceeded. Active file-part streams are terminated with the multipart failure when a limit is exceeded or the body ends unexpectedly, so consumers fail promptly instead of hanging. Keep consuming or supervising every exposed file stream so that failure is observed.
+
+Buffered parts produced while a file is being read are emitted before pulling
+more input. Use `Multipart.isMultipartError` for unknown boundary failures;
+`HttpBody.isHttpBodyError` and `Cookies.isCookiesError` guard their corresponding
+construction errors.
 
 ---
 
@@ -585,6 +593,17 @@ yield* HttpEffect.appendPreResponseHandler((request, response) =>
 
 ## 7. Serving
 
+`HttpRouter.serve` and `toHttpEffect` isolate entrypoints with a fresh router and
+forked layer memo map. Reusing an app layer in two such entrypoints builds it
+separately; routes and global middleware do not leak between them. Layers first
+built inside an app are private to that entrypoint. Build/provide services that
+siblings must share outside `serve`/`toHttpEffect`. `toWebHandler` has a separate
+build by default, but its explicit `memoMap` option is passed through as supplied;
+sharing that map intentionally shares memoized layers, including the router.
+Pass route registration layers to each entrypoint with their `HttpRouter`
+requirement intact; pre-providing `HttpRouter.layer` registers on a different
+router and leaves the served router empty.
+
 ### Node
 
 ```ts
@@ -654,6 +673,14 @@ yield* HttpServer.serveEffect(httpEffect);
 
 ## 8. WebSocket Upgrades
 
+Node and Bun HTTP upgrade adapters close server WebSockets according to the
+owning scope's exit: `1000` on success, `1001` for interruption-only failure, and
+`1011` for other failures (including mixed failure/interruption causes). Explicit
+close codes already sent by the application are preserved. HTTP error-to-response
+handling and observation middleware retain the original handler failure for
+request-scope finalizers; mapping an error to an HTTP response does not turn that
+scope exit into success.
+
 In `@effect/platform-bun`, outgoing WebSocket messages are compressed when
 per-message deflate is configured **and negotiated**. The server option
 `websocket.compressionThreshold` sets the minimum byte size (default `1024`);
@@ -661,7 +688,7 @@ smaller messages stay uncompressed. Configure it alongside
 `websocket.perMessageDeflate` on `BunHttpServer.layer` rather than pre-compressing
 application payloads. See `packages/platform/bun/src/BunHttpServer.ts`.
 
-`request.upgrade` yields a `Socket` (from `effect/unstable/socket`) once the connection is upgraded. Both `NodeHttpServer` and `BunHttpServer` handle the platform `upgrade` events for you — just write a normal route:
+`request.upgrade` yields a `Socket` (from `effect/socket`) once the connection is upgraded. Both `NodeHttpServer` and `BunHttpServer` handle the platform `upgrade` events for you — just write a normal route:
 
 ```ts
 const WsRoute = HttpRouter.add('GET', '/ws', Effect.gen(function* () {
@@ -755,6 +782,9 @@ const { handler: appHandler, dispose: disposeApp } = HttpRouter.toWebHandler(
 
 Every request runs in a fresh `Scope` closed after the response is sent — `Effect.addFinalizer` in a handler runs post-response. Streaming bodies transfer the scope to the stream (`HttpEffect.scopeTransferToStream`, applied automatically by the adapters), so it closes when the body finishes streaming. If the client disconnects mid-request, the handler fiber is interrupted with the `ClientAbort` annotation (logged as `499`).
 
+For failed handlers, request-scope finalizers receive the original failure even
+when boundary handling successfully sends an error response.
+
 ### Integration tests on an ephemeral port
 
 `NodeHttpServer.layerTest` starts a real server on port 0 and provides an `HttpClient` whose requests are rewritten to it:
@@ -762,7 +792,7 @@ Every request runs in a fresh `Scope` closed after the response is sent — `Eff
 ```ts
 import { NodeHttpServer } from '@effect/platform-node';
 import { describe, expect, it } from '@effect/vitest';
-import { HttpClient, HttpClientResponse } from 'effect/unstable/http';
+import { HttpClient, HttpClientResponse } from 'effect/http';
 
 describe('todos', () => {
 	it.effect('GET /todos/:id', () =>
@@ -798,7 +828,7 @@ import {
 	HttpServerRespondable,
 	HttpServerResponse,
 	HttpStaticServer
-} from 'effect/unstable/http';
+} from 'effect/http';
 import { NodeHttpServer, NodeRuntime } from '@effect/platform-node';
 import { createServer } from 'node:http';
 
@@ -930,7 +960,7 @@ describe('health', () => {
 ## Common Mistakes
 
 1. **Using the v3 value-style router** — `HttpRouter.empty.pipe(HttpRouter.get('/x', app))` no longer exists. The v4 router is a service: register routes with `HttpRouter.add(...)` Layers (or `router.add` inside `HttpRouter.use`) and run with `HttpRouter.serve(appLayer)`.
-2. **Importing from `@effect/platform`** — gone in v4. Everything is `effect/unstable/http`; only the platform adapters live in `@effect/platform-node` / `@effect/platform-bun`.
+2. **Importing from `@effect/platform`** — gone in v4. Everything is `effect/http`; only the platform adapters live in `@effect/platform-node` / `@effect/platform-bun`.
 3. **Treating `HttpServerResponse.json` as synchronous** — it returns `Effect<HttpServerResponse, HttpBodyError>`. `yield*` it, or use `jsonUnsafe` for known-serializable values. Same for `schemaJson` (which is also curried: `schemaJson(schema)(value, options)`).
 4. **Expecting `HttpServerResponse.empty()` to be 200** — the default status is `204`. Pass `{ status: 200 }` if you need it.
 5. **Modifying the response in `HttpRouter.serve`'s `middleware` option** — that middleware wraps the chain *after* response sending; changes are silently dropped. Use `HttpRouter.middleware(..., { global: true })` or route-scoped `HttpRouter.middleware` instead.

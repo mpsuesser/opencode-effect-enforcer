@@ -36,7 +36,7 @@ export const PaymentIntent = Schema.Struct({
 Field **removed from schema**, only injected in code:
 
 ```typescript
-import { Schema, Context, Effect, Logger } from 'effect';
+import { Schema, Context, Effect } from 'effect';
 
 declare const generateId: () => string;
 
@@ -56,7 +56,7 @@ const createPaymentIntent = (amount: bigint) =>
 
 		// Use serial in business logic, logging, etc.
 		// but it's not part of the persisted data
-		yield* Logger.info(`Creating payment intent ${serial}`);
+		yield* Effect.logInfo(`Creating payment intent ${serial}`);
 
 		return PaymentIntent.make({ id: generateId(), amount });
 	});
@@ -177,7 +177,7 @@ Good fits:
 Witnesses are trivial to provide:
 
 ```typescript
-import { Effect } from 'effect';
+import { Context, Effect } from 'effect';
 
 declare const myProgram: Effect.Effect<unknown, never, Serial>;
 declare class Serial extends Context.Service<Serial, string>()('Serial') {}
@@ -188,7 +188,7 @@ const test = myProgram.pipe(Effect.provideService(Serial, 'test-serial-123'));
 Capabilities need implementation:
 
 ```typescript
-import { Effect } from 'effect';
+import { Context, Effect } from 'effect';
 
 declare const myProgram: Effect.Effect<unknown, never, SerialService>;
 declare class SerialService extends Context.Service<
@@ -217,7 +217,7 @@ const test = myProgram.pipe(
 - **Yes** → Keep in schema
 
 ```typescript
-import { Schema, Context, Effect, Logger, Clock } from 'effect';
+import { Schema, Context, Effect, Clock } from 'effect';
 
 declare const LineItem: Schema.Schema<any>;
 declare const generateId: () => string;
@@ -245,7 +245,7 @@ const createOrder = (items: Array<Schema.Schema.Type<typeof LineItem>>) =>
 		const requestId = yield* RequestId; // For logging
 		const timestamp = yield* Clock.currentTimeMillis; // For timestamp
 
-		yield* Logger.info({
+		yield* Effect.logInfo({
 			message: 'Creating order',
 			correlationId, // Used for tracing
 			requestId, // Used for logging

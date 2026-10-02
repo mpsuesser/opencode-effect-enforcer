@@ -7,6 +7,8 @@ description: Use Effect FileSystem for platform-abstract file I/O with Node.js/B
 
 Use `effect` FileSystem for platform-abstract file I/O. Stock layers are provided for Node.js and Bun; `@effect/platform-browser` does not provide a FileSystem layer, so browser code needs a custom/injected implementation.
 
+Targets **Effect 4.0.0**. Match platform package versions to `effect`; verify APIs against the `effect@4.0.0` source tag rather than unreleased `main`.
+
 ## Basic Pattern
 
 ```typescript
@@ -195,6 +197,7 @@ const removeDir = Effect.gen(function* () {
 
 ### Open File Handle
 
+<!-- typecheck -->
 ```typescript
 import { FileSystem } from 'effect';
 import { Effect } from 'effect';
@@ -265,36 +268,38 @@ const createDir = Effect.gen(function* () {
 });
 ```
 
-### Make Temp Directory
+### Make Temp Directory with Explicit Ownership
 
+<!-- typecheck -->
 ```typescript
-import { FileSystem } from 'effect';
-import { Effect } from 'effect';
+import { Effect, FileSystem, Path } from 'effect';
 
 const useTempDir = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
-	const tempPath = yield* fs.makeTempDirectory();
-
-	// Use tempPath
-	yield* fs.writeFileString(`${tempPath}/temp-file.txt`, 'data');
-
-	// Manual cleanup required
-	yield* fs.remove(tempPath, { recursive: true });
+	const path = yield* Path.Path;
+	return yield* Effect.acquireUseRelease(
+		fs.makeTempDirectory(),
+		(tempPath) => fs.writeFileString(path.join(tempPath, 'temp-file.txt'), 'data'),
+		(tempPath) => fs.remove(tempPath, { recursive: true }).pipe(Effect.orDie)
+	);
 });
 ```
 
+Release runs on success, failure, and interruption. Cleanup failure is surfaced as a defect here; prefer the built-in scoped variant for ordinary temporary work.
+
 ### Make Temp Directory (Scoped)
 
+<!-- typecheck -->
 ```typescript
-import { FileSystem } from 'effect';
-import { Effect } from 'effect';
+import { Effect, FileSystem, Path } from 'effect';
 
 const useScopedTempDir = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
 	const tempPath = yield* fs.makeTempDirectoryScoped();
 
 	// Use tempPath within scope
-	yield* fs.writeFileString(`${tempPath}/temp-file.txt`, 'data');
+	yield* fs.writeFileString(path.join(tempPath, 'temp-file.txt'), 'data');
 
 	// Automatically cleaned up when scope exits
 }).pipe(Effect.scoped);
@@ -304,6 +309,7 @@ const useScopedTempDir = Effect.gen(function* () {
 
 ### Stat (File Info)
 
+<!-- typecheck -->
 ```typescript
 import { FileSystem } from 'effect';
 import { Effect, Console } from 'effect';
@@ -395,14 +401,15 @@ const changeOwner = Effect.gen(function* () {
 
 ### Update Times (utimes)
 
+<!-- typecheck -->
 ```typescript
-import { FileSystem } from 'effect';
-import { Effect } from 'effect';
+import { Clock, Effect, FileSystem } from 'effect';
 
 const updateTimes = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
-	const now = new Date();
-	yield* fs.utimes('file.txt', now, now); // atime, mtime
+	const nowMillis = yield* Clock.currentTimeMillis;
+	// Numeric utimes inputs are epoch seconds, not milliseconds.
+	yield* fs.utimes('file.txt', nowMillis / 1000, nowMillis / 1000);
 });
 ```
 
@@ -436,6 +443,7 @@ const createSymlink = Effect.gen(function* () {
 
 ### Watch Files/Directories
 
+<!-- typecheck -->
 ```typescript
 import { FileSystem } from 'effect';
 import { Effect, Stream, Console, pipe } from 'effect';
@@ -466,28 +474,31 @@ Directory watching is non-recursive by default. Pass `{ recursive: true }` to in
 
 ## Size Helpers
 
+<!-- typecheck -->
 ```typescript
-import { FileSystem } from 'effect';
-import { Effect } from 'effect';
-
-const { Size, KiB, MiB, GiB, TiB, PiB } = FileSystem;
+import { ByteSize, Effect, FileSystem } from 'effect';
+import * as Schema from 'effect/Schema';
 
 // Create size values
-const oneKb = Size(1024);
-const tenKb = KiB(10);
-const oneMb = MiB(1);
-const fiveGb = GiB(5);
-const oneTb = TiB(1);
-const onePb = PiB(1);
+const oneKb = ByteSize.bytes(1024);
+const tenKb = ByteSize.kibibytes(10);
+const oneMb = ByteSize.mebibytes(1);
+const fiveGb = ByteSize.gibibytes(5);
+const oneTb = ByteSize.tebibytes(1);
+const onePb = ByteSize.pebibytes(1);
+
+class FileTooLarge extends Schema.TaggedError<FileTooLarge>()('FileTooLarge', {
+	path: Schema.String
+}) {}
 
 // Use with file operations
 const checkFileSize = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
 	const info = yield* fs.stat('large-file.bin');
 
-	const maxSize = MiB(100);
+	const maxSize = ByteSize.mebibytes(100);
 	if (info.size > maxSize) {
-		yield* Effect.fail(new Error('File too large'));
+		return yield* Effect.fail(new FileTooLarge({ path: 'large-file.bin' }));
 	}
 });
 ```
@@ -496,7 +507,7 @@ const checkFileSize = Effect.gen(function* () {
 
 ### SystemErrorTag Values
 
-FileSystem operations fail with `PlatformError` containing a `SystemErrorTag`:
+FileSystem operations fail with `PlatformError`. Its `reason` is `BadArgument` or `SystemError`. In **4.0.0**, `SystemError._tag` is the normalized category below; match `error.reason._tag` directly (there is no `reason.tag` field):
 
 - `AlreadyExists` - File/directory already exists
 - `BadResource` - Invalid file descriptor or handle
@@ -510,8 +521,11 @@ FileSystem operations fail with `PlatformError` containing a `SystemErrorTag`:
 - `WouldBlock` - Operation would block
 - `WriteZero` - Write operation wrote zero bytes
 
+For an unknown error at a boundary, `PlatformError.isPlatformError(value)` narrows it to the wrapper before inspecting `reason`.
+
 ### Error Handling Pattern
 
+<!-- typecheck -->
 ```typescript
 import { FileSystem } from 'effect';
 import { Effect, pipe } from 'effect';
@@ -525,11 +539,7 @@ const readConfigWithFallback = pipe(
 		if (error.reason._tag === 'NotFound') {
 			return Effect.succeed('{}');
 		}
-		if (error.reason._tag === 'PermissionDenied') {
-			return Effect.fail(
-				new Error('Cannot read config: permission denied')
-			);
-		}
+		// Permission and other failures remain visible to the caller.
 		return Effect.fail(error);
 	})
 );
@@ -537,6 +547,7 @@ const readConfigWithFallback = pipe(
 
 ### Typed Error Recovery
 
+<!-- typecheck -->
 ```typescript
 import { FileSystem } from 'effect';
 import { Effect, Schema, pipe } from 'effect';
@@ -548,50 +559,51 @@ class ConfigNotFound extends Schema.TaggedError<ConfigNotFound>()(
 	}
 ) {}
 
-class ConfigInvalid extends Schema.TaggedError<ConfigInvalid>()(
-	'ConfigInvalid',
+class ConfigReadFailed extends Schema.TaggedError<ConfigReadFailed>()(
+	'ConfigReadFailed',
 	{
 		path: Schema.String,
 		reason: Schema.String
 	}
 ) {}
 
-const readConfig = (path: string) =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem.FileSystem;
+const readConfig = Effect.fn('Config.read')(function* (path: string) {
+	const fs = yield* FileSystem.FileSystem;
 
-		const content = yield* pipe(
-			fs.readFileString(path),
-			Effect.mapError((error) =>
-				error.reason._tag === 'NotFound'
-					? new ConfigNotFound({ path })
-					: new ConfigInvalid({ path, reason: error.message })
-			)
-		);
+	const content = yield* pipe(
+		fs.readFileString(path),
+		Effect.mapError((error) =>
+			error.reason._tag === 'NotFound'
+				? new ConfigNotFound({ path })
+				: new ConfigReadFailed({ path, reason: error.message })
+		)
+	);
 
-		return content;
-	});
+	return content;
+});
 ```
 
 ## Scoped Resources Pattern
 
+<!-- typecheck -->
 ```typescript
-import { FileSystem } from 'effect';
-import { Effect } from 'effect';
+import { Effect, FileSystem, Path } from 'effect';
+import * as Str from 'effect/String';
 
 const processInTempDir = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
 
 	// Create temp directory with automatic cleanup
 	const tempDir = yield* fs.makeTempDirectoryScoped();
 
 	// Do work in temp directory
-	const inputPath = `${tempDir}/input.txt`;
-	const outputPath = `${tempDir}/output.txt`;
+	const inputPath = path.join(tempDir, 'input.txt');
+	const outputPath = path.join(tempDir, 'output.txt');
 
 	yield* fs.writeFileString(inputPath, 'data');
 	const content = yield* fs.readFileString(inputPath);
-	yield* fs.writeFileString(outputPath, content.toUpperCase());
+	yield* fs.writeFileString(outputPath, Str.toUpperCase(content));
 
 	const result = yield* fs.readFileString(outputPath);
 
@@ -638,10 +650,10 @@ Effect.runPromise(runnable);
 
 - Import from `effect`
 - Use `yield* FileSystem.FileSystem` for service injection
-- Provide platform layer at entry point only
+- Provide platform layers at entry points or runtime-facing adapter `defaultLayer` exports
 - Use scoped temp directories with `makeTempDirectoryScoped`
 - Handle `PlatformError` with `catchTag("PlatformError", ...)`
-- Use size helpers: `Size()`, `KiB()`, `MiB()`, `GiB()`, `TiB()`, `PiB()`
+- Use `ByteSize.bytes`, `ByteSize.kibibytes`, `ByteSize.mebibytes`, and other ByteSize constructors; the old FileSystem size helpers are removed
 - Stream large files with `stream()` and `sink()`
 
 ## DON'T

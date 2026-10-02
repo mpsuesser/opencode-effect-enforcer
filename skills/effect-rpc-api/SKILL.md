@@ -1,9 +1,9 @@
 ---
 name: effect-rpc-api
-description: Define type-safe RPC contracts with effect/unstable/rpc — Rpc.make payload/success/error/defect schemas, RpcSchema.Stream streaming responses, RpcGroup composition (add/merge/omit/prefix/annotate), and RpcMiddleware.Service definitions shared by client and server. Use when declaring or evolving RPC procedures, building a shared contract package, adding streaming endpoints, or defining auth/observability middleware types.
+description: Define type-safe RPC contracts with effect/rpc — Rpc.make payload/success/error/defect schemas, RpcSchema.Stream streaming responses, RpcGroup composition (add/merge/omit/prefix/annotate), and RpcMiddleware.Service definitions shared by client and server. Use when declaring or evolving RPC procedures, building a shared contract package, adding streaming endpoints, or defining auth/observability middleware types.
 ---
 
-You are an Effect TypeScript expert specializing in defining shared RPC contracts with `Rpc`, `RpcGroup`, `RpcSchema`, and `RpcMiddleware` from `effect/unstable/rpc`.
+You are an Effect TypeScript expert specializing in defining shared RPC contracts with `Rpc`, `RpcGroup`, `RpcSchema`, and `RpcMiddleware` from `effect/rpc`.
 
 This skill covers the **contract layer**: the definitions that client and server packages both import. Wiring handlers into a server is the `effect-rpc-server` skill; constructing clients and protocols is the `effect-rpc-client` skill; distributed entities are the `effect-rpc-cluster` skill.
 
@@ -16,17 +16,17 @@ implementations must supply `codecFor` (see `effect-rpc-client` /
 `effect-rpc-server`). JSON, NDJSON, and JSON-RPC formats use
 their wire representation; the new SchemaBinary transport has its own codecs.
 
-The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read it directly when in doubt — these modules are under `unstable` and move between betas.
+The Effect v4 source is at `~/.local/share/opencode/repos/github.com/Effect-TS/effect@main/`. Read the `effect@4.0.0` tag for this skill; main may be newer. These APIs remain `@stability unstable` and may break in minor releases despite the shorter imports. Keep Effect-family packages on the same release.
 
 Key files:
 
-- `packages/effect/src/unstable/rpc/Rpc.ts` — `Rpc.make`, `Rpc.custom`, per-rpc combinators, `exitSchema`, `Wrapper` (`fork`/`uninterruptible`/`wrap`), `ServerClient`, every type helper (`Payload`, `Success`, `Error`, `Exit`, `ToHandlerFn`, `ResultFrom`, ...)
-- `packages/effect/src/unstable/rpc/RpcGroup.ts` — group construction and composition (`add`/`merge`/`omit`/`prefix`/`middleware`), group vs per-rpc annotations, handler-conversion surface (`toLayer`/`toHandlers`/`toLayerHandler`/`accessHandler`/`of`)
-- `packages/effect/src/unstable/rpc/RpcSchema.ts` — the `Stream` schema marker, `isStreamSchema`, `ClientAbort` cause annotation
-- `packages/effect/src/unstable/rpc/RpcMiddleware.ts` — `Service` constructor, `layerClient`, `ForClient`, `ApplyServices` and the middleware function shapes
-- `packages/effect/src/unstable/rpc/RpcMessage.ts` — wire envelopes: `Request`, `Ack`, `Interrupt`, `Eof`, `Ping`, `ResponseChunk`, `ResponseExit`, `ExitEncoded`, `RequestId`
-- `packages/effect/src/unstable/rpc/RpcClientError.ts` — the transport error type referenced when typing shared client aliases
-- `packages/effect/src/unstable/rpc/index.ts` — public exports of the rpc namespace
+- `packages/effect/src/rpc/Rpc.ts` — `Rpc.make`, `Rpc.custom`, per-rpc combinators, `exitSchema`, `Wrapper` (`fork`/`uninterruptible`/`wrap`), `ServerClient`, every type helper (`Payload`, `Success`, `Error`, `Exit`, `ToHandlerFn`, `ResultFrom`, ...)
+- `packages/effect/src/rpc/RpcGroup.ts` — group construction and composition (`add`/`merge`/`omit`/`prefix`/`middleware`), group vs per-rpc annotations, handler-conversion surface (`toLayer`/`toHandlers`/`toLayerHandler`/`accessHandler`/`of`)
+- `packages/effect/src/rpc/RpcSchema.ts` — the `Stream` schema marker, `isStreamSchema`, `ClientAbort` cause annotation
+- `packages/effect/src/rpc/RpcMiddleware.ts` — `Service` constructor, `layerClient`, `ForClient`, `ApplyServices` and the middleware function shapes
+- `packages/effect/src/rpc/RpcMessage.ts` — wire envelopes: `Request`, `Ack`, `Interrupt`, `Eof`, `Ping`, `ResponseChunk`, `ResponseExit`, `ExitEncoded`, `RequestId`
+- `packages/effect/src/rpc/RpcClientError.ts` — the transport error type referenced when typing shared client aliases
+- `packages/effect/src/rpc/index.ts` — public exports of the rpc namespace
 - `packages/platform/node/test/fixtures/rpc-schemas.ts` — the best real-world contract fixture: rpcs, streaming, middleware, deferred responses
 - `packages/effect/test/rpc/Rpc.test.ts` — `exitSchema`, custom defect schemas, `getStreamSchemas` semantics
 
@@ -54,10 +54,10 @@ Imports used throughout (all from the `effect` package; there is no `@effect/rpc
 
 ```ts
 import { Context, Schema } from 'effect';
-import { Rpc, RpcGroup, RpcMiddleware, RpcSchema } from 'effect/unstable/rpc';
+import { Rpc, RpcGroup, RpcMiddleware, RpcSchema } from 'effect/rpc';
 ```
 
-Deep subpath imports also work (the package exports a `./*` wildcard), e.g. `import * as RpcSchema from 'effect/unstable/rpc/RpcSchema'` or `import { RpcClientError } from 'effect/unstable/rpc/RpcClientError'`.
+Deep subpath imports also work (the package exports a `./*` wildcard), e.g. `import * as RpcSchema from 'effect/rpc/RpcSchema'` or `import { RpcClientError } from 'effect/rpc/RpcClientError'`.
 
 ---
 
@@ -78,7 +78,7 @@ Two declaration styles, both official:
 
 ```ts
 import { Schema } from 'effect';
-import { Rpc } from 'effect/unstable/rpc';
+import { Rpc } from 'effect/rpc';
 
 export class User extends Schema.Class<User>('User')({
 	id: Schema.String,
@@ -308,7 +308,7 @@ A middleware is declared as a `Context.Service` class with two parameter slots:
 
 ```ts
 import { Context, Schema } from 'effect';
-import { RpcMiddleware } from 'effect/unstable/rpc';
+import { RpcMiddleware } from 'effect/rpc';
 
 export class CurrentUser extends Context.Service<CurrentUser, User>()('CurrentUser') {}
 
@@ -347,7 +347,7 @@ The service value is a function `(effect, options) => Effect` — options: `{ cl
 Defined alongside the contract so client packages can provide it. The function receives `{ rpc, request, next }` and **must** call `next` (with the original or a modified request):
 
 ```ts
-import { Headers } from 'effect/unstable/http';
+import { Headers } from 'effect/http';
 
 export const AuthClient = RpcMiddleware.layerClient(AuthMiddleware, ({ next, request }) =>
 	next({
@@ -368,7 +368,7 @@ export const AuthClient = RpcMiddleware.layerClient(AuthMiddleware, ({ next, req
 
 ```ts
 import { Schema } from 'effect';
-import { Rpc } from 'effect/unstable/rpc';
+import { Rpc } from 'effect/rpc';
 
 // Type-level definition: how success/error transform
 export interface RpcWithPagination extends Rpc.Custom {
@@ -451,8 +451,8 @@ You rarely touch `RpcMessage` directly, but the envelope explains several contra
 Key facts:
 
 - A `RequestEncoded` carries `{ _tag: 'Request', id: string | number, tag: string, payload: unknown, headers: Array<[string, string]>, isNotification?, traceId?, spanId?, sampled? }`. The rpc's `_tag` **is the wire identity** — renaming or re-prefixing an rpc is a breaking protocol change for deployed clients.
-- `RequestId` is a branded `string | number`; construct it with `RequestId(1)` or `RequestId('1')` (from `effect/unstable/rpc/RpcMessage`). You need it when invoking handlers manually in tests via `accessHandler`. `bigint` is not accepted.
-- Terminal results travel as `ExitEncoded` — `Success` with a value, or `Failure` with a cause array of `Fail` (your error union, encoded), `Die` (via `defectSchema`), and `Interrupt` entries. This is exactly what `Rpc.exitSchema` encodes/decodes.
+- `RequestId` is a branded `string | number`; construct it with `RequestId(1)` or `RequestId('1')` (from `effect/rpc/RpcMessage`). You need it when invoking handlers manually in tests via `accessHandler`. `bigint` is not accepted.
+- Terminal results travel as `ExitEncoded` — `Success` with a value, or `Failure` with a cause array of `Fail` (your error union, encoded), `Die` (via `defectSchema`), and `Interrupt` entries. This is exactly what `Rpc.exitSchema` encodes/decodes. Encoded interrupt `fiberId` may be `null` as well as absent/`undefined`; JSON encoding can produce `null`. Custom envelope consumers must accept both absence forms.
 - Stream elements travel as batched `Chunk` messages, acknowledged by `Ack` on ack-capable protocols (sockets, workers); the HTTP protocol declares `supportsAck: false`. Incremental delivery requires a serialization with framing (e.g. ndjson) — with non-framed json over HTTP the chunks are buffered and returned in one final batch (see serialization notes in the `effect-rpc-cluster` skill).
 - Servers represent server-originated calls and notifications with `RequestEncoded` in `FromServerEncoded`. Set `isNotification: true` for a notification; JSON-RPC serialization then omits `id`. Buffered, unframed JSON-RPC HTTP cannot deliver notifications and drops them, while framed HTTP, sockets, stdio, and workers support them.
 
@@ -493,8 +493,8 @@ RpcGroup.HandlerFrom<R, Tag>; // one handler fn type
 The canonical use — typing a client service in the shared package without constructing anything:
 
 ```ts
-import type { RpcClient } from 'effect/unstable/rpc';
-import type { RpcClientError } from 'effect/unstable/rpc/RpcClientError';
+import type { RpcClient } from 'effect/rpc';
+import type { RpcClientError } from 'effect/rpc/RpcClientError';
 
 export type UsersClient = RpcClient.RpcClient<
 	RpcGroup.Rpcs<typeof UsersGroup>,
@@ -513,7 +513,7 @@ Everything client and server need, with zero runtime wiring:
 ```ts
 // contracts/users.ts — imported by both server and client packages
 import { Context, Schema } from 'effect';
-import { Rpc, RpcGroup, RpcMiddleware } from 'effect/unstable/rpc';
+import { Rpc, RpcGroup, RpcMiddleware } from 'effect/rpc';
 
 // --- domain schemas ---
 export class User extends Schema.Class<User>('User')({
@@ -591,7 +591,7 @@ export const PublicGroup = AdminGroup.omit('DeleteUser', 'PurgeAll').middleware(
 Contracts double as entity protocols — annotate, then hand to `Entity.fromRpcGroup`:
 
 ```ts
-import { ClusterSchema } from 'effect/unstable/cluster';
+import { ClusterSchema } from 'effect/cluster';
 
 export const DurableUsers = UsersGroup.annotateRpcs(ClusterSchema.Persisted, true);
 // Entity.fromRpcGroup('Users', DurableUsers) — see the effect-rpc-cluster skill
@@ -602,7 +602,7 @@ export const DurableUsers = UsersGroup.annotateRpcs(ClusterSchema.Persisted, tru
 ```ts
 import { assert, it } from '@effect/vitest';
 import { Exit, Schema } from 'effect';
-import { Rpc } from 'effect/unstable/rpc';
+import { Rpc } from 'effect/rpc';
 
 it('GetUser exits round-trip', () => {
 	const schema = Rpc.exitSchema(GetUser);
@@ -614,7 +614,7 @@ it('GetUser exits round-trip', () => {
 
 ## Common Mistakes
 
-1. **Importing from `@effect/rpc`.** The package does not exist in v4 — everything is `effect/unstable/rpc` (deep subpaths like `effect/unstable/rpc/RpcMessage` also work).
+1. **Importing from `@effect/rpc`.** The package does not exist in v4 — everything is `effect/rpc` (deep subpaths like `effect/rpc/RpcMessage` also work).
 2. **Reaching for `Rpc.fromTaggedRequest` / `Schema.TaggedRequest`.** Neither exists in v4. The tag is `Rpc.make`'s first argument; the payload schema carries no `_tag` field — the wire envelope transports the tag separately.
 3. **Expecting `error` to stay the Effect error with `stream: true`.** It becomes the *stream* error schema and the rpc's `errorSchema` is set to `Schema.Never`. Likewise `success` becomes the *element* schema.
 4. **Passing `primaryKey` with a schema payload.** It is typed `never` unless `payload` is inline struct fields — wrap the fields inline or drop `primaryKey`.

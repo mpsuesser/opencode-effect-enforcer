@@ -84,74 +84,30 @@ Key details:
 
 ## Complete Before/After
 
+<!-- typecheck -->
 ```typescript
-// BEFORE — plain arrow functions, no tracing
-export class UserRepository extends Context.Service<UserRepository>()(
-	'@services/UserRepository',
-	{
-		make: Effect.gen(function* () {
-			const db = yield* DatabaseClient;
+import { Context, Effect, Layer } from 'effect';
+import * as Schema from 'effect/Schema';
 
-			return {
-				findById: (id: string): Effect.Effect<User, UserNotFound> =>
-					Effect.gen(function* () {
-						const row = yield* db.query(
-							'SELECT * FROM users WHERE id = ?',
-							id
-						);
-						if (!row)
-							return yield* new UserNotFound({
-								id,
-								message: `Not found: ${id}`
-							});
-						return row as User;
-					}),
-
-				create: (
-					data: CreateUserData
-				): Effect.Effect<User, DuplicateUser> =>
-					Effect.gen(function* () {
-						return yield* db.insert('users', data);
-					})
-			};
-		})
-	}
+class User extends Schema.Class<User>('User')({ id: Schema.String }) {}
+class UserNotFound extends Schema.TaggedError<UserNotFound>()(
+	'UserNotFound', { id: Schema.String }
 ) {}
+class Database extends Context.Service<Database, {
+	readonly findUser: (id: string) => Effect.Effect<User, UserNotFound>;
+}>()('app/Database') {}
+class UserRepository extends Context.Service<UserRepository, {
+	readonly findById: (id: string) => Effect.Effect<User, UserNotFound>;
+}>()('app/UserRepository') {}
 
-// AFTER — Effect.fn, every method gets a traced span
-export class UserRepository extends Context.Service<UserRepository>()(
-	'@services/UserRepository',
-	{
-		make: Effect.gen(function* () {
-			const db = yield* DatabaseClient;
-
-			const findById = Effect.fn('UserRepository.findById')(
-				(id: string): Effect.Effect<User, UserNotFound> =>
-					Effect.gen(function* () {
-						const row = yield* db.query(
-							'SELECT * FROM users WHERE id = ?',
-							id
-						);
-						if (!row)
-							return yield* new UserNotFound({
-								id,
-								message: `Not found: ${id}`
-							});
-						return row as User;
-					})
-			);
-
-			const create = Effect.fn('UserRepository.create')(
-				(data: CreateUserData): Effect.Effect<User, DuplicateUser> =>
-					Effect.gen(function* () {
-						return yield* db.insert('users', data);
-					})
-			);
-
-			return { findById, create };
-		})
-	}
-) {}
+const layer = Layer.effect(UserRepository, Effect.gen(function* () {
+	const db = yield* Database;
+	// Before: (id: string) => Effect.gen(function* () { ... })
+	const findById = Effect.fn('UserRepository.findById')(function* (id: string) {
+		return yield* db.findUser(id);
+	});
+	return UserRepository.of({ findById });
+}));
 ```
 
 ## When NOT to use Effect.fn

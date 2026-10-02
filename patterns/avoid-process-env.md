@@ -29,13 +29,12 @@ Config.Redacted :: String -> Config Redacted -- for sensitive values
 bad :: Effect String
 bad = Effect.sync \_ -> process.env.API_KEY    -- raw side effect
 
-good :: Effect String ConfigError
+good :: Effect (Redacted String) ConfigError
 good = Config.Redacted "API_KEY"               -- typed, redacted
 
-better :: Effect String ConfigError
+better :: Effect Int ConfigError
 better = Config.Int("PORT")
-  & Config.withDefault "3000"
-  & Config.map Number.parse                    -- with transformation
+  & Config.withDefault 3000                    -- defaults use the decoded type
 ```
 
 `process.env` is a raw side effect with no type safety. Use `Config.*` for validated, composable, testable configuration.

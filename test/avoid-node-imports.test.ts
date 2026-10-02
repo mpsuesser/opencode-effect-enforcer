@@ -17,8 +17,8 @@ testPattern({
     // Effect imports — always fine.
     'import * as Path from "effect/Path"',
     'import * as FileSystem from "effect/FileSystem"',
-    'import * as HttpClient from "effect/unstable/http/HttpClient"',
-    'import * as ChildProcess from "effect/unstable/process/ChildProcess"',
+    'import * as HttpClient from "effect/http/HttpClient"',
+    'import * as ChildProcess from "effect/process/ChildProcess"',
     'import { Stream } from "effect"',
     'import * as Terminal from "effect/Terminal"',
     'import { node } from "other-lib"',

@@ -34,12 +34,11 @@ bad = floor (Math.random * 100)     -- R = ∅, untestable
 good :: Effect Int Random
 good = Random.nextIntBetween 0 100  -- R ⊃ Random, deterministic in tests
 
--- In tests
-test :: Effect () TestRandom
-test = do
-  TestRandom.feedInts [42, 7, 13]   -- deterministic sequence
-  result ← good
-  assert (result == 42)
+-- Repeatable sequence in tests
+seeded = good & Random.withSeed "example-seed"
 ```
 
-`Math.random()` is non-deterministic. Use `Random` service for reproducible randomness via `TestRandom.feed*` in tests.
+`Math.random()` bypasses Effect's random service. Use `Random.withSeed` for
+repeatable sequences in tests, or provide a controlled `Random.Random` service
+when the exact generated values matter. `Random.nextIntBetween(min, max)` includes
+both endpoints by default; pass `{ halfOpen: true }` to exclude the upper bound.

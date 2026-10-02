@@ -7,10 +7,12 @@ description: Build pull-based TCP, Unix, TLS, and WebSocket transports with Effe
 
 ## Source reference
 
-Read `packages/effect/src/unstable/socket/{Socket,SocketServer}.ts` at
-`effect@4.0.0-rc.116` in the Effect reference. Platform adapters live in
+Read `packages/effect/src/socket/{Socket,SocketServer}.ts` at
+`effect@4.0.0` in the Effect reference. Platform adapters live in
 `packages/platform/node-shared/src/{NodeSocket,NodeSocketServer}.ts`; Node and
 Bun expose these as `NodeSocket` / `BunSocket` and their server counterparts.
+These APIs remain `@stability unstable` and may break in minor releases despite
+the stable package version. Keep Effect-family packages on the same release.
 Load `effect-scope` and `effect-fiber` for lifecycle ownership,
 `effect-stream` for framing, and `effect-scheduling` for reconnect policy.
 
@@ -38,7 +40,7 @@ There are no callback-driven `run`, `runString`, or `runRaw` methods on a socket
 <!-- typecheck -->
 ```ts
 import { Effect } from 'effect';
-import { Socket } from 'effect/unstable/socket';
+import { Socket } from 'effect/socket';
 
 const echo = Effect.fn('Socket.echo')(function* (socket: Socket.Socket) {
 	const { pull } = yield* socket.reader;
@@ -57,7 +59,7 @@ and streaming `Stream.decodeText` to preserve split UTF-8 characters.
 <!-- typecheck -->
 ```ts
 import { Duration, Effect } from 'effect';
-import { Socket } from 'effect/unstable/socket';
+import { Socket } from 'effect/socket';
 
 const receive = Effect.gen(function* () {
 	const socket = yield* Socket.makeWebSocket('wss://example.com/feed', {
@@ -84,8 +86,9 @@ casts; opening-handshake headers are available where the platform supports them.
 
 An effectful URL is reevaluated on each connection. `fromWebSocket(acquire, options)`
 wraps a scoped transport acquisition. Pausable transports pause at `highWaterMark`
-(default 64 KiB) and resume when drained. Browser WebSockets cannot pause and
-fail with `SocketReadError` when the configured bound is exceeded. Text-frame
+(default 64 KiB) and resume when drained. Browser WebSockets cannot pause; their
+default buffer is unbounded. Set `highWaterMark` explicitly to fail with
+`SocketReadError` when that byte bound is exceeded. Text-frame
 buffering counts UTF-8 bytes, not string length.
 
 ## TCP, Unix, and TLS
@@ -127,7 +130,7 @@ reconnect. Use a new socket value for an independent concurrent client connectio
 <!-- typecheck -->
 ```ts
 import { Duration, Effect, Schedule } from 'effect';
-import { Socket } from 'effect/unstable/socket';
+import { Socket } from 'effect/socket';
 
 const consume = Effect.fn('Socket.consume')(function* (socket: Socket.Socket) {
 	const pull = yield* Socket.readerString(socket);
@@ -150,6 +153,12 @@ const reconnect = (socket: Socket.Socket) => consume(socket).pipe(
 `new Socket.CloseEvent(1000, 'done')` requests a close through `writer.write`.
 WebSocket close codes are protocol data; TCP does not transmit them. Prefer
 writer-scope release for a graceful TCP half-close rather than a close event.
+
+Node/Bun HTTP upgrade adapters choose server close codes from the owning scope
+exit: `1000` for success, `1001` for interruption-only exits, and `1011` for other
+failures. An explicit code already sent is preserved. HTTP response conversion
+and observation middleware retain the handler failure for request cleanup. This
+is server-upgrade behavior, not a configurable clean-close predicate on sockets.
 
 ## Streams, channels, and framing
 
@@ -183,7 +192,7 @@ rather than becoming accept-loop failures; add application-level supervision
 where they must stop the service. HTTP upgrades yield the same Socket interface;
 see `effect-http-server`.
 
-Server addresses are `NetAddress.SocketAddress` from `effect/unstable/net`.
+Server addresses are `NetAddress.SocketAddress` from `effect/net`.
 Narrow to `InetAddress` before reading `port`; format its IP with `formatIp`,
 or use `formatHost` when passing a host and port separately (preserves IPv6 scopes).
 Unix path addresses expose `path`. Use `inetAddressFromHostString` to parse numeric
@@ -191,10 +200,45 @@ hosts and `scopeIdsFromInterfaces` with supplied interface data for named zones.
 URL helpers bracket IPv6 and reject scoped IPv6; do not assemble URLs by casting
 an address to the removed `TcpAddress` type.
 
+Treat IP values as opaque: IPv4 now stores one unsigned 32-bit number and IPv6
+four words internally, not public `.bytes`. Use `ipv4ToOctets`, `ipv6ToOctets`,
+`ipv6ToSegments`, and formatting/construction helpers. Do not persist internal
+fields or hash values as a wire representation.
+
+`NetAddress.Family<A>` selects the IPv4/IPv6 address family, `Inet<A>` the matching
+port-carrying address, and `MulticastInterface<A>` an IPv4 interface address or
+IPv6 numeric interface index (`ipv4Unspecified`/`0` choose the OS default).
+Classification predicates such as `isMulticast`, `isUnicast`, `isLoopback`, and
+`isLinkLocal` preserve the input family while refining it to the corresponding
+branded type. Use the named schemas in `effect/Schema` for boundary validation
+rather than asserting these refinements.
+
+<!-- typecheck -->
+```ts
+import { Effect } from 'effect';
+import * as Schema from 'effect/Schema';
+import { NetAddress } from 'effect/net';
+
+const parseMulticast = Schema.decodeUnknownEffect(Schema.IpMulticastAddressFromString);
+const displayMulticast = Effect.fn('Socket.displayMulticast')(function* (input: unknown) {
+	const address = yield* parseMulticast(input);
+	return NetAddress.formatIp(address);
+});
+```
+
+For native adapters, `formatNativeHost(address, scopeIds, platform?)` and
+`formatMulticastInterface(selector, scopeIds, platform?)` use an explicitly
+supplied interface-name-to-index map. Non-Windows output prefers a matching
+interface name; Windows uses numeric zones. `toCanonical` accepts both IP and
+internet addresses: mapped IPv6 becomes IPv4 while retaining its port; other
+values retain identity and IPv6 scope metadata.
+
 ## Higher-level transports and tests
 
 - RPC: `RpcClient.layerProtocolSocket` and `RpcServer.layerProtocolSocketServer`;
   provide matching `RpcSerialization` layers and the socket/server layer.
+  Missed pongs are read failures that fail in-flight calls even with transient
+  open-error retries enabled; reconnect does not replay those calls.
 - Cluster: `NodeClusterSocket` / `BunClusterSocket`; SchemaBinary is the default,
   NDJSON is explicitly selectable.
 - In-memory tests: `Socket.fromTransformStream` wraps a readable/writable pair;
