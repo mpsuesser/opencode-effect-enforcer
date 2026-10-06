@@ -11,6 +11,9 @@ Baseline: `effect@4.0.0`. Inspect that tag in the Effect source reference, not
 unreleased main. Keep Effect-family packages on the same version. `effect/ai`
 APIs carry `@stability unstable` and may change incompatibly in minor releases.
 
+For System One classification, rating, and probability calls through
+`DecisionModel`, use `effect-ai-decision-model`.
+
 ## Import Patterns
 
 **CRITICAL**: Always use namespace imports:

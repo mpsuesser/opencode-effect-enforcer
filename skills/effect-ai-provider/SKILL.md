@@ -12,6 +12,9 @@ Keep `effect` and every `@effect/*` package on the same version. Core AI APIs an
 provider clients, models, and generated schemas carry `@stability unstable`:
 minor releases may include breaking changes, even with `effect/ai` import paths.
 
+For TypeSafe/Jev and OpenRouter **decision-model** layers, use
+`effect-ai-decision-model`; its provider contracts differ from language models.
+
 ## When to Use This Skill
 
 Use this skill when:

@@ -24,7 +24,7 @@ describe("README source catalog", () => {
       .filter((name) => name.endsWith(".md"))
       .map((name) => `guidance/${name}`)
 
-    expect(skillPaths).toHaveLength(53)
+    expect(skillPaths).toHaveLength(54)
     expect(patternPaths).toHaveLength(45)
     expect(guidancePaths).toHaveLength(4)
 

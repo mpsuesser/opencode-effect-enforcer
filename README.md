@@ -17,7 +17,7 @@ Effect-first design, schema-first modeling, typed dependencies, and how to
 choose the relevant skills.
 
 **Skills** explain how to use specific Effect APIs. The agent loads the relevant
-guides through OpenCode's native skill tool, with 53 to choose from across
+guides through OpenCode's native skill tool, with 54 to choose from across
 services, streams, HTTP, SQL, React, AI, and more.
 
 **Patterns** check the code after edits. 45 tested checks look for common
@@ -59,7 +59,7 @@ look for.
 - [Effect, and the Near-Inexpressible Majesty of Layers](guidance/post__effect-and-the-near-inexpressible-majesty-of-layers.md): Explains services, Layers, typed dependencies, and testable implementations.
 - [Parse, don't validate](guidance/post__parse-dont-validate.md): Shows how refined types preserve validation knowledge and make illegal states unrepresentable.
 
-### Skills (53)
+### Skills (54)
 
 #### Modeling and core APIs
 
@@ -113,6 +113,7 @@ look for.
 #### AI and MCP
 
 - [`effect-ai-language-model`](skills/effect-ai-language-model/SKILL.md): Generate text, structured output, streams, and tool calls through `LanguageModel`.
+- [`effect-ai-decision-model`](skills/effect-ai-decision-model/SKILL.md): Use System One models such as Jev through typed decisions, provider layers, and validated answers; includes an [OpenRouter adapter reference](skills/effect-ai-decision-model/openrouter.md).
 - [`effect-ai-prompt`](skills/effect-ai-prompt/SKILL.md): Construct and compose prompts from messages and multimodal parts.
 - [`effect-ai-tool`](skills/effect-ai-tool/SKILL.md): Define type-safe AI tools, toolkits, schemas, and handlers.
 - [`effect-ai-provider`](skills/effect-ai-provider/SKILL.md): Configure provider Layers, models, runtime overrides, and fallback execution plans.

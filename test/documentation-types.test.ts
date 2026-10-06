@@ -5,6 +5,8 @@ import { expect, it } from "vitest"
 
 // Compiler/filesystem boundary: marked blocks are independent virtual TS modules.
 // Their paths remain beside the Markdown so normal package resolution applies.
+// Decision-provider examples use release-pinned dev adapters and Bun transport.
+// Pin node-shared too: Bun's ^4.0.0 dependency can select a newer Effect peer range.
 const root = resolve(import.meta.dirname, "..")
 const markedBlock = /<!-- typecheck -->\s*```(?:ts|typescript)\r?\n([\s\S]*?)\r?\n```/g
 const typescriptBlock = /```(ts|typescript|tsx)\r?\n([\s\S]*?)\r?\n```/g
